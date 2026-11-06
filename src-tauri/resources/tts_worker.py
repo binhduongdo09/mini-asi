@@ -250,11 +250,50 @@ def reader():
     os._exit(0)  # Mini-Asi đóng → tự thoát
 
 
+class EdgeBackend:
+    """Bộ đọc giọng Neural tiếng Việt tự nhiên qua edge-tts (dự phòng khi mô hình offline không khả dụng)."""
+
+    VOICE_MAP = {
+        "Trúc Ly": ("vi-VN-HoaiMyNeural", "+0%", "+0Hz"),
+        "Hải Đăng": ("vi-VN-NamMinhNeural", "+0%", "+0Hz"),
+        "Mai Phương": ("vi-VN-HoaiMyNeural", "+4%", "+2Hz"),
+        "Minh Quang": ("vi-VN-NamMinhNeural", "+2%", "-2Hz"),
+    }
+
+    def __init__(self):
+        import edge_tts  # noqa: F401
+
+    def say(self, text, voice, out):
+        import asyncio
+        import edge_tts
+
+        v_id, rate, pitch = self.VOICE_MAP.get(voice, ("vi-VN-HoaiMyNeural", "+0%", "+0Hz"))
+        norm = vi_normalize(text)
+        if not norm:
+            return
+
+        async def _run():
+            comm = edge_tts.Communicate(norm, v_id, rate=rate, pitch=pitch)
+            await comm.save(out)
+
+        asyncio.run(_run())
+
+
+def load_backend(warmup):
+    try:
+        return NghiBackend(warmup) if ENGINE == "nghi" else VieNeuBackend(warmup)
+    except Exception as first_err:
+        try:
+            return EdgeBackend()
+        except Exception:
+            raise first_err
+
+
 def main():
     warmup = "--warmup" in sys.argv
     threading.Thread(target=reader, daemon=True).start()
     try:
-        backend = NghiBackend(warmup) if ENGINE == "nghi" else VieNeuBackend(warmup)
+        backend = load_backend(warmup)
     except Exception as e:  # thiếu gói / chưa tải mô hình / mất mạng khi tải
         send({"fatal": f"{type(e).__name__}: {e}"})
         return

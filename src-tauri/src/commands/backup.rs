@@ -118,7 +118,7 @@ pub(crate) fn device_sync_inner(st: &AppState) -> Result<DeviceSyncReport, Strin
         c.items = clips;
         c.save();
         j.entries = entries;
-        let _ = std::fs::write(st.data_dir.join("journal.json"), serde_json::to_string_pretty(&j.entries).unwrap_or_default());
+        let _ = j.save();
         rep.devices.push(b.manifest.map(|m| m.device).unwrap_or(f.name));
         rep.stats.tasks += stats.tasks;
         rep.stats.notes += stats.notes;

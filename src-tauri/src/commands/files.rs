@@ -79,3 +79,212 @@ pub(crate) async fn file_merge_pdf(paths: Vec<String>) -> Result<files::FileResu
 pub(crate) fn reveal(path: String) {
     files::reveal(&PathBuf::from(path));
 }
+
+/// Mở bảng chia sẻ AirDrop gốc của macOS cho danh sách file (kéo thả vào tai thỏ hoặc chọn từ khay File).
+#[tauri::command]
+pub(crate) fn file_airdrop(app: AppHandle, paths: Vec<String>) -> Result<(), String> {
+    if paths.is_empty() {
+        return Err("Chưa có file nào để gửi AirDrop".into());
+    }
+    // Hạ tạm tầng cửa sổ tai thỏ xuống mức nổi thường để hộp thoại AirDrop của macOS hiện lên trên cùng
+    apply_level(&app, 3);
+    let h = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_secs(12));
+        apply_level(&h, normal_level(&h));
+    });
+    on_main(&app, move || notch_native::airdrop_files(&paths)).unwrap_or_else(|| Err("Không mở được AirDrop".into()))
+}
+
+/// Kiểm tra con trỏ chuột đang ở nửa trái ("left" = AirDrop) hay nửa phải ("right" = Khay File) của tai thỏ khi kéo thả.
+#[tauri::command]
+pub(crate) fn cursor_side(app: AppHandle) -> String {
+    if let Some(win) = app.get_webview_window("notch") {
+        if let (Ok(c), Ok(p), Ok(sz)) = (app.cursor_position(), win.outer_position(), win.outer_size()) {
+            let mid = p.x as f64 + (sz.width as f64) / 2.0;
+            return if c.x < mid { "left".into() } else { "right".into() };
+        }
+    }
+    "left".into()
+}
+
+// ───────────────────────── Điều khiển nhanh trên tai thỏ (Media · Mic · Camera) ─────────────────────────
+
+static LAST_MIC_VOL: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(80);
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub(crate) struct MediaQuickStatus {
+    pub(crate) title: String,
+    pub(crate) artist: String,
+    pub(crate) app: String,
+    pub(crate) playing: bool,
+    pub(crate) output_volume: u8,
+    pub(crate) output_muted: bool,
+    pub(crate) mic_volume: u8,
+    pub(crate) mic_muted: bool,
+    pub(crate) cam_granted: bool,
+}
+
+#[cfg(target_os = "macos")]
+const MEDIA_STATUS_JXA: &str = r#"
+const cur = Application.currentApplication();
+cur.includeStandardAdditions = true;
+let vol = { outputVolume: 50, inputVolume: 80, outputMuted: false };
+try { vol = cur.getVolumeSettings(); } catch (e) {}
+let title = '', artist = '', appName = '', playing = false;
+for (const name of ['Spotify', 'Music']) {
+  try {
+    const a = Application(name);
+    if (a.running()) {
+      const st = String(a.playerState());
+      if (st === 'playing' || (!title && st === 'paused')) {
+        const tr = a.currentTrack;
+        title = String(tr.name() || '');
+        artist = String(tr.artist() || '');
+        appName = name === 'Music' ? 'Apple Music' : 'Spotify';
+        playing = (st === 'playing');
+        if (playing) break;
+      }
+    }
+  } catch (e) {}
+}
+JSON.stringify({
+  title: title,
+  artist: artist,
+  app: appName,
+  playing: playing,
+  output_volume: Number(vol.outputVolume ?? 50),
+  output_muted: !!vol.outputMuted,
+  mic_volume: Number(vol.inputVolume ?? 80),
+  mic_muted: Number(vol.inputVolume ?? 80) === 0
+});
+"#;
+
+pub(crate) fn query_media_status_sync() -> MediaQuickStatus {
+    let cam_granted = notch_native::perm::camera() == notch_native::perm::State::Granted;
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(out) = std::process::Command::new("osascript").args(["-l", "JavaScript", "-e", MEDIA_STATUS_JXA]).output() {
+            if out.status.success() {
+                if let Ok(mut s) = serde_json::from_slice::<MediaQuickStatus>(&out.stdout) {
+                    if s.mic_volume > 0 {
+                        LAST_MIC_VOL.store(s.mic_volume, Ordering::Relaxed);
+                    }
+                    s.cam_granted = cam_granted;
+                    return s;
+                }
+            }
+        }
+    }
+    MediaQuickStatus {
+        output_volume: 60,
+        mic_volume: LAST_MIC_VOL.load(Ordering::Relaxed),
+        cam_granted,
+        ..Default::default()
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn media_status() -> MediaQuickStatus {
+    tauri::async_runtime::spawn_blocking(query_media_status_sync).await.unwrap_or_default()
+}
+
+/// Điều khiển nhạc/media: "play" | "next" | "prev" | "mute_out" | "vol_up" | "vol_down"
+#[tauri::command]
+pub(crate) async fn media_control(app: AppHandle, action: String) -> MediaQuickStatus {
+    match action.as_str() {
+        "play" | "play_pause" => {
+            let _ = on_main(&app, || notch_native::send_media_key(notch_native::MEDIA_KEY_PLAY));
+        }
+        "next" => {
+            let _ = on_main(&app, || notch_native::send_media_key(notch_native::MEDIA_KEY_NEXT));
+        }
+        "prev" => {
+            let _ = on_main(&app, || notch_native::send_media_key(notch_native::MEDIA_KEY_PREV));
+        }
+        "vol_up" => {
+            let _ = on_main(&app, || notch_native::send_media_key(notch_native::MEDIA_KEY_VOL_UP));
+        }
+        "vol_down" => {
+            let _ = on_main(&app, || notch_native::send_media_key(notch_native::MEDIA_KEY_VOL_DOWN));
+        }
+        "mute_out" => {
+            #[cfg(target_os = "macos")]
+            {
+                let _ = tauri::async_runtime::spawn_blocking(|| {
+                    let _ = std::process::Command::new("osascript")
+                        .args(["-e", "set volume output muted not (output muted of (get volume settings))"])
+                        .status();
+                })
+                .await;
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                let _ = on_main(&app, || notch_native::send_media_key(notch_native::MEDIA_KEY_MUTE));
+            }
+        }
+        _ => {}
+    }
+    tauri::async_runtime::spawn_blocking(|| {
+        std::thread::sleep(Duration::from_millis(90));
+        query_media_status_sync()
+    })
+    .await
+    .unwrap_or_default()
+}
+
+/// Bật / tắt nhanh tiếng Micro đầu vào của hệ thống ngay từ tai thỏ.
+#[tauri::command]
+pub(crate) async fn toggle_mic_mute() -> MediaQuickStatus {
+    tauri::async_runtime::spawn_blocking(|| {
+        let mut cur = query_media_status_sync();
+        #[cfg(target_os = "macos")]
+        {
+            if cur.mic_muted || cur.mic_volume == 0 {
+                let restore = LAST_MIC_VOL.load(Ordering::Relaxed).clamp(40, 100);
+                let _ = std::process::Command::new("osascript")
+                    .args(["-e", &format!("set volume input volume {restore}")])
+                    .status();
+                cur.mic_volume = restore;
+                cur.mic_muted = false;
+            } else {
+                LAST_MIC_VOL.store(cur.mic_volume, Ordering::Relaxed);
+                let _ = std::process::Command::new("osascript")
+                    .args(["-e", "set volume input volume 0"])
+                    .status();
+                cur.mic_volume = 0;
+                cur.mic_muted = true;
+            }
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = std::process::Command::new("pactl").args(["set-source-mute", "@DEFAULT_SOURCE@", "toggle"]).status();
+            cur.mic_muted = !cur.mic_muted;
+            cur.mic_volume = if cur.mic_muted { 0 } else { 80 };
+        }
+        cur
+    })
+    .await
+    .unwrap_or_default()
+}
+
+/// Kiểm tra và xin quyền Camera trước khi mở gương Camera trên tai thỏ.
+#[tauri::command]
+pub(crate) async fn ensure_camera_perm(app: AppHandle) -> bool {
+    let st = notch_native::perm::camera();
+    if st == notch_native::perm::State::Granted {
+        return true;
+    }
+    if st == notch_native::perm::State::Denied {
+        #[cfg(target_os = "macos")]
+        let _ = std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Camera")
+            .spawn();
+        return false;
+    }
+    window_low(&app, true);
+    let ok = tauri::async_runtime::spawn_blocking(notch_native::perm::request_camera).await.unwrap_or(false);
+    window_low(&app, false);
+    ok
+}

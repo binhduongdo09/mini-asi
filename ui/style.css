@@ -169,13 +169,74 @@ button { cursor: pointer; border: 0; background: none; }
   opacity: 1; pointer-events: auto; transform: none; transition-delay: 0.1s;
 }
 
-/* Ló ra */
-.peek { display: flex; flex-direction: column; justify-content: center; gap: 6px; }
-.peek-main { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; min-width: 0; }
+/* Ló ra khi rê chuột (Peek): thông tin + Media + Mic/Cam + AirDrop */
+.peek { display: flex; flex-direction: column; justify-content: space-between; gap: 7px; padding: 4px 14px 12px; }
+.peek-top { display: flex; flex-direction: column; gap: 3px; cursor: pointer; padding: 2px 4px; border-radius: 10px; transition: background 0.15s; }
+.peek-top:hover { background: rgba(255, 255, 255, 0.04); }
+.peek-main { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; min-width: 0; }
 .peek-main .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-.peek-sub { display: flex; gap: 12px; color: var(--muted); font-size: 11.5px; }
-.peek-sub span { display: inline-flex; align-items: center; gap: 4px; }
-.peek-sub svg { width: 12px; height: 12px; }
+.peek-sub { display: flex; gap: 10px; color: var(--muted); font-size: 11px; flex-wrap: nowrap; overflow: hidden; }
+.peek-sub span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.peek-sub svg { width: 11px; height: 11px; }
+
+.peek-bar {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  background: rgba(255, 255, 255, 0.055); border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px; padding: 5px 8px;
+}
+.peek-media { display: flex; align-items: center; gap: 6px; min-width: 0; flex: 1; }
+.peek-track {
+  display: flex; align-items: center; gap: 5px; min-width: 0; flex: 1;
+  font-size: 11.5px; color: var(--muted); overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.peek-track b { color: #fff; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.peek-track .playing-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex: none;
+  box-shadow: 0 0 6px var(--green);
+}
+.peek-mbtns { display: flex; align-items: center; gap: 2px; flex: none; }
+.peek-mbtn {
+  width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center;
+  color: #e5e5ea; transition: 0.15s;
+}
+.peek-mbtn svg { width: 13px; height: 13px; }
+.peek-mbtn:hover { background: rgba(255, 255, 255, 0.14); color: #fff; transform: scale(1.06); }
+.peek-mbtn:active { transform: scale(0.95); }
+.peek-mbtn.play { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.peek-mbtn.muted { color: var(--red); }
+
+.peek-sep { width: 1px; height: 18px; background: rgba(255, 255, 255, 0.1); flex: none; }
+.peek-actions { display: flex; align-items: center; gap: 4px; flex: none; }
+.peek-btn {
+  height: 24px; padding: 0 8px; border-radius: 8px; display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600; background: rgba(255, 255, 255, 0.08); color: #f5f5f7;
+  transition: 0.15s; white-space: nowrap;
+}
+.peek-btn svg { width: 12.5px; height: 12.5px; }
+.peek-btn:hover { background: rgba(255, 255, 255, 0.16); transform: translateY(-0.5px); }
+.peek-btn:active { transform: scale(0.96); }
+.peek-btn.on { background: rgba(50, 215, 75, 0.18); color: var(--green); }
+.peek-btn.danger { background: rgba(255, 69, 58, 0.22); color: var(--red); }
+.peek-btn.cam-on { background: rgba(50, 215, 75, 0.24); color: var(--green); box-shadow: 0 0 0 1px rgba(50, 215, 75, 0.4) inset; }
+.peek-btn.blue { background: rgba(79, 179, 255, 0.18); color: var(--blue); }
+
+.peek-cam-wrap {
+  position: relative; width: 100%; height: 128px; border-radius: 13px; overflow: hidden;
+  background: #111; border: 1px solid rgba(50, 215, 75, 0.35);
+}
+.peek-cam-wrap video {
+  width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); display: block;
+}
+.peek-cam-bar {
+  position: absolute; left: 8px; right: 8px; bottom: 6px;
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  pointer-events: auto;
+}
+.peek-cam-badge {
+  display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 99px;
+  background: rgba(0, 0, 0, 0.65); backdrop-filter: blur(8px); font-size: 10.5px; font-weight: 600; color: var(--green);
+}
+.peek-cam-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
 
 /* Báo động */
 .alert { display: flex; flex-direction: column; justify-content: center; gap: 10px; }
@@ -184,16 +245,25 @@ button { cursor: pointer; border: 0; background: none; }
 .alert .row { display: flex; gap: 6px; flex-wrap: wrap; }
 .countdown { font: 600 26px/1 ui-rounded, system-ui; font-variant-numeric: tabular-nums; }
 
-/* Thả file */
-.dropzone { display: grid; place-items: center; padding-bottom: 16px; }
-.drop-hint {
-  width: 100%; height: 100%; border: 1.5px dashed rgba(255, 255, 255, 0.25); border-radius: 16px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
-  background: rgba(255, 255, 255, 0.03); animation: dash 1.2s ease-in-out infinite alternate;
+/* Thả file: chia đôi AirDrop (trái) và Khay File (phải) */
+.dropzone { display: flex; align-items: stretch; padding: 6px 14px 14px; }
+.drop-split { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; height: 100%; }
+.drop-box {
+  border: 1.5px dashed rgba(255, 255, 255, 0.22); border-radius: 14px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: 8px; text-align: center; background: rgba(255, 255, 255, 0.03); transition: 0.18s var(--ease);
 }
-.drop-hint b { font-size: 14px; }
-.drop-hint span { color: var(--muted); font-size: 11.5px; }
-@keyframes dash { to { border-color: rgba(79, 179, 255, 0.7); background: rgba(79, 179, 255, 0.06); } }
+.drop-box .drop-ic { font-size: 20px; line-height: 1.1; margin-bottom: 1px; }
+.drop-box b { font-size: 13px; color: #fff; }
+.drop-box span { color: var(--muted); font-size: 11px; }
+.drop-box.airdrop.active, .drop-box.airdrop:hover {
+  border-color: rgba(79, 179, 255, 0.85); background: rgba(79, 179, 255, 0.12);
+  box-shadow: 0 0 18px -4px rgba(79, 179, 255, 0.35); transform: scale(1.01);
+}
+.drop-box.tray.active, .drop-box.tray:hover {
+  border-color: rgba(50, 215, 75, 0.8); background: rgba(50, 215, 75, 0.1);
+  box-shadow: 0 0 18px -4px rgba(50, 215, 75, 0.3); transform: scale(1.01);
+}
 
 /* ───────── Bảng điều khiển ───────── */
 .panel { display: flex; flex-direction: column; gap: 10px; padding: 6px 16px 14px; }

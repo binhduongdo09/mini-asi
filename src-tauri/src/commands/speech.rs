@@ -37,13 +37,25 @@ pub(crate) fn voice_for(e: tts::Engine, v: &str) -> &str {
     if e.has_voice(v) { v } else { e.default_voice() }
 }
 
+pub(crate) fn track_audio_child(mut child: std::process::Child) {
+    let pid = child.id();
+    *SAY_PID.lock().unwrap() = Some(pid);
+    std::thread::spawn(move || {
+        let _ = child.wait();
+        let mut g = SAY_PID.lock().unwrap();
+        if *g == Some(pid) {
+            *g = None;
+        }
+    });
+}
+
 pub(crate) fn system_say(clean: &str, en: bool) {
     #[cfg(target_os = "macos")]
     let child = std::process::Command::new("say").args(["-v", if en { "Samantha" } else { "Linh" }, clean]).spawn();
     #[cfg(not(target_os = "macos"))]
     let child = std::process::Command::new("spd-say").args(["-l", if en { "en" } else { "vi" }, clean]).spawn();
     if let Ok(c) = child {
-        *SAY_PID.lock().unwrap() = Some(c.id());
+        track_audio_child(c);
     }
 }
 

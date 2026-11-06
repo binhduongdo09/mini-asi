@@ -179,7 +179,7 @@ impl Default for Settings {
             display_mode: "notch".into(),
             bubble_x: 0.0,
             bubble_y: 0.0,
-            voice_reply: true,
+            voice_reply: false,
             tts_engine: "system".into(),
             tts_voice: crate::tts::DEFAULT_VOICE.into(),
             visible_tabs: ["home", "tasks", "notes", "clips", "journal", "words", "threads"].iter().map(|s| s.to_string()).collect(),

@@ -3,8 +3,9 @@
   "use strict";
   function boot() {
     const A = window.ASI;
-    const { api, on, $, $$, esc, I, toast, confetti, flashMood, fmtDue, hm, bytes } = A;
-    const ago = (ms) => (Date.now() - ms < 45000 ? "vừa xong" : fmtDue(ms).replace("trễ ", "") + " trước");
+    const { api, on, $, $$, esc, I, toast, confetti, flashMood, fmtDue, fmtAgo, hm, bytes } = A;
+    const ago = fmtAgo || ((ms) => (Date.now() - ms < 45000 ? "vừa xong" : fmtDue(ms).replace("trễ ", "") + " trước"));
+    let searchTimer = null;
 
     // ═════════ CLIPBOARD ═════════
     let cq = "";
@@ -29,7 +30,8 @@
         <div id="clipList"></div>`;
       $("#clipSearch").addEventListener("input", (e) => {
         cq = e.target.value;
-        drawClips();
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(drawClips, 100);
       });
       setTimeout(() => $("#clipSearch") && $("#clipSearch").focus(), 80);
       drawClips();
@@ -71,11 +73,13 @@
             </div></div>`;
         })
         .join("");
-      for (const img of $$("img[data-img]", box)) {
-        const id = Number(img.dataset.img);
-        if (!thumbs.has(id)) thumbs.set(id, await api("clip_image", { id }));
-        if (thumbs.get(id)) img.src = thumbs.get(id);
-      }
+      await Promise.all(
+        $$("img[data-img]", box).map(async (img) => {
+          const id = Number(img.dataset.img);
+          if (!thumbs.has(id)) thumbs.set(id, await api("clip_image", { id }));
+          if (thumbs.get(id)) img.src = thumbs.get(id);
+        })
+      );
     }
 
     async function copyClip(id, paste) {

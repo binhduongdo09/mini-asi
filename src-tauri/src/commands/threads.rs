@@ -26,10 +26,25 @@ pub(crate) fn load_seen(st: &AppState) -> HashSet<String> {
 }
 
 pub(crate) fn save_seen(st: &AppState, seen: &HashSet<String>) {
-    // giữ gọn: tối đa 5000 id gần nhất
-    let v: Vec<&String> = seen.iter().take(5000).collect();
-    if let Ok(s) = serde_json::to_string(&v) {
-        let _ = std::fs::write(st.data_dir.join("threads_seen.json"), s);
+    // Giữ thứ tự thời gian (FIFO): giữ lại tối đa 5000 id mới nhất và ghi nguyên tử
+    let path = st.data_dir.join("threads_seen.json");
+    let mut ordered: Vec<String> = std::fs::read_to_string(&path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+    ordered.retain(|id| seen.contains(id));
+    let known: HashSet<String> = ordered.iter().cloned().collect();
+    for id in seen {
+        if !known.contains(id) {
+            ordered.push(id.clone());
+        }
+    }
+    if ordered.len() > 5000 {
+        let drop_n = ordered.len() - 5000;
+        ordered.drain(..drop_n);
+    }
+    if let Ok(s) = serde_json::to_string(&ordered) {
+        let tmp = path.with_extension("json.tmp");
+        if std::fs::write(&tmp, s).is_ok() {
+            let _ = std::fs::rename(&tmp, &path);
+        }
     }
 }
 
@@ -49,12 +64,29 @@ pub(crate) fn fetch_threads(st: &AppState) -> Result<Vec<(String, String)>, Stri
     }
     let token = threads_token(st).unwrap_or(token);
     let profile = threads::me(&token)?;
-    let overview = threads::overview(&token).ok();
-    let mut posts = threads::posts(&token, 12)?;
-    for p in posts.iter_mut() {
-        p.metrics = threads::post_metrics(&token, &p.id).ok();
+    let (overview, mut posts, mentions) = std::thread::scope(|s| {
+        let h_ov = s.spawn(|| threads::overview(&token).ok());
+        let h_posts = s.spawn(|| threads::posts(&token, 12));
+        let h_men = s.spawn(|| threads::mentions(&token).unwrap_or_default());
+        (h_ov.join().unwrap_or(None), h_posts.join().unwrap_or_else(|_| Err("Lỗi tải bài viết".into())), h_men.join().unwrap_or_default())
+    });
+    let mut posts = posts?;
+    // Tải thống kê các bài viết song song theo từng cụm 4 bài để tăng tốc gấp ~4 lần
+    for chunk in posts.chunks_mut(4) {
+        std::thread::scope(|s| {
+            let handles: Vec<_> = chunk
+                .iter()
+                .map(|p| {
+                    let id = p.id.clone();
+                    let tok = &token;
+                    s.spawn(move || threads::post_metrics(tok, &id).ok())
+                })
+                .collect();
+            for (p, h) in chunk.iter_mut().zip(handles) {
+                p.metrics = h.join().unwrap_or(None);
+            }
+        });
     }
-    let mentions = threads::mentions(&token).unwrap_or_default();
 
     let mut c = st.threads.lock().unwrap();
     if c.seen.is_empty() {

@@ -128,12 +128,71 @@ mod imp {
     #[link(name = "CoreGraphics", kind = "framework")]
     extern "C" {
         fn CGEventSourceSecondsSinceLastEventType(state_id: i32, event_type: u32) -> f64;
+        fn CGEventPost(tap: u32, event: *mut c_void);
     }
 
     pub fn idle_seconds() -> Option<f64> {
         // kCGEventSourceStateCombinedSessionState = 0, kCGAnyInputEventType = !0
         let s = unsafe { CGEventSourceSecondsSinceLastEventType(0, u32::MAX) };
         if s.is_finite() && s >= 0.0 { Some(s) } else { None }
+    }
+
+    /// Mở bảng chia sẻ AirDrop gốc của macOS cho danh sách đường dẫn file (gọi trên main thread).
+    pub fn airdrop_files(paths: &[String]) -> Result<(), String> {
+        if paths.is_empty() {
+            return Err("Chưa chọn file để gửi AirDrop".into());
+        }
+        unsafe {
+            let Some(cls) = objc2::runtime::AnyClass::get(c"NSSharingService") else {
+                return Err("Không tìm thấy dịch vụ AirDrop".into());
+            };
+            let name = objc2_foundation::NSString::from_str("com.apple.share.AirDrop.send");
+            let svc: *mut objc2::runtime::AnyObject = objc2::msg_send![cls, sharingServiceNamed: &*name];
+            if svc.is_null() {
+                return Err("Máy này không hỗ trợ AirDrop".into());
+            }
+            let urls: Vec<objc2::rc::Retained<objc2_foundation::NSURL>> = paths
+                .iter()
+                .map(|p| objc2_foundation::NSURL::fileURLWithPath(&objc2_foundation::NSString::from_str(p)))
+                .collect();
+            let arr = objc2_foundation::NSArray::from_retained_slice(&urls);
+            activate_app();
+            let _: () = objc2::msg_send![svc, performWithItems: &*arr];
+            Ok(())
+        }
+    }
+
+    /// Gửi phím cứng điều khiển Media của macOS (Play/Pause = 16, Next = 17, Prev = 18, Mute = 7, VolUp = 0, VolDown = 1).
+    pub fn send_media_key(key: u32) -> bool {
+        unsafe {
+            let Some(cls) = objc2::runtime::AnyClass::get(c"NSEvent") else {
+                return false;
+            };
+            let pt = objc2_foundation::NSPoint::new(0.0, 0.0);
+            for down in [true, false] {
+                let flags: usize = if down { 0xa00 } else { 0xb00 };
+                let data1: isize = ((key as isize) << 16) | ((if down { 0x0a } else { 0x0b }) << 8);
+                let ev: *mut objc2::runtime::AnyObject = objc2::msg_send![
+                    cls,
+                    otherEventWithType: 14usize,
+                    location: pt,
+                    modifierFlags: flags,
+                    timestamp: 0.0f64,
+                    windowNumber: 0isize,
+                    context: std::ptr::null::<objc2::runtime::AnyObject>(),
+                    subtype: 8i16,
+                    data1: data1,
+                    data2: -1isize
+                ];
+                if !ev.is_null() {
+                    let cg: *mut c_void = objc2::msg_send![ev, CGEvent];
+                    if !cg.is_null() {
+                        CGEventPost(0, cg);
+                    }
+                }
+            }
+            true
+        }
     }
 }
 
@@ -142,7 +201,7 @@ mod imp {
 mod imp {
     use super::*;
     use windows_sys::Win32::System::SystemInformation::GetTickCount;
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{keybd_event, GetLastInputInfo, KEYEVENTF_KEYUP, LASTINPUTINFO};
 
     pub fn notch_info() -> Option<NotchInfo> {
         None // Windows không có tai thỏ → dùng viên thuốc ảo, kích thước lấy từ Tauri
@@ -164,6 +223,27 @@ mod imp {
         }
         let now = unsafe { GetTickCount() };
         Some(now.wrapping_sub(info.dwTime) as f64 / 1000.0)
+    }
+
+    pub fn airdrop_files(_paths: &[String]) -> Result<(), String> {
+        Err("AirDrop chỉ hỗ trợ trên macOS".into())
+    }
+
+    pub fn send_media_key(key: u32) -> bool {
+        let vk: u8 = match key {
+            16 => 0xB3, // VK_MEDIA_PLAY_PAUSE
+            17 => 0xB0, // VK_MEDIA_NEXT_TRACK
+            18 => 0xB1, // VK_MEDIA_PREV_TRACK
+            7 => 0xAD,  // VK_VOLUME_MUTE
+            0 => 0xAF,  // VK_VOLUME_UP
+            1 => 0xAE,  // VK_VOLUME_DOWN
+            _ => return false,
+        };
+        unsafe {
+            keybd_event(vk, 0, 0, 0);
+            keybd_event(vk, 0, KEYEVENTF_KEYUP, 0);
+        }
+        true
     }
 }
 
@@ -193,9 +273,31 @@ mod imp {
         let ms: f64 = String::from_utf8_lossy(&out.stdout).trim().parse().ok()?;
         Some(ms / 1000.0)
     }
+
+    pub fn airdrop_files(_paths: &[String]) -> Result<(), String> {
+        Err("AirDrop chỉ hỗ trợ trên macOS".into())
+    }
+
+    pub fn send_media_key(key: u32) -> bool {
+        let cmd = match key {
+            16 => "play-pause",
+            17 => "next",
+            18 => "previous",
+            _ => return false,
+        };
+        std::process::Command::new("playerctl").arg(cmd).status().map(|s| s.success()).unwrap_or(false)
+    }
 }
 
-pub use imp::{activate_app, configure_window, deactivate_app, idle_seconds, notch_info, set_window_level};
+pub use imp::{activate_app, airdrop_files, configure_window, deactivate_app, idle_seconds, notch_info, send_media_key, set_window_level};
+
+/// Mã phím cứng điều khiển Media (chuẩn NX_KEYTYPE của macOS, ánh xạ đa nền tảng)
+pub const MEDIA_KEY_VOL_UP: u32 = 0;
+pub const MEDIA_KEY_VOL_DOWN: u32 = 1;
+pub const MEDIA_KEY_MUTE: u32 = 7;
+pub const MEDIA_KEY_PLAY: u32 = 16;
+pub const MEDIA_KEY_NEXT: u32 = 17;
+pub const MEDIA_KEY_PREV: u32 = 18;
 
 /// Tầng cửa sổ tai thỏ bình thường (trên thanh menu)
 pub const NOTCH_LEVEL: isize = 27;

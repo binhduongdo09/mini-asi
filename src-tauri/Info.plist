@@ -7,7 +7,9 @@
   <true/>
   <!-- Lời giải thích macOS hiện khi xin quyền (bắt buộc, thiếu là app bị tắt khi xin quyền) -->
   <key>NSMicrophoneUsageDescription</key>
-  <string>Mini-Asi dùng micro để bạn ghi chú, thêm việc và viết nhật ký bằng giọng nói.</string>
+  <string>Mini-Asi dùng micro để bạn ghi chú, thêm việc, viết nhật ký bằng giọng nói và bật/tắt nhanh micro trên tai thỏ.</string>
+  <key>NSCameraUsageDescription</key>
+  <string>Mini-Asi dùng camera để hiển thị gương xem nhanh và bật/tắt camera ngay trên tai thỏ.</string>
   <key>NSSpeechRecognitionUsageDescription</key>
   <string>Mini-Asi chuyển giọng nói tiếng Việt / tiếng Anh của bạn thành chữ.</string>
   <key>NSCalendarsUsageDescription</key>

@@ -190,16 +190,29 @@ pub(crate) fn background_loop(app: AppHandle, st: Arc<AppState>) {
 }
 
 /// Theo dõi chuột: báo UI khi con trỏ đi vào/ra khỏi cửa sổ (kể cả khi app không được focus).
+/// Tự động giãn nhịp ngủ khi chuột ở xa hoặc máy đang nghỉ để tiết kiệm pin.
 pub(crate) fn hover_loop(app: AppHandle) {
     let mut inside = false;
+    let mut sleep_ms = 80u64;
     loop {
-        std::thread::sleep(Duration::from_millis(80));
+        std::thread::sleep(Duration::from_millis(sleep_ms));
+        if !inside && notch_native::idle_seconds().is_some_and(|s| s > 30.0) {
+            sleep_ms = 350;
+            continue;
+        }
         let Some(win) = app.get_webview_window("notch") else { continue };
         let (Ok(c), Ok(p), Ok(sz)) = (app.cursor_position(), win.outer_position(), win.outer_size()) else { continue };
-        let now_in = c.x >= p.x as f64 && c.x <= (p.x + sz.width as i32) as f64 && c.y >= p.y as f64 - 2.0 && c.y <= (p.y + sz.height as i32) as f64;
+        let x0 = p.x as f64;
+        let y0 = p.y as f64 - 2.0;
+        let x1 = (p.x + sz.width as i32) as f64;
+        let y1 = (p.y + sz.height as i32) as f64;
+        let now_in = c.x >= x0 && c.x <= x1 && c.y >= y0 && c.y <= y1;
         if now_in != inside {
             inside = now_in;
             let _ = app.emit("hover", inside);
         }
+        // Chuột đang ở trong hoặc tiến lại gần (< 220px) → quét nhạy 65ms; ở xa → giãn lên 180ms
+        let near = now_in || (c.x >= x0 - 220.0 && c.x <= x1 + 220.0 && c.y >= y0 - 120.0 && c.y <= y1 + 220.0);
+        sleep_ms = if near { 65 } else { 180 };
     }
 }

@@ -79,7 +79,7 @@ impl Journal {
         Self { file, entries }
     }
 
-    fn save(&self) -> Result<(), String> {
+    pub fn save(&self) -> Result<(), String> {
         let tmp = self.file.with_extension("json.tmp");
         std::fs::write(&tmp, serde_json::to_string_pretty(&self.entries).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
         std::fs::rename(&tmp, &self.file).map_err(|e| e.to_string())

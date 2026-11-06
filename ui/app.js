@@ -85,6 +85,16 @@
     const names = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
     return `${names[d.getDay()]}, ${pad(d.getDate())}/${pad(d.getMonth() + 1)} · ${hm(d)}`;
   }
+  function fmtAgo(ms, now = Date.now()) {
+    if (!ms) return "chưa có";
+    const s = Math.max(0, Math.round((now - ms) / 1000));
+    if (s < 45) return "vừa xong";
+    const m = Math.round(s / 60);
+    if (m < 60) return `${m} phút trước`;
+    const h = Math.round(m / 60);
+    if (h < 24) return `${h} giờ trước`;
+    return `${Math.round(h / 24)} ngày trước`;
+  }
   function bytes(n) {
     const u = ["B", "KB", "MB", "GB", "TB"];
     let i = 0;
@@ -113,9 +123,9 @@
 
   const SIZES = {
     collapsed: DISP === "bubble" ? [58, 58] : [BASE_W, BAR],
-    peek: [Math.max(BASE_W + 80, 420), BAR + 72],
+    peek: [Math.max(BASE_W + 120, 480), BAR + 110],
     alert: [Math.max(BASE_W + 80, 460), BAR + 120],
-    drop: [Math.max(BASE_W + 100, 480), BAR + 128],
+    drop: [Math.max(BASE_W + 130, 500), BAR + 132],
     expanded: [Math.max(BASE_W + 120, 700), 470],
     listen: [Math.max(BASE_W + 80, 440), BAR + 84],
     reply: [Math.max(BASE_W + 140, 500), BAR + 250],
@@ -126,12 +136,14 @@
   const clampW = (w) => Math.round(Math.min(Math.max(w, Math.max(BASE_W + 40, 460)), MAX_W));
   const clampH = (h) => Math.round(Math.min(Math.max(h, 360), MAX_H));
   let settingsCache = { ...early };
+  let peekCam = { active: false, stream: null };
   // Nhúng Threads vào bảng: hiện hỗ trợ macOS (Windows/Linux mở cửa sổ riêng)
   // Nhúng Threads vào bảng: đang thử nghiệm (macOS) — mặc định dùng cửa sổ Threads riêng
   const EMBED_OK = geo.platform === "macos" || new URLSearchParams(location.search).has("embed");
   const threadsInline = () => EMBED_OK && DISP !== "bubble" && tab === "threads" && (settingsCache.threads_embed_beta || new URLSearchParams(location.search).has("embed")) && !window.__thApi;
   // Kích thước bảng: theo tab, có thể kéo giãn & được nhớ lại
   function sizeOf(m) {
+    if (m === "peek" && peekCam.active) return [Math.max(BASE_W + 130, 480), BAR + 246];
     if (m !== "expanded") return SIZES[m];
     if (threadsInline()) {
       return [clampW(settingsCache.threads_w || Math.max(BASE_W + 120, 470)), clampH(settingsCache.threads_h || Math.min(MAX_H, 860))];
@@ -160,6 +172,7 @@
     const prev = mode;
     mode = next;
     if (!growing) modeTimer = setTimeout(frame, 420); // thu hoạt cảnh xong mới thu cửa sổ
+    if (next !== "peek" && peekCam.active) stopPeekCam(false);
     if (next !== "expanded" || tab !== "threads") hideEmbed();
     if (next === "expanded" && prev !== "expanded") {
       freshOpen = true; // lần mở mới → Học từ mới đổi sang 2–3 từ khác
@@ -175,7 +188,10 @@
       api("set_interactive", { on: false });
       if (window.VNKey) window.VNKey.mode = null;
     }
-    if (next === "peek") renderPeek();
+    if (next === "peek") {
+      renderPeek();
+      refreshMediaQuick();
+    }
     updateBar();
   }
 
@@ -320,9 +336,9 @@
     return Array.isArray(v) ? v : IDLE_DEFAULT;
   }
 
-  function renderPeek() {
-    const s = status;
-    if (!s) return;
+  let mediaQuick = { title: "", artist: "", app: "", playing: false, output_volume: 60, output_muted: false, mic_volume: 80, mic_muted: false };
+
+  function peekTopHtml(s) {
     const main = s.lateness.overdue > 0
       ? `<span class="chip red">${s.lateness.overdue} việc trễ</span><span class="t">${esc((tasks.find((t) => !t.done_at && t.due && t.due < Date.now()) || {}).title || "")}</span>`
       : s.next_event && (!s.next || s.next_event.start < s.next.due)
@@ -331,9 +347,167 @@
         ? `<span class="chip">${I.clock}${fmtDue(s.next.due)}</span><span class="t">${esc(s.next.title)}</span>`
         : `<span class="t">${s.open_count ? `${s.open_count} việc chưa hạn` : "Hôm nay thảnh thơi ✨"}</span>`;
     const disk = s.disk ? `<span>${I.disk}${bytes(s.disk.free_bytes)} trống</span>` : "";
-    $("#peek").innerHTML = `<div class="peek-main">${main}</div>
+    return `<div class="peek-main">${main}</div>
       <div class="peek-sub">${disk}<span>${I.clock}${mins(s.session_minutes)} liên tục</span>
       ${s.focus_until ? `<span>${I.target}đang tập trung</span>` : ""}</div>`;
+  }
+
+  function peekBarHtml() {
+    const m = mediaQuick;
+    const trackText = m.title
+      ? `<b>${esc(m.title)}</b>${m.artist ? ` · <span>${esc(m.artist)}</span>` : ""}`
+      : `<span>${m.app ? esc(m.app) : "Điều khiển nhạc"}</span>`;
+    const micMuted = !!m.mic_muted;
+    const camOn = !!peekCam.active;
+    return `<div class="peek-media">
+        <div class="peek-track" title="${esc(m.title ? `${m.title} — ${m.artist || m.app}` : "Điều khiển trình phát nhạc/video hệ thống")}">
+          ${m.playing ? '<span class="playing-dot"></span>' : I.music}${trackText}
+        </div>
+        <div class="peek-mbtns">
+          <button class="peek-mbtn" data-peek="prev" title="Bài trước">${I.prev}</button>
+          <button class="peek-mbtn play" data-peek="play" title="${m.playing ? "Tạm dừng" : "Phát tiếp"}">${m.playing ? I.pause : I.play}</button>
+          <button class="peek-mbtn" data-peek="next" title="Bài tiếp theo">${I.next}</button>
+          <button class="peek-mbtn ${m.output_muted ? "muted" : ""}" data-peek="mute-out" title="${m.output_muted ? "Loa đang tắt tiếng — bấm để bật" : `Âm lượng loa ${m.output_volume}% — bấm để tắt tiếng`}">${m.output_muted ? I.volOff : I.vol}</button>
+        </div>
+      </div>
+      <div class="peek-sep"></div>
+      <div class="peek-actions">
+        <button class="peek-btn ${micMuted ? "danger" : "on"}" data-peek="mic" title="${micMuted ? "Micro hệ thống đang tắt tiếng — bấm để bật lại" : `Micro đang bật (${m.mic_volume}%) — bấm để tắt tiếng Micro`}">
+          ${micMuted ? I.micOff : I.mic}<span>${micMuted ? "Mic tắt" : "Mic"}</span>
+        </button>
+        <button class="peek-btn ${camOn ? "cam-on" : ""}" data-peek="cam" title="${camOn ? "Camera đang bật trên tai thỏ — bấm để tắt" : "Bật gương Camera nhanh trên tai thỏ"}">
+          ${I.cam}<span>${camOn ? "Tắt Cam" : "Cam"}</span>
+        </button>
+        <button class="peek-btn blue" data-peek="airdrop" title="Chọn file gửi AirDrop (hoặc kéo thả file thẳng vào nửa trái tai thỏ)">
+          ${I.airdrop}<span>AirDrop</span>
+        </button>
+      </div>`;
+  }
+
+  function renderPeek() {
+    const s = status;
+    if (!s) return;
+    const pk = $("#peek");
+    // Nếu đang mở gương Camera trực tiếp, chỉ cập nhật phần chữ & thanh nút để không làm giật luồng video
+    const topEl = pk.querySelector(".peek-top");
+    const barEl = pk.querySelector(".peek-bar");
+    if (peekCam.active && topEl && barEl) {
+      topEl.innerHTML = peekTopHtml(s);
+      barEl.innerHTML = peekBarHtml();
+      return;
+    }
+    pk.innerHTML = `<div class="peek-top" title="Bấm để mở bảng điều khiển">${peekTopHtml(s)}</div>
+      <div class="peek-bar">${peekBarHtml()}</div>
+      ${peekCam.active ? `<div class="peek-cam-wrap" id="peekCamWrap">
+        <video id="peekCamVideo" autoplay playsinline muted></video>
+        <div class="peek-cam-bar">
+          <span class="peek-cam-badge">Camera đang bật</span>
+          <div class="row" style="gap:4px">
+            <button class="peek-btn" data-peek="cam-snap" title="Chụp ảnh lưu vào Clipboard">📸 Chụp</button>
+            <button class="peek-btn danger" data-peek="cam" title="Tắt Camera">✕ Tắt</button>
+          </div>
+        </div>
+      </div>` : ""}`;
+    if (peekCam.active && peekCam.stream) {
+      const v = $("#peekCamVideo");
+      if (v && v.srcObject !== peekCam.stream) v.srcObject = peekCam.stream;
+    }
+  }
+
+  async function refreshMediaQuick() {
+    try {
+      const m = await api("media_status");
+      if (m) {
+        mediaQuick = m;
+        const barEl = $("#peek .peek-bar");
+        if (barEl && mode === "peek") barEl.innerHTML = peekBarHtml();
+      }
+    } catch (_) {}
+  }
+
+  function stopPeekCam(resize = true) {
+    if (peekCam.stream) {
+      try { peekCam.stream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+    }
+    peekCam.active = false;
+    peekCam.stream = null;
+    const wrap = $("#peekCamWrap");
+    if (wrap) wrap.remove();
+    if (resize && mode === "peek") setMode("peek", { force: true });
+  }
+
+  async function togglePeekCam() {
+    if (peekCam.active) {
+      stopPeekCam(true);
+      toast("📷 Đã tắt Camera");
+      return;
+    }
+    const ok = await api("ensure_camera_perm").catch(() => true);
+    if (!ok) {
+      toast("Chưa cấp quyền Camera — hãy bật quyền Camera cho Mini-Asi trong Cài đặt hệ thống");
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      toast("WebView chưa hỗ trợ mở luồng Camera trực tiếp");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 360 }, facingMode: "user" }, audio: false });
+      peekCam.active = true;
+      peekCam.stream = stream;
+      await setMode("peek", { force: true });
+      const v = $("#peekCamVideo");
+      if (v) v.srcObject = stream;
+    } catch (err) {
+      toast("Không mở được Camera: " + String(err.message || err));
+    }
+  }
+
+  async function handlePeekAction(act) {
+    if (["prev", "play", "next", "mute-out"].includes(act)) {
+      const cmd = act === "mute-out" ? "mute_out" : act;
+      mediaQuick = await api("media_control", { action: cmd });
+      const barEl = $("#peek .peek-bar");
+      if (barEl) barEl.innerHTML = peekBarHtml();
+      if (act === "mute-out") toast(mediaQuick.output_muted ? "🔇 Đã tắt tiếng loa" : `🔊 Đã bật loa (${mediaQuick.output_volume}%)`);
+      return;
+    }
+    if (act === "mic") {
+      mediaQuick = await api("toggle_mic_mute");
+      const barEl = $("#peek .peek-bar");
+      if (barEl) barEl.innerHTML = peekBarHtml();
+      toast(mediaQuick.mic_muted ? "🔇 Đã tắt tiếng Micro hệ thống" : `🎙 Đã bật Micro (${mediaQuick.mic_volume}%)`);
+      return;
+    }
+    if (act === "cam") {
+      await togglePeekCam();
+      return;
+    }
+    if (act === "cam-snap") {
+      const v = $("#peekCamVideo");
+      if (!v || !v.videoWidth) return;
+      const cv = document.createElement("canvas");
+      cv.width = v.videoWidth;
+      cv.height = v.videoHeight;
+      const ctx = cv.getContext("2d");
+      ctx.translate(cv.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(v, 0, 0);
+      await api("clip_copy_image", { dataUrl: cv.toDataURL("image/png") });
+      confetti(16);
+      toast("📸 Đã chụp vào Clipboard — nhấn ⌘V để dán!");
+      return;
+    }
+    if (act === "airdrop") {
+      const paths = await api("pick_files");
+      if (!paths || !paths.length) return;
+      try {
+        await api("file_airdrop", { paths });
+        setMode("collapsed");
+      } catch (err) {
+        toast(String(err));
+      }
+    }
   }
 
   // ───────── Kéo giãn bảng ─────────
@@ -403,11 +577,11 @@
   on("hover", (inside) => {
     hovering = inside;
     if (inside && mode === "collapsed" && DISP !== "bubble") modeTimer = setTimeout(() => hovering && setMode("peek"), 140);
-    if (!inside && mode === "peek") modeTimer = setTimeout(() => !hovering && setMode("collapsed"), 380);
+    if (!inside && mode === "peek") modeTimer = setTimeout(() => !hovering && setMode("collapsed"), peekCam.active ? 1600 : 380);
   });
   island.addEventListener("transitionend", (e) => { if (e.target === island && e.propertyName === "width") { const rw = $("#rightWing"); rw.dataset.keys = ""; delete rw.dataset.retry; updateBar(); } });
   island.addEventListener("mouseenter", () => { hovering = true; if (mode === "collapsed" && DISP !== "bubble") modeTimer = setTimeout(() => hovering && setMode("peek"), 140); });
-  island.addEventListener("mouseleave", () => { hovering = false; if (mode === "peek") modeTimer = setTimeout(() => !hovering && setMode("collapsed"), 380); });
+  island.addEventListener("mouseleave", () => { hovering = false; if (mode === "peek") modeTimer = setTimeout(() => !hovering && setMode("collapsed"), peekCam.active ? 1600 : 380); });
   // Kéo & ghim vị trí bất kỳ trên màn hình (áp dụng cho cả Tai thỏ, Viên thuốc, Bong bóng và bảng Popup mở rộng)
   let justDragged = false;
   async function resetPosition() {
@@ -484,7 +658,16 @@
     if (act === "close") { setMode("collapsed"); return; }
     if (mode === "collapsed" || mode === "peek") setMode("expanded");
   });
-  $("#peek").addEventListener("click", () => setMode("expanded"));
+  $("#peek").addEventListener("click", async (e) => {
+    const btn = e.target.closest("[data-peek]");
+    if (btn) {
+      e.stopPropagation();
+      await handlePeekAction(btn.dataset.peek);
+      return;
+    }
+    if (e.target.closest(".peek-cam-wrap") || e.target.closest(".peek-bar")) return;
+    setMode("expanded");
+  });
   window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !isComposing(e) && mode !== "collapsed") setMode("collapsed"); });
   // Chỉ thu gọn khi người dùng thật sự rời đi (chuột ở ngoài tai thỏ) — tránh bị đóng khi
   // bộ gõ tiếng Việt / bảng chọn emoji / đổi ngôn ngữ bàn phím làm cửa sổ mất focus thoáng qua
@@ -722,16 +905,72 @@
   on("water", () => { flashMood("happy", 2500); if (mode === "expanded") toast("💧 Uống ngụm nước nhé"); });
   on("focus-done", () => { confetti(); flashMood("love", 4000); });
 
-  // ───────── Kéo thả file ─────────
+  // ───────── Kéo thả file (nửa trái = AirDrop ngay · nửa phải = Khay File / Nén / PDF) ─────────
+  let dropZone = "airdrop";
+  let dropPoll = null;
+  function setDropZone(z) {
+    dropZone = z === "files" ? "files" : "airdrop";
+    $("#dropAirdrop")?.classList.toggle("active", dropZone === "airdrop");
+    $("#dropTray")?.classList.toggle("active", dropZone === "files");
+  }
+  $("#dropLayer")?.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    setDropZone(e.clientX < window.innerWidth / 2 ? "airdrop" : "files");
+  });
+  $("#dropLayer")?.addEventListener("pointermove", (e) => {
+    setDropZone(e.clientX < window.innerWidth / 2 ? "airdrop" : "files");
+  });
+  on("tauri://drag-over", (p) => {
+    const pos = p && p.position;
+    if (pos && typeof pos.x === "number") {
+      const dpr = window.devicePixelRatio || 1;
+      const half = window.innerWidth / 2;
+      // Hỗ trợ cả toạ độ logical và physical trên màn Retina
+      const lx = pos.x > window.innerWidth ? pos.x / dpr : pos.x;
+      setDropZone(lx < half ? "airdrop" : "files");
+    }
+  });
   on("tauri://drag-enter", () => {
     if (mode === "drop") return;
     dropBefore = mode;
+    setDropZone("airdrop");
     if (mode !== "expanded") setMode("drop");
+    clearInterval(dropPoll);
+    dropPoll = setInterval(async () => {
+      if (mode !== "drop") { clearInterval(dropPoll); return; }
+      try {
+        const side = await api("cursor_side");
+        setDropZone(side === "right" ? "files" : "airdrop");
+      } catch (_) {}
+    }, 90);
   });
-  on("tauri://drag-leave", () => { if (mode === "drop") setMode(dropBefore === "expanded" ? "expanded" : "collapsed"); });
+  on("tauri://drag-leave", () => {
+    clearInterval(dropPoll);
+    if (mode === "drop") setMode(dropBefore === "expanded" ? "expanded" : "collapsed");
+  });
   on("tauri://drag-drop", async (p) => {
+    clearInterval(dropPoll);
     const paths = (p && p.paths) || [];
     if (!paths.length) return;
+    let side = dropZone;
+    if (mode === "drop") {
+      try {
+        const s = await api("cursor_side");
+        side = s === "right" ? "files" : "airdrop";
+      } catch (_) {}
+    }
+    if (mode === "drop" && side === "airdrop") {
+      await setMode("collapsed");
+      try {
+        await api("file_airdrop", { paths });
+      } catch (err) {
+        await addFiles(paths);
+        tab = "files";
+        await setMode("expanded", { force: true });
+        toast(String(err));
+      }
+      return;
+    }
     await addFiles(paths);
     tab = "files";
     setMode("expanded", { force: true });
@@ -1286,7 +1525,7 @@
           const [first, ...rest] = n.text.split("\n");
           return `<div class="note-item ${n.id === noteId ? "active" : ""}" data-n="open" data-id="${n.id}">
             <b>${n.pinned ? "📌 " : ""}${esc(first || "Ghi chú trống")}</b>
-            <span>${fmtDue(n.updated).replace("trễ ", "") + " trước"} · ${esc(rest.join(" ").slice(0, 30))}</span></div>`;
+            <span>${fmtAgo(n.updated)} · ${esc(rest.join(" ").slice(0, 30))}</span></div>`;
         }).join("")
       : `<div class="empty small">Chưa có ghi chú</div>`;
   }
@@ -1326,6 +1565,7 @@
           <div class="grow"><div class="nm">${esc(f.name)}</div><div class="muted small">${f.is_dir ? "Thư mục" : bytes(f.size)}</div></div>
           <button class="icon-btn" data-f="rm" data-i="${i}">${I.x}</button></div>`).join("")}</div>
         <div class="actions">
+          <button class="btn blue" data-f="airdrop" title="Bắn file nhanh qua AirDrop sang iPhone, iPad, Mac">${I.airdrop}AirDrop</button>
           <button class="btn primary" data-f="zip" ${busy ? "disabled" : ""}>${I.zip}Nén ZIP</button>
           <button class="btn" data-f="copy" title="Chép vào clipboard để dán ra Finder, Mail, Zalo…">${I.clip}Chép file</button>
           ${arcs.length ? `<button class="btn" data-f="extract" ${busy ? "disabled" : ""}>${I.unzip}Giải nén${arcs.length > 1 ? ` (${arcs.length})` : ""}</button>` : ""}
@@ -1338,8 +1578,8 @@
           ${busy ? '<span class="spin"></span>' : ""}
         </div>`
       : `<div class="drop-area">${I.file}<b style="color:#fff">Kéo file thả vào tai thỏ</b>
-          <span class="small">Nén ZIP · Giải nén ZIP/RAR/7z/TAR · Nén PDF · Gộp PDF</span>
-          <button class="btn" data-f="pick">Chọn file…</button></div>`}
+          <span class="small">Thả nửa trái: <b>AirDrop ngay</b> · Thả nửa phải: <b>Nén ZIP / Giải nén / PDF</b></span>
+          <div class="row" style="margin-top:4px"><button class="btn blue" data-f="airdrop-pick">${I.airdrop}Chọn file gửi AirDrop…</button><button class="btn" data-f="pick">Chọn file nén / PDF…</button></div></div>`}
       ${fileResults.length ? `<div class="sec">Kết quả</div>` + fileResults.map((r) => `
         <div class="card result ${r.error ? "err" : ""}" style="margin-bottom:6px">
           <div class="row"><div class="grow">
@@ -1370,6 +1610,15 @@
     if (!b) return;
     const a = b.dataset.f;
     if (a === "pick") { const p = await api("pick_files"); if (p.length) { await addFiles(p); viewFiles(); } }
+    if (a === "airdrop-pick") {
+      const p = await api("pick_files");
+      if (p.length) { try { await api("file_airdrop", { paths: p }); } catch (err) { toast(String(err)); } }
+      return;
+    }
+    if (a === "airdrop") {
+      try { await api("file_airdrop", { paths: files.map((f) => f.path) }); } catch (err) { toast(String(err)); }
+      return;
+    }
     if (a === "clear") { files = []; viewFiles(); }
     if (a === "rm") { files.splice(Number(b.dataset.i), 1); viewFiles(); }
     if (a === "reveal") api("reveal", { path: b.dataset.p });
@@ -1760,7 +2009,7 @@
           <div class="grow"><b>${p.name}</b> ${p.required ? "" : '<span class="chip">Tuỳ chọn</span>'} <span class="muted small">${p.why}</span></div>
           ${p.state === "granted" ? '<span class="chip green">Đã cấp</span>' : `<button class="btn sm ghost" data-s="perm" data-p="${p.id}">${p.state === "denied" && ["accessibility", "disk"].includes(p.id) ? "Mở cài đặt" : "Cấp quyền"}</button>`}</div>`).join("")}</div>
       </div>`;
-    const ago = (ms) => (ms ? fmtDue(ms).replace("trễ ", "") + " trước" : "chưa có");
+    const ago = (ms) => fmtAgo(ms);
     const backupCard = `<div class="sec">☁️ Sao lưu & đồng bộ nhiều máy</div>
       <div class="card">
         <div class="setting"><div class="grow"><b>Thư mục đám mây</b><span>${bk.current ? esc(bk.current) : "Chưa tìm thấy Google Drive — cài “Google Drive cho máy tính” hoặc chọn thư mục"}</span></div>
@@ -1877,7 +2126,7 @@
         <div class="setting"><div class="grow"><b>Lịch (Calendar)</b><span>Hiện lịch họp hôm nay, nhắc trước giờ họp, thêm việc vào Lịch</span></div>
           <input class="input num" type="number" min="1" max="60" value="${st.event_alert_minutes}" data-k="event_alert_minutes" /><span class="muted small">phút</span>
           <button class="switch ${st.show_calendar ? "on" : ""}" data-k="show_calendar"></button></div>
-        <div class="setting"><div class="grow"><b>Trạng thái</b><span id="syncState">${si.last_run ? "Đồng bộ lần cuối " + fmtDue(si.last_run).replace("trễ ", "") + " trước · " + si.linked_tasks + " việc · " + si.linked_notes + " ghi chú" : "Chưa đồng bộ"}${si.last_error ? `<br><span style="color:var(--red)">${esc(si.last_error)}</span>` : ""}</span></div>
+        <div class="setting"><div class="grow"><b>Trạng thái</b><span id="syncState">${si.last_run ? "Đồng bộ lần cuối " + fmtAgo(si.last_run) + " · " + si.linked_tasks + " việc · " + si.linked_notes + " ghi chú" : "Chưa đồng bộ"}${si.last_error ? `<br><span style="color:var(--red)">${esc(si.last_error)}</span>` : ""}</span></div>
           <button class="btn sm" data-s="sync">${I.sync}Đồng bộ ngay</button></div>
       </div>` : ""}
       <div class="row" style="margin-top:12px"><span class="muted small grow">Mini-Asi 0.10.0 · Dữ liệu chỉ lưu trên máy bạn</span>
@@ -1959,7 +2208,7 @@
 
   // Cho phép extra.js (Clipboard, Nhật ký) dùng chung tiện ích
   window.ASI = {
-    api, on, $, $$, esc, I, toast, askAsi, voiceCommand, isComposing, typing, updateBar, placeEmbed, hideEmbed, switchTab, threadsInline, confetti, flashMood, fmtDue, hm, bytes, mins, dictate, micBtn, langPill, geo,
+    api, on, $, $$, esc, I, toast, askAsi, voiceCommand, isComposing, typing, updateBar, placeEmbed, hideEmbed, switchTab, threadsInline, confetti, flashMood, fmtDue, fmtAgo, hm, bytes, mins, dictate, micBtn, langPill, geo,
     views: EXTRA_VIEWS,
     get tab() { return tab; }, set tab(t) { tab = t; },
     get mode() { return mode; }, setMode, renderView,

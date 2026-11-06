@@ -24,7 +24,7 @@
   const settings = { break_enabled: true, break_minutes: 50, water_enabled: true, water_minutes: 60, sleep_hour: 23, focus_mode: false, launch_at_login: true, license_key: null, pdf_quality: "ebook", shortcut: "CmdOrCtrl+Shift+Space",
     clip_enabled: true, clip_max: 200, clip_shortcut: "Control+Shift+V", clip_autopaste: false, sync_reminders: true, reminders_list: "Mini-Asi", sync_notes: true, notes_folder: "Mini-Asi",
     show_calendar: true, event_alert_minutes: 10, voice_lang: "vi-VN", journal_enabled: true, journal_hour: 21,
-    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", visible_tabs: ["home", "tasks", "notes", "clips", "journal", "threads"], auto_update_check: true, update_repo: "binhduongdo09/mini-asi" };
+    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", visible_tabs: ["home", "tasks", "notes", "clips", "journal", "words", "threads"], auto_update_check: true, update_repo: "binhduongdo09/mini-asi", voice_reply: false, tts_engine: "system", tts_voice: "Trúc Ly" };
   const today0 = new Date(); today0.setHours(0, 0, 0, 0);
   const at = (h, m = 0) => today0.getTime() + h * H + m * 60e3;
   const events = [
@@ -109,6 +109,13 @@
     file_extract: async () => { await wait(600); return { output: "/Users/binh/Downloads/Anh-su-kien", before: 4.2e6, after: 4.6e6, message: "Đã giải nén xong" }; },
     file_compress_pdf: async ({ path }) => { await wait(900); return { output: path.replace(".pdf", "-nen.pdf"), before: 8.4e6, after: 1.9e6, message: "Giảm 77% (macOS)" }; },
     file_merge_pdf: async () => { await wait(600); return { output: "/Users/binh/Desktop/Hop-dong-Hoiana-gop.pdf", before: 12e6, after: 11e6, message: "Đã gộp 2 file" }; },
+    file_airdrop: async () => { await wait(200); return null; },
+    cursor_side: () => "left",
+    media_status: () => ({ playing: true, title: "Chúng Ta Của Tương Lai", artist: "Sơn Tùng M-TP", app: "Spotify", output_volume: 65, output_muted: false, mic_volume: 80, mic_muted: false, cam_granted: true }),
+    media_control: async () => ({ playing: false, title: "Chúng Ta Của Tương Lai", artist: "Sơn Tùng M-TP", app: "Spotify", output_volume: 65, output_muted: false, mic_volume: 80, mic_muted: false, cam_granted: true }),
+    toggle_mic_mute: async () => ({ playing: true, title: "Chúng Ta Của Tương Lai", artist: "Sơn Tùng M-TP", app: "Spotify", output_volume: 65, output_muted: false, mic_volume: 0, mic_muted: true, cam_granted: true }),
+    ensure_camera_perm: async () => true,
+    clip_copy_image: () => null,
     reveal: () => null,
     clean_scan: async () => { await wait(1200); return { report: report(), disk, pro }; },
     clean_run: async ({ rules, paths }) => { await wait(900); return { dry_run: false, deleted_bytes: 15.95e9, trashed_bytes: 0, items_done: 11, failures: [], locked_rules: [] }; },
@@ -207,6 +214,7 @@
       { id: "notifications", name: "Thông báo", why: "Nhắc việc, nhắc nghỉ, báo giờ họp", state: "granted", required: true },
       { id: "microphone", name: "Micro", why: "Ghi chú, thêm việc, nhật ký bằng giọng nói", state: "granted", required: true },
       { id: "speech", name: "Nhận dạng giọng nói", why: "Chuyển giọng nói tiếng Việt / Anh thành chữ", state: "granted", required: true },
+      { id: "camera", name: "Camera", why: "Gương xem nhanh & bật/tắt camera trên tai thỏ (tuỳ chọn)", state: "granted", required: false },
       { id: "calendar", name: "Lịch", why: "Hiện lịch họp, báo trước giờ họp", state: "granted" },
       { id: "automation", name: "Lời nhắc & Ghi chú", why: "Đồng bộ việc và ghi chú với app Apple", state: "manual" },
       { id: "accessibility", name: "Trợ năng", why: "Tự dán từ Clipboard", state: "denied" },

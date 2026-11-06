@@ -33,12 +33,19 @@
     <section class="layer listenL" id="listenL"></section>
     <section class="layer replyL" id="replyL"></section>
 
-    <!-- Nhận file khi kéo thả -->
+    <!-- Nhận file khi kéo thả: nửa trái = AirDrop ngay · nửa phải = Khay File (Nén/PDF) -->
     <section class="layer dropzone" id="dropLayer">
-      <div class="drop-hint">
-        <div class="drop-icon"></div>
-        <b>Thả vào đây</b>
-        <span>Nén · Giải nén · Nén PDF · Gộp PDF</span>
+      <div class="drop-split">
+        <div class="drop-box airdrop active" id="dropAirdrop" data-drop-zone="airdrop">
+          <div class="drop-ic">📡</div>
+          <b>Thả để AirDrop</b>
+          <span>Bắn nhanh sang iPhone · iPad · Mac</span>
+        </div>
+        <div class="drop-box tray" id="dropTray" data-drop-zone="files">
+          <div class="drop-ic">📦</div>
+          <b>Khay File & PDF</b>
+          <span>Nén ZIP · Giải nén · Nén/Gộp PDF</span>
+        </div>
       </div>
     </section>
 

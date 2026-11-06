@@ -51,6 +51,14 @@ pub(crate) fn clip_copy_files(paths: Vec<String>) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub(crate) fn clip_copy_image(data_url: String) -> Result<(), String> {
+    use base64::Engine;
+    let raw = data_url.split(',').nth(1).unwrap_or(&data_url);
+    let png = base64::engine::general_purpose::STANDARD.decode(raw.trim()).map_err(|e| e.to_string())?;
+    notch_native::clip::write(&notch_native::clip::ClipData::Image(png))
+}
+
+#[tauri::command]
 pub(crate) fn clip_pin(st: S, id: u64) {
     st.clips.lock().unwrap().toggle_pin(id);
 }
@@ -108,6 +116,7 @@ pub(crate) fn open_privacy(pane: String) {
             "calendar" => "Privacy_Calendars",
             "automation" => "Privacy_Automation",
             "microphone" => "Privacy_Microphone",
+            "camera" => "Privacy_Camera",
             "speech" => "Privacy_SpeechRecognition",
             _ => "Privacy",
         };

@@ -36,7 +36,8 @@ pub(crate) fn perm_list(app: &AppHandle) -> Vec<PermItem> {
     };
     vec![
         PermItem { id: "notifications", name: "Thông báo", why: "Nhắc việc, nhắc nghỉ, báo giờ họp", state: notif, required: true },
-        PermItem { id: "microphone", name: "Micro", why: "Ra lệnh & ghi chú bằng giọng nói", state: state_str(perm::microphone()), required: true },
+        PermItem { id: "microphone", name: "Micro", why: "Ra lệnh, ghi chú & bật/tắt nhanh micro trên tai thỏ", state: state_str(perm::microphone()), required: true },
+        PermItem { id: "camera", name: "Camera", why: "Gương xem nhanh & bật/tắt camera trên tai thỏ (tuỳ chọn)", state: state_str(perm::camera()), required: false },
         PermItem { id: "speech", name: "Nhận dạng giọng nói", why: "Chuyển giọng nói tiếng Việt / Anh thành chữ", state: state_str(perm::speech()), required: true },
         PermItem { id: "calendar", name: "Lịch", why: "Hiện lịch họp, báo trước giờ họp", state: state_str(perm::calendar()), required: false },
         PermItem { id: "automation", name: "Lời nhắc & Ghi chú", why: "Đồng bộ việc và ghi chú với app Apple", state: "manual", required: false },
@@ -68,6 +69,9 @@ pub(crate) async fn request_permissions(app: AppHandle, which: String) -> Vec<Pe
         }
         if want("microphone") {
             notch_native::perm::request_microphone();
+        }
+        if want("camera") {
+            notch_native::perm::request_camera();
         }
         if want("speech") {
             let _ = notch_native::speech::ensure_access();

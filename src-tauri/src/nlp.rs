@@ -153,9 +153,12 @@ pub fn parse(input: &str, now: NaiveDateTime) -> Parsed {
     let mut minute: u32 = 0;
     let mut period: Option<Period> = None;
 
-    let re_time = regex::Regex::new(r"^(\d{1,2})(?:h|g|:)(\d{1,2})?(?:p|ph|phut)?$").unwrap();
-    let re_date = regex::Regex::new(r"^(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?$").unwrap();
-    let re_ampm = regex::Regex::new(r"^(\d{1,2})(?::(\d{2}))?(am|pm|a\.m|p\.m)$").unwrap();
+    static RE_TIME: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static RE_DATE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    static RE_AMPM: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re_time = RE_TIME.get_or_init(|| regex::Regex::new(r"^(\d{1,2})(?:h|g|:)(\d{1,2})?(?:p|ph|phut)?$").unwrap());
+    let re_date = RE_DATE.get_or_init(|| regex::Regex::new(r"^(\d{1,2})[/\-.](\d{1,2})(?:[/\-.](\d{2,4}))?$").unwrap());
+    let re_ampm = RE_AMPM.get_or_init(|| regex::Regex::new(r"^(\d{1,2})(?::(\d{2}))?(am|pm|a\.m|p\.m)$").unwrap());
     let ampm = |h: u32, ap: &str| -> u32 {
         let pm = ap.starts_with('p');
         match (h % 12, pm) {

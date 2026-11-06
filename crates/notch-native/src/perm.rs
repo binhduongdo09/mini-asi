@@ -15,7 +15,7 @@ mod imp {
     use super::State;
     use block2::RcBlock;
     use objc2::runtime::Bool;
-    use objc2_av_foundation::{AVAuthorizationStatus, AVCaptureDevice, AVMediaTypeAudio};
+    use objc2_av_foundation::{AVAuthorizationStatus, AVCaptureDevice, AVMediaTypeAudio, AVMediaTypeVideo};
     use std::ffi::c_void;
     use std::sync::mpsc;
     use std::time::Duration;
@@ -34,6 +34,28 @@ mod imp {
             return true;
         }
         let Some(t) = (unsafe { AVMediaTypeAudio }) else { return false };
+        let (tx, rx) = mpsc::channel();
+        let block = RcBlock::new(move |ok: Bool| {
+            let _ = tx.send(ok.as_bool());
+        });
+        unsafe { AVCaptureDevice::requestAccessForMediaType_completionHandler(t, &block) };
+        rx.recv_timeout(Duration::from_secs(120)).unwrap_or(false)
+    }
+
+    pub fn camera() -> State {
+        let Some(t) = (unsafe { AVMediaTypeVideo }) else { return State::Unknown };
+        match unsafe { AVCaptureDevice::authorizationStatusForMediaType(t) } {
+            AVAuthorizationStatus::Authorized => State::Granted,
+            AVAuthorizationStatus::NotDetermined => State::NotAsked,
+            _ => State::Denied,
+        }
+    }
+
+    pub fn request_camera() -> bool {
+        if camera() == State::Granted {
+            return true;
+        }
+        let Some(t) = (unsafe { AVMediaTypeVideo }) else { return false };
         let (tx, rx) = mpsc::channel();
         let block = RcBlock::new(move |ok: Bool| {
             let _ = tx.send(ok.as_bool());
@@ -102,6 +124,12 @@ mod imp {
     pub fn request_microphone() -> bool {
         true
     }
+    pub fn camera() -> State {
+        State::Granted
+    }
+    pub fn request_camera() -> bool {
+        true
+    }
     pub fn accessibility() -> State {
         State::Unknown
     }
@@ -113,7 +141,7 @@ mod imp {
     }
 }
 
-pub use imp::{accessibility, full_disk_access, microphone, prompt_accessibility, request_microphone};
+pub use imp::{accessibility, camera, full_disk_access, microphone, prompt_accessibility, request_camera, request_microphone};
 
 /// Trạng thái quyền Lịch
 pub fn calendar() -> State {

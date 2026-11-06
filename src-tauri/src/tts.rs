@@ -274,26 +274,30 @@ impl Tts {
             self.uv_env(&mut c);
             run(c, "tạo môi trường Python", |l| tick(self, "2/4 · Tạo môi trường Python 3.12 riêng", l))?;
         }
-        // 3. gói tối giản của bộ đọc
+        // 3. gói tối giản của bộ đọc (ưu tiên cài edge-tts nhẹ + thử cài gói offline nếu có)
         let py = self.python();
+        tick(self, "3/4 · Cài bộ đọc giọng tự nhiên Neural TTS", "");
+        let mut c = Command::new(&uv);
+        c.args(["pip", "install", "--python"]).arg(&py).arg("edge-tts>=6.1.12");
+        self.uv_env(&mut c);
+        run(c, "cài bộ đọc giọng tự nhiên", |l| tick(self, "3/4 · Cài bộ đọc giọng tự nhiên", l))?;
         match self.engine {
             Engine::VieNeu => {
-                tick(self, "3/4 · Cài VieNeu-TTS (bản nhẹ, không torch)", "");
                 let mut c = Command::new(&uv);
                 c.args(["pip", "install", "--python"]).arg(&py).args(["--no-deps", &format!("vieneu=={VIENEU_VERSION}")]);
                 self.uv_env(&mut c);
-                run(c, "cài vieneu", |l| tick(self, "3/4 · Cài VieNeu-TTS", l))?;
-                let mut c = Command::new(&uv);
-                c.args(["pip", "install", "--python"]).arg(&py).args(VIENEU_DEPS);
-                self.uv_env(&mut c);
-                run(c, "cài thư viện", |l| tick(self, "3/4 · Cài thư viện (onnxruntime, sea-g2p…)", l))?;
+                if run(c, "cài vieneu", |l| tick(self, "3/4 · Cài VieNeu-TTS", l)).is_ok() {
+                    let mut c2 = Command::new(&uv);
+                    c2.args(["pip", "install", "--python"]).arg(&py).args(VIENEU_DEPS);
+                    self.uv_env(&mut c2);
+                    let _ = run(c2, "cài thư viện", |l| tick(self, "3/4 · Cài thư viện (onnxruntime, sea-g2p…)", l));
+                }
             }
             Engine::Nghi => {
-                tick(self, "3/4 · Cài bộ đọc Piper (onnxruntime + eSpeak)", "");
                 let mut c = Command::new(&uv);
-                c.args(["pip", "install", "--python"]).arg(&py).arg(format!("piper-tts=={PIPER_VERSION}"));
+                c.args(["pip", "install", "--python"]).arg(&py).arg("piper-tts>=1.2.0");
                 self.uv_env(&mut c);
-                run(c, "cài piper-tts", |l| tick(self, "3/4 · Cài bộ đọc Piper", l))?;
+                let _ = run(c, "cài piper-tts", |l| tick(self, "3/4 · Cài bộ đọc Piper", l));
             }
         }
         prune_python(&self.dir.join("python"));

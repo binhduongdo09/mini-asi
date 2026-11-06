@@ -106,7 +106,7 @@ pub(crate) fn play_audio_file(f: &std::path::Path) -> bool {
     let c = std::process::Command::new("sh").args(["-c", "ffplay -nodisp -autoexit -loglevel quiet \"$0\" 2>/dev/null || mpg123 -q \"$0\" 2>/dev/null || paplay \"$0\"", &f.to_string_lossy()]).spawn();
     match c {
         Ok(c) => {
-            *SAY_PID.lock().unwrap() = Some(c.id());
+            track_audio_child(c);
             true
         }
         Err(_) => false,
