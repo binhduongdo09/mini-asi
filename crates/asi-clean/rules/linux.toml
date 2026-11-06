@@ -1,0 +1,110 @@
+# Bộ luật dọn dẹp Mini-Asi cho Linux (bản đầu — dùng để kiểm thử đa nền tảng)
+
+[[rule]]
+id = "browser-chrome"
+name = "Cache Google Chrome / Chromium"
+category = "browser"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/.cache/google-chrome", "~/.cache/chromium"]
+action = "delete"
+active_guard_minutes = 30
+
+[[rule]]
+id = "browser-firefox"
+name = "Cache Firefox"
+category = "browser"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/.cache/mozilla/firefox"]
+action = "delete"
+active_guard_minutes = 30
+
+[[rule]]
+id = "dev-package-caches"
+name = "Cache npm, yarn, pip, cargo, go"
+category = "dev"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/.npm/_cacache", "~/.cache/yarn", "~/.cache/pip", "~/.cargo/registry/cache", "~/.cache/go-build"]
+action = "delete"
+active_guard_minutes = 15
+
+[[rule]]
+id = "dev-project-artifacts"
+name = "Thư mục build của dự án lâu không đụng tới"
+category = "projects"
+level = "review"
+tier = "pro"
+kind = "artifacts"
+paths = ["~/Projects", "~/GitHub", "~/dev", "~/Code"]
+depth = 6
+min_age_days = 7
+action = "delete"
+artifacts = [
+  { dir = "node_modules", marker = "package.json" },
+  { dir = "target",       marker = "Cargo.toml" },
+  { dir = "__pycache__",  marker = "*.py" },
+  { dir = ".venv",        marker = "pyproject.toml" },
+]
+
+[[rule]]
+id = "files-installers"
+name = "File cài đặt đã dùng xong (.deb, .rpm, .AppImage, .iso)"
+category = "files"
+level = "review"
+tier = "pro"
+kind = "glob"
+paths = ["~/Downloads", "~/Desktop"]
+patterns = ["*.deb", "*.rpm", "*.AppImage", "*.iso"]
+depth = 2
+min_age_days = 3
+action = "trash"
+
+[[rule]]
+id = "files-large"
+name = "File lớn > 1 GB"
+category = "files"
+level = "review"
+tier = "pro"
+kind = "glob"
+paths = ["~/Downloads", "~/Desktop", "~/Videos", "~/Documents"]
+patterns = ["*"]
+depth = 4
+min_size_mb = 1024
+action = "trash"
+
+[[rule]]
+id = "system-thumbnails"
+name = "Ảnh thu nhỏ (thumbnails)"
+category = "system"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/.cache/thumbnails"]
+action = "delete"
+
+[[rule]]
+id = "system-user-caches"
+name = "Cache ứng dụng (tự tạo lại khi cần)"
+category = "system"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/.cache"]
+action = "delete"
+active_guard_minutes = 60
+exclude = ["mini-asi", "fontconfig", "ibus", "keyring-*", "gnome-software"]
+
+[[rule]]
+id = "system-trash"
+name = "Thùng rác"
+category = "system"
+level = "review"
+tier = "free"
+kind = "contents"
+paths = ["~/.local/share/Trash/files", "~/.local/share/Trash/info"]
+action = "delete"

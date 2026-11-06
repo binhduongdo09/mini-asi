@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mini-Asi</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="island" class="mode-collapsed mood-idle" aria-label="Mini-Asi">
+    <!-- Thanh trên cùng: cánh trái (linh vật) · khoảng tai thỏ · cánh phải (thông tin) -->
+    <div class="bar" id="bar">
+      <div class="wing left">
+        <div class="face" id="face">
+          <span class="eye l"><i></i></span><span class="eye r"><i></i></span>
+          <span class="zzz">z</span>
+          <span class="vein">💢</span>
+          <span class="drop"></span>
+        </div>
+        <span class="bar-title" id="barTitle"></span>
+      </div>
+      <div class="notch-gap" id="notchGap"></div>
+      <div class="wing right" id="rightWing"></div>
+    </div>
+
+    <!-- Ló ra khi rê chuột -->
+    <section class="layer peek" id="peek"></section>
+
+    <!-- Báo động: nhắc việc / nghỉ mắt -->
+    <section class="layer alert" id="alert"></section>
+
+    <!-- Asi đang nghe / trả lời lệnh giọng nói -->
+    <section class="layer listenL" id="listenL"></section>
+    <section class="layer replyL" id="replyL"></section>
+
+    <!-- Nhận file khi kéo thả -->
+    <section class="layer dropzone" id="dropLayer">
+      <div class="drop-hint">
+        <div class="drop-icon"></div>
+        <b>Thả vào đây</b>
+        <span>Nén · Giải nén · Nén PDF · Gộp PDF</span>
+      </div>
+    </section>
+
+    <!-- Bảng điều khiển đầy đủ -->
+    <section class="layer panel" id="panel">
+      <nav class="tabs" id="tabs"></nav>
+      <div class="view" id="view"></div>
+    </section>
+
+    <div class="accent" id="accent"></div>
+    <div class="confetti" id="confetti"></div>
+  </div>
+  <script src="icons.js"></script>
+  <script src="vnkey.js"></script>
+  <script src="app.js"></script>
+  <script src="extra.js"></script>
+  <script src="vocab.js"></script>
+</body>
+</html>

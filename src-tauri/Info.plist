@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Ứng dụng nền: không hiện icon trên Dock, chỉ sống ở tai thỏ + thanh menu -->
+  <key>LSUIElement</key>
+  <true/>
+  <!-- Lời giải thích macOS hiện khi xin quyền (bắt buộc, thiếu là app bị tắt khi xin quyền) -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Mini-Asi dùng micro để bạn ghi chú, thêm việc và viết nhật ký bằng giọng nói.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Mini-Asi chuyển giọng nói tiếng Việt / tiếng Anh của bạn thành chữ.</string>
+  <key>NSCalendarsUsageDescription</key>
+  <string>Mini-Asi hiện lịch họp trên tai thỏ và nhắc bạn trước giờ họp.</string>
+  <key>NSCalendarsFullAccessUsageDescription</key>
+  <string>Mini-Asi hiện lịch họp trên tai thỏ, nhắc trước giờ họp và thêm việc vào Lịch.</string>
+  <key>NSAppleEventsUsageDescription</key>
+  <string>Mini-Asi đồng bộ việc với Lời nhắc và ghi chú với app Ghi chú của bạn.</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>© 2026 Mini-Asi</string>
+</dict>
+</plist>

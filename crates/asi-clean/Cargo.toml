@@ -1,0 +1,32 @@
+[package]
+name = "asi-clean"
+version = "0.1.0"
+edition = "2021"
+description = "Mini-Asi cleanup engine: quét & dọn rác an toàn cho macOS / Linux / Windows"
+license = "Proprietary"
+
+[lib]
+name = "asi_clean"
+path = "src/lib.rs"
+
+[[bin]]
+name = "asi-clean"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+globset = "0.4"
+walkdir = "2"
+trash = "5"
+clap = { version = "4", features = ["derive"] }
+dirs = "5"
+humantime = "2"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+filetime = "0.2"

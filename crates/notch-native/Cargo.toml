@@ -1,0 +1,22 @@
+[package]
+name = "notch-native"
+version = "0.2.0"
+edition = "2021"
+description = "Mini-Asi: lớp gọi API hệ điều hành — tai thỏ, cửa sổ, thời gian rảnh tay, clipboard, Lịch, nhận dạng giọng nói"
+license = "Proprietary"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSThread", "NSString", "NSArray", "NSURL", "NSData", "NSDictionary", "NSDate", "NSError", "NSLocale", "NSOperation", "NSObject", "block2"] }
+objc2-app-kit = { version = "0.3", features = ["NSScreen", "NSWindow", "NSResponder", "NSGraphics", "NSApplication", "NSRunningApplication", "NSPasteboard", "NSPasteboardItem", "NSImageRep", "NSBitmapImageRep"] }
+objc2-event-kit = "0.3"
+objc2-speech = "0.3"
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "AVCaptureDevice", "AVMediaFormat"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_UI_Input_KeyboardAndMouse", "Win32_System_SystemInformation"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+arboard = { version = "3", default-features = false, features = ["image-data"] }
+png = "0.17"

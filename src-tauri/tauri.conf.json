@@ -1,0 +1,60 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Mini-Asi",
+  "version": "0.10.0",
+  "identifier": "com.miniasi.app",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "notch",
+        "title": "Mini-Asi",
+        "url": "index.html",
+        "width": 340,
+        "height": 40,
+        "x": 0,
+        "y": 0,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "resizable": false,
+        "skipTaskbar": true,
+        "shadow": false,
+        "visible": false,
+        "focus": false,
+        "acceptFirstMouse": true,
+        "visibleOnAllWorkspaces": true,
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "Trợ lý sống quanh tai thỏ",
+    "longDescription": "Mini-Asi nhắc việc, ghi chú nhanh, nén/giải nén, nén PDF, dọn rác máy và nhắc nghỉ — tất cả gói gọn quanh tai thỏ MacBook.",
+    "copyright": "© 2026 Mini-Asi",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    },
+    "linux": {
+      "deb": { "depends": [] }
+    }
+  },
+  "plugins": {}
+}

@@ -1,0 +1,292 @@
+# Bộ luật dọn dẹp Mini-Asi cho macOS
+# Tự soạn từ kiến thức công khai về cấu trúc thư mục macOS.
+# Không sao chép mã nguồn từ dự án khác.
+#
+# Thứ tự quan trọng: luật cụ thể đặt TRƯỚC luật chung.
+# Một đường dẫn đã được luật trước "nhận" thì luật sau bỏ qua (không đếm trùng).
+#
+# kind:
+#   contents  = xoá từng mục con bên trong thư mục (giữ lại thư mục gốc)
+#   glob      = tìm file khớp mẫu tên trong thư mục (theo depth)
+#   artifacts = tìm thư mục build có thể tái tạo trong các thư mục dự án
+# action:
+#   delete = xoá hẳn (chỉ cho dữ liệu tự tái tạo được như cache) → giải phóng ngay
+#   trash  = chuyển vào Thùng rác (dữ liệu của người dùng) → hoàn tác được
+# tier: free | pro      level: safe | review
+
+# ───────────── TRÌNH DUYỆT ─────────────
+[[rule]]
+id = "browser-chrome"
+name = "Cache Google Chrome"
+category = "browser"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/Library/Caches/Google/Chrome"]
+action = "delete"
+active_guard_minutes = 30
+
+[[rule]]
+id = "browser-edge"
+name = "Cache Microsoft Edge"
+category = "browser"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/Library/Caches/Microsoft Edge"]
+action = "delete"
+active_guard_minutes = 30
+
+[[rule]]
+id = "browser-brave"
+name = "Cache Brave"
+category = "browser"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/Library/Caches/BraveSoftware"]
+action = "delete"
+active_guard_minutes = 30
+
+[[rule]]
+id = "browser-firefox"
+name = "Cache Firefox"
+category = "browser"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/Library/Caches/Firefox/Profiles"]
+action = "delete"
+active_guard_minutes = 30
+
+[[rule]]
+id = "browser-safari"
+name = "Cache Safari"
+category = "browser"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/Library/Caches/com.apple.Safari"]
+action = "delete"
+active_guard_minutes = 30
+
+[[rule]]
+id = "browser-coccoc"
+name = "Cache Cốc Cốc"
+category = "browser"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/Library/Caches/Coccoc"]
+action = "delete"
+active_guard_minutes = 30
+
+# ───────────── LẬP TRÌNH ─────────────
+[[rule]]
+id = "dev-xcode-deriveddata"
+name = "Xcode DerivedData"
+category = "dev"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/Library/Developer/Xcode/DerivedData"]
+action = "delete"
+active_guard_minutes = 60
+
+[[rule]]
+id = "dev-simulator-caches"
+name = "Cache iOS Simulator"
+category = "dev"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/Library/Developer/CoreSimulator/Caches"]
+action = "delete"
+
+[[rule]]
+id = "dev-package-caches"
+name = "Cache npm, yarn, pip, Homebrew, CocoaPods, Go"
+category = "dev"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = [
+  "~/.npm/_cacache",
+  "~/Library/Caches/Yarn",
+  "~/Library/Caches/pip",
+  "~/Library/Caches/Homebrew",
+  "~/Library/Caches/CocoaPods",
+  "~/Library/Caches/go-build",
+  "~/.cache/pip",
+]
+action = "delete"
+active_guard_minutes = 15
+
+[[rule]]
+id = "dev-xcode-archives"
+name = "Xcode Archives cũ (> 90 ngày)"
+category = "dev"
+level = "review"
+tier = "pro"
+kind = "contents"
+paths = ["~/Library/Developer/Xcode/Archives"]
+min_age_days = 90
+action = "trash"
+
+[[rule]]
+id = "dev-ios-devicesupport"
+name = "Dữ liệu iOS DeviceSupport cũ"
+category = "dev"
+level = "review"
+tier = "pro"
+kind = "contents"
+paths = ["~/Library/Developer/Xcode/iOS DeviceSupport"]
+min_age_days = 60
+action = "delete"
+
+[[rule]]
+id = "dev-project-artifacts"
+name = "Thư mục build của dự án lâu không đụng tới"
+category = "projects"
+level = "review"
+tier = "pro"
+kind = "artifacts"
+paths = ["~/Projects", "~/GitHub", "~/dev", "~/Code", "~/Developer", "~/Documents/GitHub"]
+depth = 6
+min_age_days = 7
+action = "delete"
+artifacts = [
+  { dir = "node_modules", marker = "package.json" },
+  { dir = "target",       marker = "Cargo.toml" },
+  { dir = ".build",       marker = "Package.swift" },
+  { dir = "Pods",         marker = "Podfile" },
+  { dir = ".next",        marker = "package.json" },
+  { dir = "dist",         marker = "package.json" },
+  { dir = "build",        marker = "build.gradle" },
+  { dir = ".gradle",      marker = "build.gradle" },
+  { dir = "__pycache__",  marker = "*.py" },
+  { dir = ".venv",        marker = "pyproject.toml" },
+]
+
+# ───────────── FILE NGƯỜI DÙNG (luôn vào Thùng rác) ─────────────
+[[rule]]
+id = "files-installers"
+name = "File cài đặt đã dùng xong (.dmg, .pkg, .iso, .xip)"
+category = "files"
+level = "review"
+tier = "pro"
+kind = "glob"
+paths = ["~/Downloads", "~/Desktop"]
+patterns = ["*.dmg", "*.pkg", "*.mpkg", "*.iso", "*.xip"]
+depth = 2
+min_age_days = 3
+action = "trash"
+
+[[rule]]
+id = "files-old-screenshots"
+name = "Ảnh chụp màn hình cũ (> 30 ngày)"
+category = "files"
+level = "review"
+tier = "pro"
+kind = "glob"
+paths = ["~/Desktop", "~/Pictures/Screenshots"]
+patterns = ["Screenshot *.png", "Ảnh màn hình *.png", "Screen Shot *.png", "Screen Recording *.mov", "Bản ghi màn hình *.mov"]
+depth = 1
+min_age_days = 30
+action = "trash"
+
+[[rule]]
+id = "files-old-downloads"
+name = "File trong Downloads không đụng tới > 90 ngày"
+category = "files"
+level = "review"
+tier = "pro"
+kind = "contents"
+paths = ["~/Downloads"]
+min_age_days = 90
+action = "trash"
+
+[[rule]]
+id = "files-large"
+name = "File lớn > 1 GB"
+category = "files"
+level = "review"
+tier = "pro"
+kind = "glob"
+paths = ["~/Downloads", "~/Desktop", "~/Movies", "~/Documents"]
+patterns = ["*"]
+depth = 4
+min_size_mb = 1024
+action = "trash"
+
+[[rule]]
+id = "files-ios-backups"
+name = "Bản sao lưu iPhone/iPad cũ trên máy"
+category = "files"
+level = "review"
+tier = "pro"
+kind = "contents"
+paths = ["~/Library/Application Support/MobileSync/Backup"]
+min_age_days = 30
+action = "trash"
+
+[[rule]]
+id = "files-mail-downloads"
+name = "File đính kèm Mail đã mở"
+category = "files"
+level = "review"
+tier = "pro"
+kind = "contents"
+paths = ["~/Library/Containers/com.apple.mail/Data/Library/Mail Downloads"]
+min_age_days = 14
+action = "trash"
+
+# ───────────── HỆ THỐNG (luật chung, đặt CUỐI) ─────────────
+[[rule]]
+id = "system-logs"
+name = "Nhật ký ứng dụng (> 7 ngày)"
+category = "system"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/Library/Logs"]
+min_age_days = 7
+action = "delete"
+exclude = ["MiniAsi", "DiagnosticReports"]
+
+[[rule]]
+id = "system-saved-state"
+name = "Trạng thái cửa sổ đã lưu của app"
+category = "system"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/Library/Saved Application State"]
+min_age_days = 14
+action = "delete"
+
+[[rule]]
+id = "system-user-caches"
+name = "Cache ứng dụng (tự tạo lại khi cần)"
+category = "system"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/Library/Caches"]
+action = "delete"
+active_guard_minutes = 60
+exclude = [
+  "CloudKit", "com.apple.bird", "com.apple.CloudDocs", "com.apple.HomeKit",
+  "com.apple.akd", "FamilyCircle", "com.apple.containermanagerd",
+  "com.apple.nsurlsessiond", "MiniAsi", "com.miniasi.*",
+]
+
+[[rule]]
+id = "system-trash"
+name = "Thùng rác"
+category = "system"
+level = "review"
+tier = "free"
+kind = "contents"
+paths = ["~/.Trash"]
+action = "delete"

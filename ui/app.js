@@ -1,0 +1,1831 @@
+/* ───────────────────────── Mini-Asi — logic giao diện ─────────────────────────
+ * Trạng thái hòn đảo: collapsed → peek (rê chuột) → expanded (bấm / phím tắt)
+ *                     alert (nhắc việc, nghỉ mắt) · drop (kéo file vào) · listen / reply (lệnh giọng nói)
+ * Backend Rust lo dữ liệu + thời gian; UI chỉ hiển thị và gọi lệnh (`api(cmd, args)` = Tauri invoke).
+ *
+ * Bản đồ file (tìm theo dòng "// ───────── <tên> ─────────"):
+ *   Cầu nối Tauri · Định dạng · Hình học (kích thước từng trạng thái, 3 kiểu hiển thị) · Trạng thái tổng
+ *   (màu, tâm trạng linh vật, thanh thu gọn/chế độ chờ) · Kéo giãn bảng · Tương tác hòn đảo (bong bóng kéo thả)
+ *   · Giọng nói (dictate) · Báo động · Kéo thả file · Các tab (mọi view: chat, việc, ghi chú, file, dọn máy,
+ *   sức khoẻ, cài đặt) · Cài đặt › Giọng đọc · Vòng cập nhật.
+ * File khác: extra.js (Clipboard, Nhật ký, Threads) · vocab.js (Học từ mới) · vnkey.js (bộ gõ Telex/VNI)
+ *            · icons.js · dev-mock.js (giả lập backend khi mở index.html bằng trình duyệt).
+ * Các file phụ dùng chung tiện ích qua `window.ASI` (khai báo cuối file này).
+ */
+(async function () {
+  "use strict";
+
+  // ───────── Cầu nối Tauri (hoặc bản giả lập khi mở bằng trình duyệt) ─────────
+  if (!window.__TAURI__) {
+    await new Promise((ok) => {
+      const s = document.createElement("script");
+      s.src = "dev-mock.js";
+      s.onload = ok;
+      document.head.appendChild(s);
+    });
+    document.body.classList.add("mock");
+  }
+  const T = window.__TAURI__;
+  // Gửi kèm lệch múi giờ để backend hiểu "9h" theo đúng giờ người dùng đang thấy
+  const api = (cmd, args = {}) => T.core.invoke(cmd, { offset: -new Date().getTimezoneOffset(), ...args });
+  const on = (ev, cb) => T.event.listen(ev, (e) => cb(e.payload));
+
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const I = window.ICON;
+  // ── Bộ gõ tiếng Việt (Telex/VNI của macOS, EVKey, OpenKey…) ghép chữ qua "composition".
+  // Khi đang ghép chữ: không bắt phím Enter/Esc, không vẽ lại ô đang gõ.
+  let composing = false;
+  document.addEventListener("compositionstart", () => (composing = true), true);
+  document.addEventListener("compositionend", () => setTimeout(() => (composing = false), 0), true);
+  const isComposing = (e) => composing || e.isComposing || e.keyCode === 229;
+  // Người dùng đang gõ trong một ô nhập → hoãn mọi lần vẽ lại toàn bộ
+  const typing = () => {
+    const a = document.activeElement;
+    return composing || (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable));
+  };
+  // Tắt tự sửa chính tả / tự viết hoa của macOS — nó hay "sửa" chữ tiếng Việt không dấu thành tiếng Anh
+  document.addEventListener("focusin", (e) => {
+    const el = e.target;
+    if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) {
+      el.setAttribute("spellcheck", "false");
+      el.setAttribute("autocorrect", "off");
+      el.setAttribute("autocapitalize", "off");
+      el.setAttribute("autocomplete", "off");
+    }
+  }, true);
+  const island = $("#island");
+  const root = document.documentElement;
+
+  // ───────── Định dạng ─────────
+  const WD = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+  const pad = (n) => String(n).padStart(2, "0");
+  const hm = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const dayKey = (d) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  function fmtDue(ms, now = Date.now()) {
+    if (ms == null) return "";
+    const d = new Date(ms);
+    const diff = ms - now;
+    if (diff < 0) {
+      const m = Math.round(-diff / 60000);
+      if (m < 60) return `trễ ${Math.max(m, 1)} phút`;
+      if (m < 1440) return `trễ ${Math.round(m / 60)} giờ`;
+      return `trễ ${Math.round(m / 1440)} ngày`;
+    }
+    const today = new Date(now);
+    const tmr = new Date(now + 86400000);
+    if (dayKey(d) === dayKey(today)) return diff < 3600000 ? `${Math.max(1, Math.round(diff / 60000))} phút nữa` : hm(d);
+    if (dayKey(d) === dayKey(tmr)) return `Mai ${hm(d)}`;
+    if (diff < 6 * 86400000) return `${WD[d.getDay()]} ${hm(d)}`;
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${hm(d)}`;
+  }
+  function fmtFull(ms) {
+    const d = new Date(ms);
+    const names = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
+    return `${names[d.getDay()]}, ${pad(d.getDate())}/${pad(d.getMonth() + 1)} · ${hm(d)}`;
+  }
+  function bytes(n) {
+    const u = ["B", "KB", "MB", "GB", "TB"];
+    let i = 0;
+    let v = n;
+    while (v >= 1000 && i < u.length - 1) { v /= 1000; i++; }
+    return i === 0 ? `${n} B` : `${v.toFixed(v >= 100 ? 0 : 1)} ${u[i]}`;
+  }
+  const mins = (m) => (m >= 60 ? `${Math.floor(m / 60)} giờ ${m % 60 ? (m % 60) + " phút" : ""}` : `${m} phút`);
+  const shortPath = (p) => String(p).replace(/^\/(Users|home)\/[^/]+/, "~");
+
+  // ───────── Hình học: kích thước từng trạng thái ─────────
+  const geo = await api("get_geometry");
+  const early = await api("get_settings");
+  // Kiểu hiển thị: tai thỏ · viên thuốc nổi · bong bóng tròn
+  const DISP = ["notch", "pill", "bubble"].includes(early.display_mode) ? early.display_mode : "notch";
+  document.body.classList.add("disp-" + DISP);
+  const ON_NOTCH = DISP === "notch" && geo.has_notch;
+  // Độ rộng mỗi bên tai thỏ: gọn (mặc định) · vừa · rộng — chọn trong Cài đặt › Chế độ chờ
+  const WING = { m: 112, l: 150 }[early.wing_size] || 76;
+  const BAR = Math.round(ON_NOTCH ? geo.notch_height : DISP === "notch" ? 30 : 34);
+  const BASE_W = Math.round(ON_NOTCH ? geo.notch_width + WING * 2 : DISP === "bubble" ? 210 : 210);
+  root.style.setProperty("--bar-h", BAR + "px");
+  root.style.setProperty("--gap-w", (ON_NOTCH ? Math.round(geo.notch_width) : 0) + "px");
+  if (!ON_NOTCH) island.classList.add("virtual");
+
+  const SIZES = {
+    collapsed: DISP === "bubble" ? [58, 58] : [BASE_W, BAR],
+    peek: [Math.max(BASE_W + 80, 420), BAR + 72],
+    alert: [Math.max(BASE_W + 80, 460), BAR + 120],
+    drop: [Math.max(BASE_W + 100, 480), BAR + 128],
+    expanded: [Math.max(BASE_W + 120, 700), 470],
+    listen: [Math.max(BASE_W + 80, 440), BAR + 84],
+    reply: [Math.max(BASE_W + 140, 500), BAR + 250],
+  };
+  const MARGIN_X = 18, MARGIN_B = 20;
+  const MAX_W = Math.max(600, Math.round(geo.screen_width - 60));
+  const MAX_H = Math.max(420, Math.round((geo.screen_height || 900) - 40));
+  const clampW = (w) => Math.round(Math.min(Math.max(w, Math.max(BASE_W + 40, 460)), MAX_W));
+  const clampH = (h) => Math.round(Math.min(Math.max(h, 360), MAX_H));
+  let settingsCache = {};
+  // Nhúng Threads vào bảng: hiện hỗ trợ macOS (Windows/Linux mở cửa sổ riêng)
+  // Nhúng Threads vào bảng: đang thử nghiệm (macOS) — mặc định dùng cửa sổ Threads riêng
+  const EMBED_OK = geo.platform === "macos" || new URLSearchParams(location.search).has("embed");
+  const threadsInline = () => EMBED_OK && DISP !== "bubble" && tab === "threads" && (settingsCache.threads_embed_beta || new URLSearchParams(location.search).has("embed")) && !window.__thApi;
+  // Kích thước bảng: theo tab, có thể kéo giãn & được nhớ lại
+  function sizeOf(m) {
+    if (m !== "expanded") return SIZES[m];
+    if (threadsInline()) {
+      return [clampW(settingsCache.threads_w || Math.max(BASE_W + 120, 470)), clampH(settingsCache.threads_h || Math.min(MAX_H, 860))];
+    }
+    return [clampW(settingsCache.panel_w || SIZES.expanded[0]), clampH(settingsCache.panel_h || SIZES.expanded[1])];
+  }
+
+  let mode = "collapsed";
+  let pinned = false;
+  let hovering = false;
+  let modeTimer = null;
+  let dropBefore = null;
+
+  let freshOpen = true;
+  async function setMode(next, opts = {}) {
+    if (next === mode && !opts.force) return;
+    clearTimeout(modeTimer);
+    const [w, h] = sizeOf(next);
+    const [cw, ch] = sizeOf(mode === next ? "collapsed" : mode);
+    const growing = w * h >= cw * ch;
+    const frame = () => api("set_frame", { width: w + MARGIN_X * 2, height: h + MARGIN_B });
+    if (growing) await frame(); // nở cửa sổ trước rồi mới chạy hoạt cảnh
+    island.className = island.className.replace(/mode-\w+/, "mode-" + next);
+    root.style.setProperty("--w", w + "px");
+    root.style.setProperty("--h", h + "px");
+    const prev = mode;
+    mode = next;
+    if (!growing) modeTimer = setTimeout(frame, 420); // thu hoạt cảnh xong mới thu cửa sổ
+    if (next !== "expanded" || tab !== "threads") hideEmbed();
+    if (next === "expanded" && prev !== "expanded") {
+      freshOpen = true; // lần mở mới → Học từ mới đổi sang 2–3 từ khác
+      api("set_interactive", { on: true }).then((m) => {
+        const V = window.VNKey;
+        if (V) { V.mode = m || (V.userOn ? V.userOn : null); V.suspended = false; }
+        updateBar();
+      });
+      renderView();
+    } else if (next === "expanded") {
+      renderView();
+    } else if (prev === "expanded") {
+      api("set_interactive", { on: false });
+      if (window.VNKey) window.VNKey.mode = null;
+    }
+    if (next === "peek") renderPeek();
+    updateBar();
+  }
+
+  // ───────── Trạng thái tổng ─────────
+  let status = null;
+  let tasks = [];
+  let tab = "home";
+  let moodOverride = null;
+  let moodTimer = null;
+
+  function flashMood(m, ms = 2200) {
+    moodOverride = m;
+    clearTimeout(moodTimer);
+    moodTimer = setTimeout(() => { moodOverride = null; applyMood(); }, ms);
+    applyMood();
+  }
+
+  function currentMood() {
+    if (moodOverride) return moodOverride;
+    if (mode === "drop") return "drop";
+    if (!status) return "idle";
+    // Có việc trễ → Asi tức giận (mắt đỏ), càng trễ càng giận
+    // Đang hẹn giờ tập trung: Asi giữ yên (không giận, không nhấp nháy) để bạn không bị phân tâm
+    if (status.focus_until) return "focus";
+    if (status.lateness.level >= 1 && !status.focus_mode) return "angry";
+    if (status.disk && status.disk.level === "critical") return "worried";
+    if (status.focus_until) return "focus";
+    if (status.session_minutes >= status.break_minutes) return "tired";
+    if (status.sleepy) return "sleepy";
+    return "idle";
+  }
+  let angerTimer = null;
+  function applyMood() {
+    const m = currentMood();
+    island.className = island.className.replace(/mood-\w+/, "mood-" + m);
+    const lvl = m === "angry" && status ? status.lateness.level : 0;
+    island.dataset.anger = String(lvl);
+    // Giận nặng (mức 3): cứ ~20 giây lại dậm chân một cái cho chủ nhân để ý
+    clearInterval(angerTimer);
+    if (lvl >= 3) {
+      angerTimer = setInterval(() => {
+        if (currentMood() !== "angry" || mode === "expanded") return;
+        island.classList.add("stomp");
+        setTimeout(() => island.classList.remove("stomp"), 700);
+      }, 20000);
+    }
+  }
+
+  // Màu hòn đảo: đen → đỏ dần theo mức trễ việc. Cam = ổ đĩa, xanh = cần nghỉ.
+  function mix(a, b, t) {
+    const pa = a.match(/\w\w/g).map((x) => parseInt(x, 16));
+    const pb = b.match(/\w\w/g).map((x) => parseInt(x, 16));
+    return "#" + pa.map((v, i) => Math.round(v + (pb[i] - v) * t).toString(16).padStart(2, "0")).join("");
+  }
+  function applyColor() {
+    const s = status;
+    let bg = "#000000", glow = "transparent", accent = null;
+    island.classList.remove("pulse");
+    const calm = s && (s.focus_mode || s.focus_until);
+    if (s && s.lateness.level > 0 && !calm) {
+      const t = [0, 0.18, 0.45, 0.72][s.lateness.level] + 0.2 * s.lateness.heat;
+      bg = mix("000000", "a3121b", Math.min(t, 0.9));
+      glow = `rgba(255, 59, 48, ${0.25 + 0.5 * t})`;
+      if (s.lateness.level >= 3) island.classList.add("pulse");
+    }
+    if (s && s.disk && s.disk.level !== "ok") accent = "var(--amber)";
+    if (s && s.session_minutes >= s.break_minutes && !calm) accent = "var(--blue)";
+    if (calm) accent = null;
+    root.style.setProperty("--bg", bg);
+    // Bảng mở rộng chỉ ửng đỏ nhẹ để chữ vẫn dễ đọc
+    root.style.setProperty("--bg-x", s && s.lateness.level > 0 && !calm ? mix("0a0a0b", "a3121b", Math.min(0.06 + 0.05 * s.lateness.level, 0.22)) : "#0a0a0b");
+    root.style.setProperty("--glow", glow);
+    const a = $("#accent");
+    a.classList.toggle("on", !!accent);
+    if (accent) root.style.setProperty("--accent", accent);
+  }
+
+  function updateBar() {
+    const s = status;
+    const rw = $("#rightWing");
+    $("#barTitle").textContent = mode === "expanded" ? "Mini-Asi" : "";
+    if (mode === "expanded") {
+      const V = window.VNKey;
+      const ime = V && V.mode ? `${V.mode === "vni" ? "VNI" : "Telex"}` : "EN";
+      rw.innerHTML = `<button class="ime-pill ${V && V.mode ? "on" : ""}" data-act="ime" title="Bộ gõ tiếng Việt của Asi — bấm để bật/tắt">${V && V.mode ? "VI · " : ""}${ime}</button>
+        <button class="icon-btn ${pinned ? "on" : ""}" data-act="pin" title="Ghim mở">${I.pin}</button>
+        <button class="icon-btn" data-act="close" title="Thu gọn (Esc)">${I.x}</button>`;
+      rw.dataset.keys = "";
+      return;
+    }
+    const items = idleItems();
+    const showMic = items.includes("mic");
+    const micHtml = showMic ? `<button class="wing-mic ${mode === "listen" ? "rec" : ""}" data-act="vmic" title="Ra lệnh cho Asi bằng giọng nói">${I.mic}</button>` : "";
+    if (!s) { rw.innerHTML = micHtml; rw.dataset.keys = ""; return; }
+    if (DISP === "bubble" && mode === "collapsed") {
+      rw.innerHTML = s.lateness.overdue && !s.focus_mode ? `<span class="b-dot">${s.lateness.overdue}</span>` : "";
+      rw.dataset.keys = "";
+      return;
+    }
+    // [khoá, màu, biểu tượng, chữ] theo thứ tự ưu tiên; chỉ hiện những thứ bạn chọn trong Cài đặt › Chế độ chờ
+    const now = Date.now(), b = [];
+    const want = (k) => items.includes(k);
+    if (want("focus") && s.focus_until) {
+      const left = Math.max(0, s.focus_until * 1000 - now);
+      b.push(["focus", "violet", I.target, `${pad(Math.floor(left / 60000))}:${pad(Math.floor((left % 60000) / 1000))}`]);
+    }
+    if (want("overdue") && s.lateness.overdue > 0 && !s.focus_mode && !s.focus_until) b.push(["overdue", "red", "", String(s.lateness.overdue)]);
+    if (want("event") && s.next_event && s.next_event.start - now < 15 * 60000 && s.next_event.start > now) b.push(["event", "blue", I.cal, hm(new Date(s.next_event.start))]);
+    if (want("next") && s.next && s.next.due - now < 3600000) b.push(["next", "", I.clock, hm(new Date(s.next.due))]);
+    if (want("time")) b.push(["time", "ghost", "", hm(new Date(now))]);
+    if (want("tasks") && s.open_count > 0) b.push(["tasks", "ghost", I.check, String(s.open_count)]);
+    if (want("notes") && s.note_count > 0) b.push(["notes", "ghost", I.note, String(s.note_count)]);
+    if (want("clips") && s.clip_count > 0) b.push(["clips", "ghost", I.clip, String(s.clip_count)]);
+    if (want("disk") && s.disk) b.push(["disk", s.disk.level !== "ok" ? "amber" : "ghost", I.disk, shortBytes(s.disk.free_bytes)]);
+    const keys = b.map((x) => x[0]).join(",") + (showMic ? "|mic" + (mode === "listen" ? "R" : "") : "");
+    if (rw.dataset.keys === keys) {
+      // cùng các mục như trước → chỉ đổi chữ, không vẽ lại (không nhấp nháy, không “pop”)
+      for (const [k, , , t] of b) { const el = rw.querySelector(`[data-k="${k}"] .bt`); if (el && el.textContent !== t) el.textContent = t; }
+      return;
+    }
+    rw.innerHTML = b.map(([k, c, ic, t]) => `<span class="badge steady ${c}" data-k="${k}">${ic}<span class="bt">${t}</span></span>`).join("") + micHtml;
+    rw.dataset.keys = keys;
+    // Không đủ chỗ (cánh phải cạnh tai thỏ hẹp) → bỏ bớt mục ít ưu tiên ở cuối
+    const shown = [...rw.querySelectorAll(".badge")];
+    const overflow = () => rw.firstElementChild && rw.firstElementChild.getBoundingClientRect().left < rw.getBoundingClientRect().left - 0.5;
+    let dropped = 0;
+    while (shown.length > 1 && overflow()) { shown.pop().remove(); dropped++; }
+    // đang chạy hiệu ứng đổi cỡ thì đo lại sau khi xong (tránh bỏ nhầm mục vì lúc đó còn hẹp)
+    if (dropped && !rw.dataset.retry) { rw.dataset.retry = "1"; setTimeout(() => { rw.dataset.keys = ""; updateBar(); }, 650); }
+    else if (!dropped) delete rw.dataset.retry;
+  }
+  function shortBytes(n) {
+    if (!n && n !== 0) return "";
+    const g = n / 1e9;
+    return g >= 100 ? `${Math.round(g)}G` : g >= 1 ? `${g.toFixed(g >= 10 ? 0 : 1)}G` : `${Math.round(n / 1e6)}M`;
+  }
+  const IDLE_DEFAULT = ["focus", "overdue", "event", "next", "tasks", "mic"];
+  function idleItems() {
+    const v = settingsCache.idle_items || early.idle_items;
+    return Array.isArray(v) ? v : IDLE_DEFAULT;
+  }
+
+  function renderPeek() {
+    const s = status;
+    if (!s) return;
+    const main = s.lateness.overdue > 0
+      ? `<span class="chip red">${s.lateness.overdue} việc trễ</span><span class="t">${esc((tasks.find((t) => !t.done_at && t.due && t.due < Date.now()) || {}).title || "")}</span>`
+      : s.next_event && (!s.next || s.next_event.start < s.next.due)
+        ? `<span class="chip blue">${I.cal}${s.next_event.start <= Date.now() ? "Đang diễn ra" : fmtDue(s.next_event.start)}</span><span class="t">${esc(s.next_event.title)}</span>`
+      : s.next
+        ? `<span class="chip">${I.clock}${fmtDue(s.next.due)}</span><span class="t">${esc(s.next.title)}</span>`
+        : `<span class="t">${s.open_count ? `${s.open_count} việc chưa hạn` : "Hôm nay thảnh thơi ✨"}</span>`;
+    const disk = s.disk ? `<span>${I.disk}${bytes(s.disk.free_bytes)} trống</span>` : "";
+    $("#peek").innerHTML = `<div class="peek-main">${main}</div>
+      <div class="peek-sub">${disk}<span>${I.clock}${mins(s.session_minutes)} liên tục</span>
+      ${s.focus_until ? `<span>${I.target}đang tập trung</span>` : ""}</div>`;
+  }
+
+  // ───────── Kéo giãn bảng ─────────
+  (function grips() {
+    for (const cls of ["grip", "grip-corner l", "grip-corner r"]) {
+      const g = document.createElement("div");
+      g.className = cls;
+      g.title = "Kéo để đổi kích thước";
+      island.appendChild(g);
+    }
+    let drag = null, raf = 0;
+    island.addEventListener("pointerdown", (e) => {
+      const g = e.target.closest(".grip, .grip-corner");
+      if (!g || mode !== "expanded") return;
+      e.preventDefault();
+      g.setPointerCapture(e.pointerId);
+      const [w, h] = sizeOf("expanded");
+      drag = { g, x: e.screenX, y: e.screenY, w, h, corner: g.classList.contains("grip-corner"), side: g.classList.contains("l") ? -1 : 1 };
+      island.classList.add("resizing");
+      // nở sẵn cửa sổ tới cỡ tối đa để kéo mượt, thả tay mới thu về đúng cỡ
+      api("set_frame", { width: MAX_W + MARGIN_X * 2, height: MAX_H + MARGIN_B });
+    });
+    island.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      const nh = clampH(drag.h + (e.screenY - drag.y));
+      const nw = drag.corner ? clampW(drag.w + 2 * drag.side * (e.screenX - drag.x)) : drag.w;
+      drag.nw = nw; drag.nh = nh;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        root.style.setProperty("--w", nw + "px");
+        root.style.setProperty("--h", nh + "px");
+        if (tab === "threads" && embedShown) placeEmbed();
+      });
+    });
+    const end = async () => {
+      if (!drag) return;
+      const { nw, nh } = drag;
+      drag = null;
+      island.classList.remove("resizing");
+      if (nw && nh) {
+        if (threadsInline()) { settingsCache.threads_w = nw; settingsCache.threads_h = nh; }
+        else { settingsCache.panel_w = nw; settingsCache.panel_h = nh; }
+        api("save_settings", { settings: settingsCache });
+      }
+      const [w, h] = sizeOf("expanded");
+      await api("set_frame", { width: w + MARGIN_X * 2, height: h + MARGIN_B });
+      if (tab === "threads" && embedShown) setTimeout(placeEmbed, 60);
+    };
+    island.addEventListener("pointerup", end);
+    island.addEventListener("pointercancel", end);
+    island.addEventListener("dblclick", (e) => {
+      if (!e.target.closest(".grip, .grip-corner")) return;
+      // bấm đúp vào tay kéo → về kích thước mặc định
+      if (threadsInline()) { settingsCache.threads_w = 0; settingsCache.threads_h = 0; } else { settingsCache.panel_w = 0; settingsCache.panel_h = 0; }
+      api("save_settings", { settings: settingsCache });
+      setMode("expanded", { force: true });
+    });
+  })();
+  on("perm-prompt", (low) => { if (low && mode !== "collapsed") setMode("collapsed"); });
+  on("ime-warn", () => toast("Không chuyển được sang bàn phím ABC — hãy bật thêm bàn phím ABC trong Cài đặt hệ thống › Bàn phím › Nguồn nhập để Asi tự gõ tiếng Việt"));
+  on("window-blur", () => {
+    if (mode !== "expanded" || pinned) return;
+    setTimeout(() => { if (!hovering && !document.hasFocus() && !voice.active) setMode("collapsed"); }, 350);
+  });
+
+  // ───────── Tương tác hòn đảo ─────────
+  on("hover", (inside) => {
+    hovering = inside;
+    if (inside && mode === "collapsed" && DISP !== "bubble") modeTimer = setTimeout(() => hovering && setMode("peek"), 140);
+    if (!inside && mode === "peek") modeTimer = setTimeout(() => !hovering && setMode("collapsed"), 380);
+  });
+  island.addEventListener("transitionend", (e) => { if (e.target === island && e.propertyName === "width") { const rw = $("#rightWing"); rw.dataset.keys = ""; delete rw.dataset.retry; updateBar(); } });
+  island.addEventListener("mouseenter", () => { hovering = true; if (mode === "collapsed" && DISP !== "bubble") modeTimer = setTimeout(() => hovering && setMode("peek"), 140); });
+  island.addEventListener("mouseleave", () => { hovering = false; if (mode === "peek") modeTimer = setTimeout(() => !hovering && setMode("collapsed"), 380); });
+  // Bong bóng: kéo để di chuyển, bấm để mở
+  let justDragged = false;
+  if (DISP === "bubble") {
+    let d = null, raf = 0;
+    island.addEventListener("pointerdown", (e) => {
+      if (mode !== "collapsed" || e.button !== 0) return;
+      d = { sx: e.screenX, sy: e.screenY, wx: e.screenX - e.clientX, wy: e.screenY - e.clientY, moved: false, pid: e.pointerId };
+    });
+    island.addEventListener("pointermove", (e) => {
+      if (!d) return;
+      const dx = e.screenX - d.sx, dy = e.screenY - d.sy;
+      if (!d.moved && Math.hypot(dx, dy) < 4) return;
+      if (!d.moved) { try { island.setPointerCapture(d.pid); } catch (_) {} } // chỉ bắt chuột khi đã thật sự kéo, để cú bấm thường vẫn mở được bảng
+      d.moved = true;
+      island.classList.add("dragging");
+      cancelAnimationFrame(raf);
+      const x = d.wx + dx, y = d.wy + dy;
+      raf = requestAnimationFrame(() => api("move_bubble", { x, y, save: false }));
+      d.last = [x, y];
+    });
+    island.addEventListener("pointerup", () => {
+      if (d && d.moved && d.last) { api("move_bubble", { x: d.last[0], y: d.last[1], save: true }); justDragged = true; setTimeout(() => (justDragged = false), 50); }
+      island.classList.remove("dragging");
+      d = null;
+    });
+  }
+  $("#bar").addEventListener("click", (e) => {
+    if (justDragged) return;
+    const act = e.target.closest("[data-act]")?.dataset.act;
+    if (act === "pin") { pinned = !pinned; updateBar(); return; }
+    if (act === "vmic") { e.stopPropagation(); voiceCommand(); return; }
+    if (act === "ime") {
+      const V = window.VNKey;
+      const pref = (settingsCache.viet_engine === "vni") ? "vni" : "telex";
+      V.mode = V.mode ? null : pref;
+      V.userOn = V.mode;
+      V.suspended = false;
+      api("threads_embed_ime", { ime: V.mode });
+      toast(V.mode ? `Bộ gõ của Asi: ${V.mode === "vni" ? "VNI" : "Telex"} — hãy để bàn phím macOS ở ABC` : "Đã tắt bộ gõ của Asi");
+      updateBar();
+      return;
+    }
+    if (act === "close") { setMode("collapsed"); return; }
+    if (mode === "collapsed" || mode === "peek") setMode("expanded");
+  });
+  $("#peek").addEventListener("click", () => setMode("expanded"));
+  window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !isComposing(e) && mode !== "collapsed") setMode("collapsed"); });
+  // Chỉ thu gọn khi người dùng thật sự rời đi (chuột ở ngoài tai thỏ) — tránh bị đóng khi
+  // bộ gõ tiếng Việt / bảng chọn emoji / đổi ngôn ngữ bàn phím làm cửa sổ mất focus thoáng qua
+  window.addEventListener("blur", () => {
+    if (mode !== "expanded" || pinned) return;
+    modeTimer = setTimeout(() => {
+      if (!document.hasFocus() && !hovering && !voice.active) setMode("collapsed");
+    }, 450);
+  });
+  window.addEventListener("focus", () => clearTimeout(modeTimer));
+  on("toggle", () => (mode === "expanded" ? setMode("collapsed") : setMode("expanded")));
+  on("open-tab", (id) => {
+    tab = { open: tab, clean: "clean", settings: "settings", clips: "clips", journal: "journal", threads: "threads" }[id] || tab;
+    setMode("expanded", { force: true });
+  });
+
+  // Mắt chớp & liếc ngẫu nhiên — linh vật "sống"
+  (function life() {
+    const face = $("#face");
+    const blink = () => {
+      if (!["sleepy", "happy", "love", "focus"].includes(currentMood())) {
+        face.classList.add("blink");
+        setTimeout(() => face.classList.remove("blink"), 140);
+      }
+      setTimeout(blink, 2500 + Math.random() * 4000);
+    };
+    const look = () => {
+      const x = currentMood() === "idle" ? Math.round((Math.random() - 0.5) * 4) : 0;
+      face.style.transform = `translateX(${x}px)`;
+      setTimeout(look, 1800 + Math.random() * 3500);
+    };
+    setTimeout(blink, 1500);
+    setInterval(() => {
+      const b = document.getElementById("bigFace");
+      if (b && Math.random() < 0.5) { b.classList.add("blink"); setTimeout(() => b.classList.remove("blink"), 150); }
+    }, 2600);
+    setTimeout(look, 2500);
+  })();
+
+  function confetti(n = 26) {
+    const box = $("#confetti");
+    const colors = ["#ffd60a", "#32d74b", "#4fb3ff", "#ff6b81", "#bf8cff"];
+    for (let i = 0; i < n; i++) {
+      const c = document.createElement("i");
+      c.style.left = 30 + Math.random() * 30 + "px";
+      c.style.top = BAR / 2 + "px";
+      c.style.background = colors[i % colors.length];
+      c.style.setProperty("--dx", (Math.random() * 160 - 40) + "px");
+      c.style.setProperty("--dy", (Math.random() * 90 + 10) + "px");
+      c.style.setProperty("--rot", Math.random() * 540 + "deg");
+      box.appendChild(c);
+      setTimeout(() => c.remove(), 1200);
+    }
+  }
+  function toast(msg) {
+    const t = document.createElement("div");
+    t.className = "toast";
+    t.textContent = msg;
+    island.appendChild(t);
+    setTimeout(() => t.remove(), 2600);
+  }
+
+  // ───────── Giọng nói (tiếng Việt / tiếng Anh) ─────────
+  settingsCache = await api("get_settings");
+  const EXTRA_VIEWS = {};
+  const voice = { active: null };
+  function langPill() {
+    const en = (settingsCache.voice_lang || "vi-VN").startsWith("en");
+    return `<button class="lang-pill" data-voice-lang title="Đổi ngôn ngữ giọng nói">${en ? "EN" : "VI"}</button>`;
+  }
+  function micBtn(id) {
+    return `<button class="mic" id="${id}" title="Nói để nhập (bấm lần nữa để dừng)">${I.mic}<span class="bars"><i></i><i></i><i></i><i></i></span></button>`;
+  }
+  // Bấm mic: bắt đầu thu; bấm lần nữa (hoặc im lặng 2 giây) → nhận dạng → onText(chuỗi)
+  // opts.lang: ngôn ngữ nhận dạng (mặc định theo Cài đặt) · opts.keep: giữ bản ghi để nghe lại (học phát âm)
+  async function dictate(btn, onText, opts = {}) {
+    if (voice.active) { await stopDictation(); return; }
+    try {
+      await api("voice_start");
+    } catch (err) {
+      toast(String(err));
+      return;
+    }
+    voice.active = { btn, onText, lang: opts.lang, keep: !!opts.keep };
+    btn.classList.add("rec");
+    moodOverride = "listen";
+    applyMood();
+  }
+  async function stopDictation() {
+    const v = voice.active;
+    if (!v) return;
+    voice.active = null;
+    v.btn.classList.remove("rec");
+    v.btn.classList.add("busy");
+    moodOverride = "focus";
+    applyMood();
+    try {
+      const text = await api("voice_stop", { lang: v.lang || settingsCache.voice_lang, keep: v.keep });
+      if (text) { v.onText(text); flashMood("happy", 1200); }
+    } catch (err) {
+      toast(String(err));
+      flashMood("worried", 1600);
+    } finally {
+      v.btn.classList.remove("busy");
+      if (moodOverride === "focus") { moodOverride = null; applyMood(); }
+      // lệnh giọng nói không nhận được gì → tự thu gọn
+      setTimeout(() => { if (mode === "listen" && !voice.active) setMode("collapsed"); }, 2500);
+    }
+  }
+  on("voice-level", ([level]) => {
+    if (!voice.active) return;
+    $$("i", voice.active.btn).forEach((b, k) => (b.style.height = 3 + Math.round(level * (8 + k * 3) * (0.6 + Math.random() * 0.6)) + "px"));
+    island.style.setProperty("--lvl", level.toFixed(2));
+  });
+  on("voice-ended", () => stopDictation());
+  document.addEventListener("click", async (e) => {
+    if (!e.target.closest("[data-voice-lang]")) return;
+    settingsCache.voice_lang = (settingsCache.voice_lang || "vi-VN").startsWith("en") ? "vi-VN" : "en-US";
+    await api("save_settings", { settings: settingsCache });
+    $$("[data-voice-lang]").forEach((b) => (b.textContent = settingsCache.voice_lang.startsWith("en") ? "EN" : "VI"));
+    toast(settingsCache.voice_lang.startsWith("en") ? "🎙 Giọng nói: English" : "🎙 Giọng nói: Tiếng Việt");
+  });
+
+  // ───────── Báo động ─────────
+  const alertQueue = [];
+  let alertTimer = null;
+  function showAlert(a) {
+    alertQueue.push(a);
+    if (mode !== "alert") nextAlert();
+  }
+  function nextAlert() {
+    clearTimeout(alertTimer);
+    const a = alertQueue.shift();
+    if (!a) { setMode(mode === "alert" ? "collapsed" : mode); return; }
+    const el = $("#alert");
+    if (a.kind === "reminder") {
+      el.innerHTML = `<h3>⏰ ${esc(a.task.title)}</h3><p>Đến giờ rồi!</p>
+        <div class="row">
+          <button class="btn green" data-a="done">${I.check}Xong</button>
+          <button class="btn" data-a="s10">10 phút</button>
+          <button class="btn" data-a="s60">1 giờ</button>
+          <button class="btn" data-a="stm">Mai</button>
+          <button class="btn ghost" data-a="dismiss">Đóng</button>
+        </div>`;
+      flashMood("alarm", 6000);
+      island.classList.add("shake");
+      setTimeout(() => island.classList.remove("shake"), 1600);
+    } else if (a.kind === "break") {
+      el.innerHTML = `<h3>👀 Bạn đã dùng máy ${a.minutes} phút liên tục</h3>
+        <p>Nhìn ra xa khoảng 6 mét trong 20 giây để mắt thư giãn nhé.</p>
+        <div class="row">
+          <button class="btn blue" data-a="rest">Nghỉ 20 giây</button>
+          <button class="btn" data-a="later">Để sau 10 phút</button>
+          <button class="btn ghost" data-a="dismiss">Đóng</button>
+        </div>`;
+      flashMood("tired", 8000);
+    }
+    if (a.kind === "event") {
+      const mins = Math.max(1, Math.round((a.event.start - Date.now()) / 60000));
+      el.innerHTML = `<h3>📅 ${esc(a.event.title)}</h3><p>${mins} phút nữa · ${hm(new Date(a.event.start))}${a.event.location ? " · " + esc(a.event.location) : ""}</p>
+        <div class="row"><button class="btn blue" data-a="dismiss">Đã biết</button></div>`;
+      flashMood("alarm", 3000);
+    }
+    if (a.kind === "journal") {
+      el.innerHTML = `<h3>📔 Hôm nay bạn thấy thế nào?</h3><p>3 câu hỏi nhỏ, trả lời 2–3 câu thôi — Asi ghi nhật ký giúp bạn.</p>
+        <div class="row"><button class="btn primary" data-a="jwrite">${I.note}Viết</button><button class="btn" data-a="jtalk">${I.mic}Nói</button>
+        <button class="btn" data-a="jlater">30 phút nữa</button><button class="btn ghost" data-a="jskip">Bỏ qua hôm nay</button></div>`;
+      flashMood("love", 3000);
+    }
+    el.dataset.id = a.task ? a.task.id : "";
+    el.dataset.kind = a.kind;
+    if (mode === "expanded") { /* đang mở bảng: không chen ngang, chỉ báo nhỏ */
+      toast(a.kind === "reminder" ? `⏰ ${a.task.title}` : "👀 Đến giờ nghỉ mắt");
+      return;
+    }
+    setMode("alert", { force: true });
+    alertTimer = setTimeout(nextAlert, 45000);
+  }
+  $("#alert").addEventListener("click", async (e) => {
+    const a = e.target.closest("[data-a]")?.dataset.a;
+    if (!a) return;
+    const el = $("#alert");
+    const id = Number(el.dataset.id);
+    if (a === "done") { await api("toggle_task", { id }); confetti(); flashMood("happy"); }
+    if (a === "s10") await api("snooze_task", { id, minutes: 10 });
+    if (a === "s60") await api("snooze_task", { id, minutes: 60 });
+    if (a === "stm") await api("snooze_task", { id, minutes: -1 });
+    if (a === "later") await api("health_snooze", { minutes: 10 });
+    if (a === "rest") { restCountdown(); return; }
+    if (a === "jwrite" || a === "jtalk") {
+      alertQueue.length = 0;
+      tab = "journal";
+      window.__asiJournalTalk = a === "jtalk";
+      setMode("expanded", { force: true });
+      return;
+    }
+    if (a === "jlater") await api("journal_snooze", { minutes: 30 });
+    if (a === "jskip") await api("journal_skip_today");
+    await refreshTasks();
+    nextAlert();
+  });
+  function restCountdown() {
+    clearTimeout(alertTimer);
+    let n = 20;
+    moodOverride = "sleepy";
+    applyMood();
+    const el = $("#alert");
+    const tick = () => {
+      el.innerHTML = `<div class="row"><div class="countdown">${n}</div><div><h3>Nhìn xa nào…</h3><p style="margin:0">Thả lỏng vai, chớp mắt vài lần</p></div></div>`;
+      if (n-- <= 0) {
+        api("health_break_done");
+        moodOverride = null;
+        flashMood("happy");
+        confetti(14);
+        nextAlert();
+        return;
+      }
+      alertTimer = setTimeout(tick, 1000);
+    };
+    tick();
+  }
+  on("reminder", (task) => { refreshTasks(); showAlert({ kind: "reminder", task }); });
+  on("break", (minutes) => showAlert({ kind: "break", minutes }));
+  on("event-soon", (event) => showAlert({ kind: "event", event }));
+  on("journal-ask", () => showAlert({ kind: "journal" }));
+  let syncDirty = false;
+  on("synced", () => {
+    if (typing()) { syncDirty = true; return; } // đang gõ → cập nhật sau
+    refreshTasks();
+    if (mode === "expanded" && (tab === "notes" || tab === "tasks")) renderView();
+  });
+  document.addEventListener("focusout", () => setTimeout(() => {
+    if (syncDirty && !typing()) { syncDirty = false; refreshTasks(); if (mode === "expanded" && tab === "notes") renderView(); }
+  }, 300));
+  on("water", () => { flashMood("happy", 2500); if (mode === "expanded") toast("💧 Uống ngụm nước nhé"); });
+  on("focus-done", () => { confetti(); flashMood("love", 4000); });
+
+  // ───────── Kéo thả file ─────────
+  on("tauri://drag-enter", () => {
+    if (mode === "drop") return;
+    dropBefore = mode;
+    if (mode !== "expanded") setMode("drop");
+  });
+  on("tauri://drag-leave", () => { if (mode === "drop") setMode(dropBefore === "expanded" ? "expanded" : "collapsed"); });
+  on("tauri://drag-drop", async (p) => {
+    const paths = (p && p.paths) || [];
+    if (!paths.length) return;
+    await addFiles(paths);
+    tab = "files";
+    setMode("expanded", { force: true });
+  });
+
+  // ───────── Các tab ─────────
+  const TABS = [
+    ["home", "Asi", I.mic, "#ffffff"],
+    ["tasks", "Việc", I.tasks, "#32d74b"],
+    ["notes", "Ghi chú", I.note, "#ffd60a"],
+    ["clips", "Clipboard", I.clip, "#5ac8fa"],
+    ["journal", "Nhật ký", I.book, "#ff9fd0"],
+    ["words", "Từ mới", I.words, "#ffb86b"],
+    ["threads", "Threads", I.at, "#f5f5f7"],
+    ["files", "File", I.file, "#4fb3ff"],
+    ["clean", "Dọn máy", I.broom, "#ff9f0a"],
+    ["health", "Sức khoẻ", I.heart, "#ff6b81"],
+    ["settings", "Cài đặt", I.gear, "#bf8cff"],
+  ];
+  function visibleTabs() {
+    const vis = settingsCache.visible_tabs && settingsCache.visible_tabs.length ? settingsCache.visible_tabs : ["home", "tasks", "notes", "clips", "journal", "words", "threads"];
+    const list = TABS.filter(([id]) => id === "home" || vis.includes(id));
+    // tab đang mở mà bị ẩn vẫn hiện tạm để không "mất" chỗ đang đứng
+    if (!list.some(([id]) => id === tab) && tab !== "all" && tab !== "settings") { const cur = TABS.find(([id]) => id === tab); if (cur) list.push(cur); }
+    list.push(["all", "Tất cả", I.grid, "#ffffff"]);
+    if (!list.some(([id]) => id === "settings")) list.push(TABS.find(([id]) => id === "settings"));
+    return list;
+  }
+  function renderTabs() {
+    $("#tabs").innerHTML = visibleTabs().map(([id, name, ic, c]) =>
+      `<button class="tab ${tab === id ? "active" : ""}" data-tab="${id}" style="--tc:${c}" title="${name}">${ic}<span class="lbl">${name}</span>${(id === "tasks" && status && status.lateness.overdue) || (id === "threads" && status && status.threads_unread) ? '<span class="dot"></span>' : ""}</button>`
+    ).join("");
+  }
+  $("#tabs").addEventListener("click", (e) => {
+    const t = e.target.closest("[data-tab]");
+    if (t) switchTab(t.dataset.tab);
+  });
+  function switchTab(t) {
+    const before = sizeOf("expanded").join("x");
+    tab = t;
+    if (mode === "expanded" && sizeOf("expanded").join("x") !== before) setMode("expanded", { force: true });
+    else renderView();
+  }
+  // Khung Threads nhúng: chỉ hiện ở tab Threads khi bảng đang mở
+  let embedShown = false;
+  function hideEmbed() {
+    if (embedShown) { embedShown = false; api("threads_embed", { show: false, x: 0, y: 0, w: 0, h: 0 }); }
+  }
+  function placeEmbed(url) {
+    const slot = $("#thSlot");
+    if (!slot || mode !== "expanded" || tab !== "threads") return;
+    const r = slot.getBoundingClientRect();
+    embedShown = true;
+    const V = window.VNKey;
+    return api("threads_embed", { show: true, x: r.left, y: r.top, w: r.width, h: r.height, ime: V && V.mode ? V.mode : null, url: url || null }).catch((err) => toast(String(err)));
+  }
+  function renderView() {
+    if (tab !== "threads") hideEmbed();
+    renderTabs();
+    const v = $("#view");
+    v.style.animation = "none";
+    void v.offsetWidth;
+    v.style.animation = "";
+    const views = { home: viewChat, all: viewHome, tasks: viewTasks, notes: viewNotes, files: viewFiles, clean: viewClean, health: viewHealth, settings: viewSettings, ...EXTRA_VIEWS };
+    (views[tab] || viewTasks)();
+  }
+
+  // ═════════ ASI: CHAT & RA LỆNH BẰNG GIỌNG NÓI ═════════
+  const chat = []; // {who: "me"|"asi", text, reply?}
+  const SUGGEST = [
+    ["🩺", "Máy mình thế nào?"], ["🧹", "Dọn rác giúp mình"], ["⏰", "Có việc nào trễ không?"],
+    ["📅", "Hôm nay có gì?"], ["🎯", "Tập trung 25 phút"], ["💾", "Còn bao nhiêu dung lượng?"],
+  ];
+  function cardHtml(c) {
+    if (c.kind === "metrics") return `<div class="a-metrics">${c.items.map((m) => `<div class="a-metric lv${m.level}">
+        <span class="muted small">${esc(m.label)}</span><b>${esc(m.value)}</b>${m.ratio != null ? `<i style="--r:${Math.min(1, m.ratio)}"></i>` : ""}</div>`).join("")}</div>`;
+    if (c.kind === "tasks") return `<div class="a-list">${c.items.map((t) => `<div class="a-task" data-tid="${t.id}"><span class="grow">${esc(t.title)}</span>
+        ${t.due ? `<span class="chip ${t.due < Date.now() ? "red" : ""}">${fmtDue(t.due)}</span>` : ""}
+        <button class="btn sm ghost" data-ta="done">✓</button><button class="btn sm ghost" data-ta="s60">+1h</button><button class="btn sm ghost" data-ta="stm">Mai</button></div>`).join("")}</div>`;
+    if (c.kind === "events") return `<div class="a-list">${c.items.map(([t, st, ad]) => `<div class="a-task"><span class="ev-dot"></span><span class="grow">${esc(t)}</span><span class="chip blue">${ad ? "Cả ngày" : hm(new Date(st))}</span></div>`).join("")}</div>`;
+    if (c.kind === "text") return `<div class="a-text">${esc(c.text).replace(/\n/g, "<br>")}</div>`;
+    return "";
+  }
+  function replyHtml(r) {
+    return `${r.cards.map(cardHtml).join("")}
+      ${r.actions.length ? `<div class="a-acts">${r.actions.map((a, i) => `<button class="btn sm ${i === 0 ? "primary" : ""}" data-ac="${esc(a.cmd)}" data-arg="${esc(a.arg)}">${esc(a.label)}</button>`).join("")}</div>` : ""}`;
+  }
+  async function askAsi(text, compact) {
+    text = (text || "").trim();
+    if (!text) return;
+    chat.push({ who: "me", text });
+    chat.push({ who: "asi", text: "…", thinking: true });
+    if (compact) renderReply(); else if (tab === "home" && mode === "expanded") drawChat();
+    moodOverride = "focus"; applyMood();
+    let r;
+    try { r = await api("asi_ask", { text }); } catch (err) { r = { text: String(err), speak: "", cards: [], actions: [], mood: "worried" }; }
+    chat.pop();
+    chat.push({ who: "asi", text: r.text, reply: r });
+    refreshTasks(); // việc vừa thêm bằng giọng nói hiện ngay trong danh sách
+    moodOverride = null;
+    flashMood(r.mood || "happy", 2500);
+    if (r.speak) api("asi_speak", { text: r.speak });
+    if (compact) renderReply(); else if (tab === "home" && mode === "expanded") drawChat();
+  }
+  function renderReply() {
+    const last = chat[chat.length - 1];
+    const me = [...chat].reverse().find((m) => m.who === "me");
+    $("#replyL").innerHTML = `<div class="r-me">“${esc(me ? me.text : "")}”</div>
+      <div class="r-asi">${last.thinking ? '<span class="dots"><i></i><i></i><i></i></span>' : esc(last.text)}</div>
+      ${last.reply ? replyHtml(last.reply) : ""}
+      <div class="r-foot"><button class="btn sm ghost" data-ac="more_voice">${I.mic}Nói tiếp</button><button class="btn sm ghost" data-ac="open_chat">Mở chat</button><button class="btn sm ghost" data-ac="close">Đóng</button></div>`;
+    setMode("reply", { force: mode === "reply" });
+    clearTimeout(replyTimer);
+    replyTimer = setTimeout(() => { if (mode === "reply" && !hovering) setMode("collapsed"); }, 30000);
+  }
+  let replyTimer = null;
+  // Bấm mic ở tai thỏ → Asi nghe → hiểu → trả lời ngay trên tai thỏ
+  async function voiceCommand() {
+    if (voice.active) { await stopDictation(); return; }
+    $("#listenL").innerHTML = `<div class="l-wrap"><button class="mic big rec" id="listenMic">${I.mic}<span class="bars"><i></i><i></i><i></i><i></i></span></button>
+      <div><b>Asi đang nghe…</b><div class="muted small">Ví dụ: “máy mình thế nào”, “dọn rác”, “có việc nào trễ không”, “nhắc tôi 3h chiều gọi khách”</div></div></div>`;
+    await setMode("listen");
+    api("asi_stop_speaking");
+    const btn = $("#listenMic");
+    btn.addEventListener("click", () => stopDictation());
+    btn.classList.remove("rec");
+    await dictate(btn, (text) => askAsi(text, true));
+    if (!voice.active && mode === "listen") setMode("collapsed"); // không mở được micro
+  }
+  async function runAction(cmd, arg, compact) {
+    if (cmd === "ask") return askAsi(arg, compact);
+    if (cmd === "open_tab") { tab = arg; return setMode("expanded", { force: true }); }
+    if (cmd === "open_chat") { tab = "home"; return setMode("expanded", { force: true }); }
+    if (cmd === "more_voice") return voiceCommand();
+    if (cmd === "close") { api("asi_stop_speaking"); return setMode("collapsed"); }
+    if (cmd === "rest") { setMode("collapsed"); setTimeout(() => showAlert({ kind: "break", minutes: status ? status.session_minutes : 0 }), 450); return; }
+    try {
+      const r = await api("asi_action", { cmd, arg });
+      chat.push({ who: "asi", text: r.text, reply: r });
+      refreshTasks();
+      flashMood(r.mood || "happy", 3000);
+      if (r.mood === "love") confetti(30);
+      if (r.speak) api("asi_speak", { text: r.speak });
+    } catch (err) { chat.push({ who: "asi", text: String(err) }); }
+    if (compact) renderReply(); else drawChat();
+  }
+  async function taskAct(row, a, compact) {
+    const id = Number(row.dataset.tid);
+    if (a === "done") { await api("toggle_task", { id }); confetti(12); flashMood("happy"); row.style.opacity = 0.4; row.style.textDecoration = "line-through"; }
+    if (a === "s60") await api("snooze_task", { id, minutes: 60 });
+    if (a === "stm") await api("snooze_task", { id, minutes: -1 });
+    if (a !== "done") { row.remove(); toast("Đã hoãn"); }
+    refreshTasks();
+  }
+  $("#replyL").addEventListener("click", (e) => {
+    const t = e.target.closest("[data-ta]");
+    if (t) return taskAct(t.closest(".a-task"), t.dataset.ta, true);
+    const b = e.target.closest("[data-ac]");
+    if (b) runAction(b.dataset.ac, b.dataset.arg || "", true);
+  });
+
+  function greet() {
+    const h = new Date().getHours();
+    return h < 11 ? "Chào buổi sáng" : h < 14 ? "Chào buổi trưa" : h < 18 ? "Chào buổi chiều" : "Chào buổi tối";
+  }
+  function viewChat() {
+    const s = status;
+    const quick = s ? [
+      s.lateness.overdue ? `<span class="chip red">${s.lateness.overdue} việc trễ</span>` : `<span class="chip green">Không có việc trễ</span>`,
+      s.disk ? `<span class="chip ${s.disk.level === "ok" ? "" : "amber"}">${I.disk}${Math.round(s.disk.free_percent)}% trống</span>` : "",
+      s.next_event ? `<span class="chip blue">${I.cal}${esc(s.next_event.title)} · ${hm(new Date(s.next_event.start))}</span>` : "",
+    ].join("") : "";
+    $("#view").innerHTML = `<div class="chat-home">
+      <div class="c-hero">
+        <div class="big-face" id="bigFace"><span class="eye l"></span><span class="eye r"></span></div>
+        <div><div class="c-greet">${greet()} 👋</div><div class="muted small">Hỏi Asi bằng chữ hoặc bấm mic để nói</div><div class="c-quick">${quick}</div></div>
+      </div>
+      <div id="vocabStrip"></div>
+      <div class="c-log" id="chatLog"></div>
+      <div class="c-chips" id="chatChips">${SUGGEST.map(([ic, t]) => `<button class="c-chip" data-say="${esc(t)}">${ic} ${esc(t)}</button>`).join("")}</div>
+      <div class="c-input">
+        <button class="mic big" id="chatMic" title="Nói với Asi">${I.mic}<span class="bars"><i></i><i></i><i></i><i></i></span></button>
+        <input class="input" id="chatInput" placeholder="Hỏi Asi… vd: máy mình thế nào, dọn rác, nhắc tôi 3h chiều gọi khách" />
+        <button class="btn primary" id="chatSend">${I.send}</button>
+      </div></div>`;
+    const inp = $("#chatInput");
+    const send = () => { const v = inp.value; inp.value = ""; askAsi(v, false); };
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter" && !isComposing(e)) send(); });
+    $("#chatSend").addEventListener("click", send);
+    $("#chatMic").addEventListener("click", (e) => dictate(e.currentTarget, (text) => askAsi(text, false)));
+    drawChat();
+    if (window.VocabUI && settingsCache.vocab_enabled !== false) { window.VocabUI.strip($("#vocabStrip"), freshOpen); freshOpen = false; }
+    setTimeout(() => inp.focus(), 80);
+  }
+  function drawChat() {
+    const log = $("#chatLog");
+    if (!log) return;
+    log.innerHTML = chat.length ? chat.map((m) => m.who === "me"
+      ? `<div class="bubble me">${esc(m.text)}</div>`
+      : `<div class="bubble asi">${m.thinking ? '<span class="dots"><i></i><i></i><i></i></span>' : esc(m.text)}${m.reply ? replyHtml(m.reply) : ""}</div>`).join("")
+      : `<div class="muted small" style="text-align:center;padding:10px">Thử bấm một gợi ý bên dưới 👇</div>`;
+    log.scrollTop = log.scrollHeight;
+  }
+  $("#view").addEventListener("click", (e) => {
+    if (tab !== "home") return;
+    const say = e.target.closest("[data-say]");
+    if (say) return askAsi(say.dataset.say, false);
+    const t = e.target.closest("[data-ta]");
+    if (t) return taskAct(t.closest(".a-task"), t.dataset.ta, false);
+    const b = e.target.closest("[data-ac]");
+    if (b) runAction(b.dataset.ac, b.dataset.arg || "", false);
+  });
+
+  // ═════════ TẤT CẢ TÍNH NĂNG (trang tổng hợp) ═════════
+  async function viewHome() { // trang "Tất cả"
+    const s = status || (await api("get_status"));
+    const [notesL, clipsL, perms] = await Promise.all([api("list_notes"), api("clip_list", { query: "", kind: "all" }), api("permissions_status")]);
+    const d = new Date();
+    const today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    let jv = null;
+    try { jv = await api("journal_get", { date: today }); } catch (_) {}
+    const wrote = jv && (jv.entry.answers.some((a) => a.a.trim()) || jv.entry.text.trim());
+    const missingList = perms.filter((p) => p.required && p.state !== "granted" && p.state !== "unknown");
+    const missing = missingList.length;
+    const tile = (id, ic, name, value, sub, cls = "") => `<button class="tile ${cls}" data-go="${id}">
+        <span class="tile-ic">${ic}</span><span class="tile-name">${name}</span>
+        <b class="tile-val">${value}</b><span class="tile-sub">${sub}</span></button>`;
+    $("#view").innerHTML = `
+      ${missing ? `<div class="card perm-banner"><div class="row"><span class="grow"><b>🔐 Còn thiếu: ${missingList.map((p) => p.name).join(", ")}</b>
+        <span class="muted small"> — cấp một lần để mọi tính năng chạy trơn tru</span></span>
+        <button class="btn sm primary" data-go="perm">Cấp tất cả quyền</button></div></div>` : ""}
+      <div class="tiles">
+        ${tile("tasks", I.tasks, "Việc", s.open_count, s.lateness.overdue ? `<span style="color:var(--red)">${s.lateness.overdue} việc trễ</span>` : s.next ? "Tiếp: " + esc(s.next.title) : "Không có việc gấp", s.lateness.overdue ? "alert" : "")}
+        ${tile("notes", I.note, "Ghi chú", notesL.length, notesL[0] ? esc(notesL[0].text.split("\n")[0].slice(0, 28)) : "Ghi nhanh bằng chữ hoặc giọng nói")}
+        ${tile("clips", I.clip, "Clipboard", clipsL.length, "Đã chép · ⌃⇧V mở nhanh")}
+        ${tile("journal", I.book, "Nhật ký", wrote ? "✓" : "—", wrote ? `Đã viết hôm nay${jv.streak ? " · 🔥 " + jv.streak : ""}` : "Kể Asi nghe về hôm nay")}
+        ${tile("threads", I.at, "Threads", s.threads_unread || "@", s.threads_unread ? `${s.threads_unread} phản hồi mới` : "Lướt bảng tin")}
+        ${tile("files", I.file, "File", "ZIP", "Nén · giải nén · PDF")}
+        ${tile("clean", I.broom, "Dọn máy", s.disk ? Math.round(s.disk.free_percent) + "%" : "—", s.disk ? bytes(s.disk.free_bytes) + " trống" : "Quét rác", s.disk && s.disk.level !== "ok" ? "warn" : "")}
+        ${tile("health", I.heart, "Sức khoẻ", mins(s.session_minutes), "đang dùng máy liên tục")}
+        ${tile("settings", I.gear, "Cài đặt", "⚙", "Quyền · sao lưu · đồng bộ")}
+      </div>`;
+  }
+  $("#view").addEventListener("click", async (e) => {
+    const g = e.target.closest("[data-go]");
+    if (!g || (tab !== "all" && g.dataset.go !== "perm")) return;
+    if (g.dataset.go === "perm") { tab = "settings"; renderView(); setTimeout(() => $("#permCard") && $("#permCard").scrollIntoView({ block: "start" }), 200); return; }
+    tab = g.dataset.go;
+    renderView();
+  });
+
+  // ═════════ VIỆC ═════════
+  let showDone = false;
+  async function refreshTasks() {
+    tasks = await api("list_tasks");
+    if (mode === "expanded" && tab === "tasks") drawTaskList();
+    if (mode === "peek") renderPeek();
+  }
+  function viewTasks() {
+    api("list_tasks").then((t) => { tasks = t; if (tab === "tasks" && mode === "expanded") drawTaskList(); }).catch(() => {});
+    $("#view").innerHTML = `
+      <div class="add-wrap">
+        <div class="add-row">${I.plus}<input class="input" id="taskInput" placeholder="Thêm việc… vd: mai 9h gọi khách · tomorrow 3pm call John" autocomplete="off" />
+          <div class="add-tools">${langPill()}${micBtn("taskMic")}</div></div>
+        <div class="preview" id="preview"></div>
+      </div>
+      <div id="eventList"></div>
+      <div id="taskList"></div>`;
+    const inp = $("#taskInput");
+    $("#taskMic").addEventListener("click", (e) => dictate(e.currentTarget, (text) => {
+      inp.value = text;
+      inp.dispatchEvent(new Event("input"));
+      inp.focus();
+      toast("Nhấn Enter để thêm việc");
+    }));
+    drawEvents();
+    let deb;
+    inp.addEventListener("input", () => {
+      clearTimeout(deb);
+      deb = setTimeout(async () => {
+        const v = inp.value.trim();
+        if (!v) { $("#preview").innerHTML = ""; return; }
+        const p = await api("parse_task", { text: v });
+        $("#preview").innerHTML = p.due
+          ? `<span class="chip green">${I.clock}${fmtFull(p.due)}</span><span class="muted small">${esc(p.title)}</span>`
+          : `<span class="chip">Không hẹn giờ</span><span class="muted small">Enter để thêm</span>`;
+      }, 120);
+    });
+    inp.addEventListener("keydown", async (e) => {
+      if (e.key !== "Enter" || isComposing(e) || !inp.value.trim()) return;
+      try {
+        const t = await api("add_task", { text: inp.value });
+        inp.value = "";
+        $("#preview").innerHTML = `<span class="chip green">${I.check}Đã thêm${t.due ? " · " + fmtDue(t.due) : ""}</span>`;
+        flashMood("happy", 1200);
+        await refreshTasks();
+      } catch (err) { toast(String(err)); }
+    });
+    setTimeout(() => inp.focus(), 80);
+    drawTaskList();
+  }
+  async function drawEvents() {
+    const box = $("#eventList");
+    if (!box || !settingsCache.show_calendar) return;
+    const evs = await api("get_events");
+    const now = Date.now();
+    const end = new Date(); end.setHours(23, 59, 59, 999);
+    const today = evs.filter((e) => e.end > now && e.start <= end.getTime());
+    box.innerHTML = today.length ? `<div class="sec" style="color:var(--blue)">${I.cal} Lịch hôm nay · ${today.length}</div>` + today.map((e) => `
+      <div class="task event"><span class="ev-dot"></span><div class="title">${esc(e.title)}<span class="muted small"> ${e.location ? "· " + esc(e.location) : ""}</span></div>
+      <span class="chip ${e.start <= now ? "green" : "blue"}">${e.all_day ? "Cả ngày" : e.start <= now ? "Đang diễn ra" : hm(new Date(e.start)) + "–" + hm(new Date(e.end))}</span></div>`).join("") : "";
+  }
+  function taskRow(t, now) {
+    const late = !t.done_at && t.due && t.due < now;
+    const chip = t.due ? `<span class="chip ${late ? "red" : t.due - now < 3600000 && !t.done_at ? "amber" : ""}">${fmtDue(t.due, now)}</span>` : "";
+    return `<div class="task ${t.done_at ? "done" : ""} ${late ? "late" : ""}" data-id="${t.id}">
+      <button class="check" data-t="toggle">${I.check}</button>
+      <div class="title" data-t="title" title="Nhấp đúp để sửa">${esc(t.title)}</div>
+      ${chip}
+      <div class="acts">
+        ${t.done_at ? "" : `<button class="icon-btn" data-t="s10" title="Hoãn 10 phút">${I.snooze}</button>
+        <button class="btn sm ghost" data-t="s60">+1h</button><button class="btn sm ghost" data-t="stm">Mai</button>
+        ${t.due && settingsCache.show_calendar ? `<button class="icon-btn" data-t="cal" title="Thêm vào Lịch">${I.cal}</button>` : ""}`}
+        <button class="icon-btn" data-t="del" title="Xoá">${I.trash}</button>
+      </div></div>`;
+  }
+  function drawTaskList() {
+    const box = $("#taskList");
+    if (!box) return;
+    const now = Date.now();
+    const open = tasks.filter((t) => !t.done_at);
+    const done = tasks.filter((t) => t.done_at).sort((a, b) => b.done_at - a.done_at);
+    const by = (a, b) => (a.due ?? 9e15) - (b.due ?? 9e15);
+    const endToday = new Date(); endToday.setHours(23, 59, 59, 999);
+    const groups = [
+      ["Trễ hạn", open.filter((t) => t.due && t.due < now).sort(by), "red"],
+      ["Hôm nay", open.filter((t) => t.due && t.due >= now && t.due <= endToday).sort(by), ""],
+      ["Sắp tới", open.filter((t) => t.due && t.due > endToday).sort(by), ""],
+      ["Không hạn", open.filter((t) => !t.due).sort((a, b) => b.created - a.created), ""],
+    ];
+    let html = "";
+    for (const [name, list, cls] of groups) {
+      if (!list.length) continue;
+      html += `<div class="sec ${cls}">${name} · ${list.length}</div>` + list.map((t) => taskRow(t, now)).join("");
+    }
+    if (!open.length) html += `<div class="empty"><div class="big">(˶ᵔ ᵕ ᵔ˶)</div>Không còn việc nào. Thêm việc ở ô bên trên nhé!</div>`;
+    if (done.length) {
+      html += `<div class="sec" style="cursor:pointer" data-t="showdone">Đã xong · ${done.length} ${showDone ? "▾" : "▸"}
+        ${showDone ? '<button class="btn sm ghost" data-t="cleardone" style="margin-left:auto">Xoá hết</button>' : ""}</div>`;
+      if (showDone) html += done.slice(0, 30).map((t) => taskRow(t, now)).join("");
+    }
+    box.innerHTML = html;
+  }
+  $("#view").addEventListener("click", async (e) => {
+    if (tab !== "tasks") return;
+    const b = e.target.closest("[data-t]");
+    if (!b) return;
+    const act = b.dataset.t;
+    if (act === "showdone") { showDone = !showDone; drawTaskList(); return; }
+    if (act === "cleardone") { e.stopPropagation(); await api("clear_done"); await refreshTasks(); return; }
+    const row = b.closest(".task");
+    if (!row) return;
+    const id = Number(row.dataset.id);
+    if (act === "toggle") {
+      const t = await api("toggle_task", { id });
+      if (t && t.done_at) {
+        row.classList.add("done");
+        confetti(16);
+        flashMood("happy");
+        await new Promise((r) => setTimeout(r, 450));
+      }
+    }
+    if (act === "s10") await api("snooze_task", { id, minutes: 10 });
+    if (act === "s60") await api("snooze_task", { id, minutes: 60 });
+    if (act === "stm") await api("snooze_task", { id, minutes: -1 });
+    if (act === "del") await api("delete_task", { id });
+    if (act === "cal") {
+      try { await api("add_to_calendar", { id }); toast("📅 Đã thêm vào Lịch"); drawEvents(); } catch (err) { toast(String(err)); }
+      return;
+    }
+    if (act !== "title") await refreshTasks();
+  });
+  $("#view").addEventListener("dblclick", (e) => {
+    const el = e.target.closest('.task [data-t="title"]');
+    if (!el || tab !== "tasks") return;
+    el.contentEditable = "true";
+    el.focus();
+    document.getSelection().selectAllChildren(el);
+    const done = async (save) => {
+      el.contentEditable = "false";
+      if (save && el.textContent.trim()) await api("rename_task", { id: Number(el.closest(".task").dataset.id), title: el.textContent.trim() });
+      await refreshTasks();
+    };
+    el.onkeydown = (k) => { if (isComposing(k)) return; if (k.key === "Enter") { k.preventDefault(); done(true); } if (k.key === "Escape") { k.stopPropagation(); done(false); } };
+    el.onblur = () => done(true);
+  });
+
+  // ═════════ GHI CHÚ ═════════
+  let notes = [];
+  let noteId = null;
+  let noteQuery = "";
+  async function viewNotes() {
+    notes = await api("list_notes");
+    if (noteId == null && notes.length) noteId = notes[0].id;
+    const cur = notes.find((n) => n.id === noteId);
+    $("#view").innerHTML = `<div class="notes">
+      <div class="note-list">
+        <div class="row" style="margin-bottom:4px">
+          <input class="input" id="noteSearch" placeholder="Tìm…" value="${esc(noteQuery)}" style="height:30px" />
+          <button class="icon-btn" data-n="new" title="Ghi chú mới">${I.plus}</button>
+        </div>
+        <div id="noteItems"></div>
+      </div>
+      <div class="editor">
+        <textarea id="noteText" placeholder="Ghi nhanh điều gì đó… (dòng đầu là tiêu đề)">${esc(cur ? cur.text : "")}</textarea>
+        <div class="foot">
+          ${micBtn("noteMic")}${langPill()}
+          <span class="muted small grow" id="noteState">${cur ? "Đã lưu" : "Gõ hoặc nói để tạo ghi chú mới"}</span>
+          <span id="noteActs" style="display:${cur ? "contents" : "none"}"><button class="icon-btn ${cur && cur.pinned ? "on" : ""}" data-n="pin" title="Ghim">${I.pin}</button>
+          <button class="icon-btn" data-n="copy" title="Sao chép">${I.copy}</button>
+          <button class="icon-btn" data-n="del" title="Xoá">${I.trash}</button></span>
+        </div>
+      </div></div>`;
+    drawNoteItems();
+    const ta = $("#noteText");
+    let deb;
+    const save = () => {
+      clearTimeout(deb);
+      deb = setTimeout(async () => {
+        if (composing) return save(); // chờ bộ gõ ghép xong chữ
+        const n = await api("save_note", { id: noteId, text: ta.value });
+        noteId = n.id;
+        notes = await api("list_notes");
+        drawNoteItems();
+        $("#noteState").textContent = "Đã lưu";
+        $("#noteActs").style.display = "contents"; // KHÔNG vẽ lại ô soạn thảo → không mất chữ đang gõ
+      }, 500);
+    };
+    ta.addEventListener("input", () => { $("#noteState").textContent = "Đang gõ…"; save(); });
+    ta.addEventListener("compositionend", save);
+    $("#noteSearch").addEventListener("input", (e) => { noteQuery = e.target.value; drawNoteItems(); });
+    $("#noteMic").addEventListener("click", (e) => dictate(e.currentTarget, (text) => {
+      const ta2 = $("#noteText");
+      if (!ta2) return;
+      const pos = ta2.selectionStart ?? ta2.value.length;
+      const before = ta2.value.slice(0, pos);
+      const sep = before && !/\s$/.test(before) ? " " : "";
+      ta2.value = before + sep + text + ta2.value.slice(pos);
+      ta2.dispatchEvent(new Event("input"));
+      ta2.focus();
+    }));
+    setTimeout(() => ta.focus(), 80);
+  }
+
+  function drawNoteItems() {
+    const q = noteQuery.trim().toLowerCase();
+    const list = notes.filter((n) => !q || n.text.toLowerCase().includes(q));
+    $("#noteItems").innerHTML = list.length
+      ? list.map((n) => {
+          const [first, ...rest] = n.text.split("\n");
+          return `<div class="note-item ${n.id === noteId ? "active" : ""}" data-n="open" data-id="${n.id}">
+            <b>${n.pinned ? "📌 " : ""}${esc(first || "Ghi chú trống")}</b>
+            <span>${fmtDue(n.updated).replace("trễ ", "") + " trước"} · ${esc(rest.join(" ").slice(0, 30))}</span></div>`;
+        }).join("")
+      : `<div class="empty small">Chưa có ghi chú</div>`;
+  }
+  $("#view").addEventListener("click", async (e) => {
+    if (tab !== "notes") return;
+    const b = e.target.closest("[data-n]");
+    if (!b) return;
+    const a = b.dataset.n;
+    if (a === "open") { noteId = Number(b.dataset.id); viewNotes(); }
+    if (a === "new") { noteId = null; $("#noteText").value = ""; $("#noteText").focus(); $("#noteState").textContent = "Gõ để tạo ghi chú mới"; $("#noteActs").style.display = "none"; $$(".note-item").forEach((x) => x.classList.remove("active")); }
+    if (a === "pin") { await api("pin_note", { id: noteId }); viewNotes(); }
+    if (a === "copy") { try { await navigator.clipboard.writeText($("#noteText").value); toast("Đã sao chép"); } catch { toast("Không sao chép được"); } }
+    if (a === "del") { await api("delete_note", { id: noteId }); noteId = null; viewNotes(); }
+  });
+
+  // ═════════ FILE ═════════
+  let files = [];
+  let fileResults = [];
+  let busy = false;
+  async function addFiles(paths) {
+    const info = await api("file_info", { paths });
+    const known = new Set(files.map((f) => f.path));
+    files.push(...info.filter((f) => !known.has(f.path)));
+  }
+  function fileIcon(f) {
+    return f.is_pdf ? I.pdf : f.is_archive ? I.zip : f.is_dir ? I.folder : I.file;
+  }
+  async function viewFiles() {
+    const settings = await api("get_settings");
+    const pdfs = files.filter((f) => f.is_pdf);
+    const arcs = files.filter((f) => f.is_archive);
+    $("#view").innerHTML = `
+      ${files.length ? `
+        <div class="row"><div class="sec grow" style="margin-top:2px">${files.length} mục đã chọn</div>
+          <button class="btn sm ghost" data-f="pick">${I.plus}Thêm</button><button class="btn sm ghost" data-f="clear">Bỏ chọn</button></div>
+        <div class="flist">${files.map((f, i) => `<div class="fitem"><div class="ic">${fileIcon(f)}</div>
+          <div class="grow"><div class="nm">${esc(f.name)}</div><div class="muted small">${f.is_dir ? "Thư mục" : bytes(f.size)}</div></div>
+          <button class="icon-btn" data-f="rm" data-i="${i}">${I.x}</button></div>`).join("")}</div>
+        <div class="actions">
+          <button class="btn primary" data-f="zip" ${busy ? "disabled" : ""}>${I.zip}Nén ZIP</button>
+          <button class="btn" data-f="copy" title="Chép vào clipboard để dán ra Finder, Mail, Zalo…">${I.clip}Chép file</button>
+          ${arcs.length ? `<button class="btn" data-f="extract" ${busy ? "disabled" : ""}>${I.unzip}Giải nén${arcs.length > 1 ? ` (${arcs.length})` : ""}</button>` : ""}
+          ${pdfs.length ? `<button class="btn" data-f="pdf" ${busy ? "disabled" : ""}>${I.pdf}Nén PDF${pdfs.length > 1 ? ` (${pdfs.length})` : ""}</button>
+            <select class="input" id="pdfQ">
+              <option value="screen" ${settings.pdf_quality === "screen" ? "selected" : ""}>Nhỏ nhất</option>
+              <option value="ebook" ${settings.pdf_quality === "ebook" ? "selected" : ""}>Cân bằng</option>
+              <option value="printer" ${settings.pdf_quality === "printer" ? "selected" : ""}>Đẹp (in ấn)</option></select>` : ""}
+          ${pdfs.length >= 2 ? `<button class="btn" data-f="merge" ${busy ? "disabled" : ""}>${I.merge}Gộp ${pdfs.length} PDF</button>` : ""}
+          ${busy ? '<span class="spin"></span>' : ""}
+        </div>`
+      : `<div class="drop-area">${I.file}<b style="color:#fff">Kéo file thả vào tai thỏ</b>
+          <span class="small">Nén ZIP · Giải nén ZIP/RAR/7z/TAR · Nén PDF · Gộp PDF</span>
+          <button class="btn" data-f="pick">Chọn file…</button></div>`}
+      ${fileResults.length ? `<div class="sec">Kết quả</div>` + fileResults.map((r) => `
+        <div class="card result ${r.error ? "err" : ""}" style="margin-bottom:6px">
+          <div class="row"><div class="grow">
+            <b>${esc(r.error ? r.title : r.output.split(/[\\/]/).pop())}</b>
+            <div class="muted small">${esc(r.error || r.message)}${r.error ? "" : ` · ${bytes(r.before)} → ${bytes(r.after)}`}</div></div>
+            ${r.error ? "" : `<button class="btn sm" data-f="reveal" data-p="${esc(r.output)}">${I.folder}Mở</button>`}</div></div>`).join("") : ""}`;
+  }
+  async function runFile(title, fn) {
+    busy = true;
+    viewFiles();
+    flashMood("focus", 60000);
+    try {
+      const r = await fn();
+      fileResults.unshift(r);
+      flashMood("happy");
+      confetti(12);
+    } catch (err) {
+      fileResults.unshift({ error: String(err), title });
+      flashMood("worried", 2500);
+    }
+    fileResults = fileResults.slice(0, 8);
+    busy = false;
+    if (tab === "files") viewFiles();
+  }
+  $("#view").addEventListener("click", async (e) => {
+    if (tab !== "files") return;
+    const b = e.target.closest("[data-f]");
+    if (!b) return;
+    const a = b.dataset.f;
+    if (a === "pick") { const p = await api("pick_files"); if (p.length) { await addFiles(p); viewFiles(); } }
+    if (a === "clear") { files = []; viewFiles(); }
+    if (a === "rm") { files.splice(Number(b.dataset.i), 1); viewFiles(); }
+    if (a === "reveal") api("reveal", { path: b.dataset.p });
+    if (a === "copy") { await api("clip_copy_files", { paths: files.map((f) => f.path) }); toast("Đã chép — ⌘V để dán ở bất kỳ đâu"); }
+    if (a === "zip") runFile("Nén ZIP", () => api("file_zip", { paths: files.map((f) => f.path) }));
+    if (a === "extract") for (const f of files.filter((f) => f.is_archive)) await runFile("Giải nén " + f.name, () => api("file_extract", { path: f.path }));
+    if (a === "pdf") {
+      const q = $("#pdfQ").value;
+      for (const f of files.filter((f) => f.is_pdf)) await runFile("Nén " + f.name, () => api("file_compress_pdf", { path: f.path, quality: q }));
+    }
+    if (a === "merge") runFile("Gộp PDF", () => api("file_merge_pdf", { paths: files.filter((f) => f.is_pdf).map((f) => f.path) }));
+  });
+
+  // ═════════ DỌN MÁY ═════════
+  let scan = null; // {report, disk, pro}
+  let scanning = false;
+  let cleanSel = { rules: new Set(), paths: new Set() };
+  let openRules = new Set();
+  let cleanResult = null;
+  let confirmClean = false;
+
+  function ring(d) {
+    if (!d) return "";
+    const used = 1 - d.free_percent / 100;
+    const C = 2 * Math.PI * 26;
+    const col = d.level === "critical" ? "var(--red)" : d.level === "warn" ? "var(--amber)" : "var(--green)";
+    return `<div class="ring"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" stroke="#2a2a2e"/>
+      <circle cx="32" cy="32" r="26" stroke="${col}" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - used)}"/></svg>
+      <div class="lbl">${Math.round(d.free_percent)}%</div></div>`;
+  }
+  function selectedBytes() {
+    if (!scan) return 0;
+    let n = 0;
+    for (const r of scan.report.rules) {
+      if (r.locked) continue;
+      for (const it of r.items) if (cleanSel.rules.has(r.id) || cleanSel.paths.has(it.path)) n += it.bytes;
+    }
+    return n;
+  }
+  async function viewClean() {
+    const disk = scan ? scan.disk : status && status.disk;
+    const head = `<div class="card disk-head">${ring(disk)}
+      <div class="grow">${disk ? `<div class="big-num">${bytes(disk.free_bytes)} <span class="muted" style="font-size:13px;font-weight:500">trống / ${bytes(disk.total_bytes)}</span></div>
+        <div class="muted small">${disk.level === "ok" ? "Ổ đĩa còn thoải mái" : disk.level === "warn" ? "Ổ đĩa sắp đầy — nên dọn bớt" : "Ổ đĩa gần hết chỗ!"}</div>` : "<b>Ổ đĩa</b>"}</div>
+      <button class="btn ${scan ? "" : "primary"}" data-c="scan" ${scanning ? "disabled" : ""}>${scanning ? '<span class="spin"></span>Đang quét…' : scan ? "Quét lại" : `${I.search}Quét máy`}</button></div>`;
+
+    if (cleanResult) {
+      const r = cleanResult;
+      $("#view").innerHTML = head + `<div class="empty"><div class="big">٩(◕‿◕)۶</div>
+        <div class="big-num" style="color:var(--green)">Đã giải phóng ${bytes(r.deleted_bytes)}</div>
+        <div class="muted">${r.trashed_bytes ? `${bytes(r.trashed_bytes)} file của bạn đã vào Thùng rác (hoàn tác được) · ` : ""}${r.items_done} mục</div>
+        ${r.failures.length ? `<div class="chip amber" style="margin-top:8px">${r.failures.length} mục không xoá được (thiếu quyền hoặc đang dùng)</div>` : ""}
+        <div style="margin-top:12px"><button class="btn" data-c="again">Xong</button></div></div>`;
+      return;
+    }
+    if (!scan) {
+      $("#view").innerHTML = head + `<div class="empty"><div class="big">🧹</div>
+        Quét để tìm cache, log, file cài đặt cũ, thư mục build…<br><span class="small">Quét chỉ đọc, không xoá gì cho tới khi bạn bấm Dọn.</span></div>`;
+      return;
+    }
+    const rep = scan.report;
+    const rules = rep.rules.filter((r) => r.bytes > 0);
+    const rows = rules.map((r) => {
+      const all = r.items.every((it) => cleanSel.paths.has(it.path));
+      const some = r.items.some((it) => cleanSel.paths.has(it.path));
+      const st = r.locked ? "" : cleanSel.rules.has(r.id) || all ? "on" : some ? "part" : "";
+      const tag = r.locked ? `<span class="chip violet">${I.lock}Pro</span>` : r.level === "safe" ? `<span class="chip green">An toàn</span>` : `<span class="chip amber">Xem lại</span>`;
+      const trashNote = r.action === "trash" ? `<span class="chip" title="Chuyển vào Thùng rác">${I.trash}</span>` : "";
+      const open = openRules.has(r.id);
+      return `<div class="rule ${r.locked ? "locked" : ""}">
+        <div class="rule-head">
+          <button class="box ${st}" data-c="rule" data-id="${r.id}" ${r.locked ? "disabled" : ""}>${I.check}</button>
+          <span class="expand ${open ? "open" : ""}" data-c="open" data-id="${r.id}">${I.chevron}</span>
+          <span class="nm" data-c="open" data-id="${r.id}">${esc(r.name)}</span>
+          ${trashNote}${tag}<span class="muted small">${r.items.length}</span><span class="sz">${bytes(r.bytes)}</span>
+        </div>
+        ${open ? `<div class="rule-items">${r.items.slice(0, 40).map((it) => `<div class="ritem">
+            <button class="box ${cleanSel.rules.has(r.id) || cleanSel.paths.has(it.path) ? "on" : ""}" data-c="item" data-rule="${r.id}" data-p="${esc(it.path)}" ${r.locked ? "disabled" : ""}>${I.check}</button>
+            <span class="p" title="${esc(it.path)}">&lrm;${esc(shortPath(it.path))}</span>
+            <span class="muted">${it.age_days} ngày</span><b>${bytes(it.bytes)}</b></div>`).join("")}
+            ${r.items.length > 40 ? `<div class="muted small">… và ${r.items.length - 40} mục khác</div>` : ""}</div>` : ""}
+      </div>`;
+    }).join("");
+    const sel = selectedBytes();
+    const fda = rep.skipped.some((s) => s.reason.includes("Full Disk Access"));
+    $("#view").innerHTML = head + `
+      <div class="row" style="margin:12px 2px 4px"><div class="grow"><div class="muted small">Có thể giải phóng</div>
+        <div class="big-num">${bytes(rep.available_bytes)}</div></div>
+        <button class="btn sm ghost" data-c="safe">Chọn mục an toàn</button><button class="btn sm ghost" data-c="none">Bỏ chọn</button></div>
+      ${rows || '<div class="empty">Máy sạch bong! ✨</div>'}
+      ${rep.locked_bytes > 0 ? `<div class="upsell">${I.sparkle}<div class="grow"><b>Bản Pro dọn thêm được ${bytes(rep.locked_bytes)}</b>
+        <div class="muted small">File cài đặt cũ, thư mục build, file lớn, ảnh chụp màn hình cũ, bản sao lưu iPhone…</div></div>
+        <button class="btn sm" data-c="pro">Nâng cấp</button></div>` : ""}
+      ${rep.skipped.length ? `<div class="muted small" style="margin:10px 4px">Đã bỏ qua ${rep.skipped.length} mục để an toàn (đang được dùng, dự án mới sửa…).
+        ${fda && geo.platform === "macos" ? `<button class="btn sm ghost" data-c="fda">Cấp quyền Full Disk Access</button>` : ""}</div>` : ""}
+      <div class="sticky-foot">
+        ${confirmClean
+          ? `<span class="grow small">Cache sẽ bị <b>xoá hẳn</b> (app tự tạo lại). File của bạn vào <b>Thùng rác</b>.</span>
+             <button class="btn ghost" data-c="cancel">Huỷ</button><button class="btn red" data-c="go">Dọn ngay ${bytes(sel)}</button>`
+          : `<span class="grow muted small">Đã chọn ${bytes(sel)}</span>
+             <button class="btn primary" data-c="ask" ${sel ? "" : "disabled"}>${I.broom}Dọn ${bytes(sel)}</button>`}
+      </div>`;
+  }
+  function selectSafe() {
+    cleanSel = { rules: new Set(), paths: new Set() };
+    for (const r of scan.report.rules) if (!r.locked && r.level === "safe" && r.id !== "system-trash" && r.bytes > 0) cleanSel.rules.add(r.id);
+  }
+  $("#view").addEventListener("click", async (e) => {
+    if (tab !== "clean") return;
+    const b = e.target.closest("[data-c]");
+    if (!b) return;
+    const a = b.dataset.c;
+    const rule = scan && scan.report.rules.find((r) => r.id === b.dataset.id || r.id === b.dataset.rule);
+    if (a === "scan") {
+      scanning = true; cleanResult = null; confirmClean = false;
+      viewClean();
+      moodOverride = "focus"; applyMood();
+      try { scan = await api("clean_scan"); selectSafe(); } catch (err) { toast(String(err)); }
+      scanning = false; moodOverride = null; applyMood();
+      if (scan && scan.report.available_bytes > 2e9) flashMood("worried", 2500);
+    }
+    if (a === "rule" && rule) {
+      const isOn = cleanSel.rules.has(rule.id) || rule.items.every((it) => cleanSel.paths.has(it.path));
+      cleanSel.rules.delete(rule.id);
+      rule.items.forEach((it) => cleanSel.paths.delete(it.path));
+      if (!isOn) cleanSel.rules.add(rule.id);
+    }
+    if (a === "item" && rule) {
+      if (cleanSel.rules.has(rule.id)) { cleanSel.rules.delete(rule.id); rule.items.forEach((it) => cleanSel.paths.add(it.path)); }
+      const p = b.dataset.p;
+      cleanSel.paths.has(p) ? cleanSel.paths.delete(p) : cleanSel.paths.add(p);
+    }
+    if (a === "open") { const id = b.dataset.id; openRules.has(id) ? openRules.delete(id) : openRules.add(id); }
+    if (a === "safe") selectSafe();
+    if (a === "none") cleanSel = { rules: new Set(), paths: new Set() };
+    if (a === "ask") confirmClean = true;
+    if (a === "cancel") confirmClean = false;
+    if (a === "pro") { tab = "settings"; renderView(); return; }
+    if (a === "fda") { api("open_disk_settings"); return; }
+    if (a === "again") { cleanResult = null; scan = null; }
+    if (a === "go") {
+      confirmClean = false;
+      scanning = true;
+      viewClean();
+      try {
+        cleanResult = await api("clean_run", { rules: [...cleanSel.rules], paths: [...cleanSel.paths] });
+        confetti(40);
+        flashMood("love", 4000);
+        status = await api("get_status");
+        if (scan) scan.disk = status.disk;
+      } catch (err) { toast(String(err)); }
+      scanning = false;
+    }
+    viewClean();
+  });
+
+  // ═════════ SỨC KHOẺ ═════════
+  async function viewHealth() {
+    const s = status || (await api("get_status"));
+    const st = await api("get_settings");
+    const pct = Math.min(100, (s.session_minutes / s.break_minutes) * 100);
+    const focusLeft = s.focus_until ? Math.max(0, Math.round((s.focus_until * 1000 - Date.now()) / 60000)) : 0;
+    $("#view").innerHTML = `
+      <div class="grid2">
+        <div class="card"><div class="muted small">Phiên hiện tại</div><div class="big-num">${mins(s.session_minutes)}</div>
+          <div class="meter"><i style="width:${pct}%;${pct >= 100 ? "background:var(--amber)" : ""}"></i></div>
+          <div class="row" style="margin-top:8px"><span class="muted small grow">${pct >= 100 ? "Đến giờ nghỉ rồi!" : `Nghỉ sau ${s.break_minutes - s.session_minutes} phút`}</span>
+          <button class="btn sm" data-h="rested">Mình vừa nghỉ</button></div></div>
+        <div class="card"><div class="muted small">Hôm nay đã dùng máy</div><div class="big-num">${mins(s.today_minutes)}</div>
+          <div class="muted small" style="margin-top:12px">${s.sleepy ? "🌙 Khuya rồi, đi ngủ sớm nhé" : "Đứng dậy vươn vai mỗi tiếng nhé"}</div></div>
+      </div>
+      <div class="card" style="margin-top:10px"><div class="row">
+        <div class="grow"><b>${I.target} Hẹn giờ tập trung</b><div class="muted small">${s.focus_until ? `Còn ${focusLeft} phút — tai thỏ chuyển tím, tạm tắt nhắc nhở` : "Làm việc sâu, không bị nhắc nhở làm phiền"}</div></div>
+        ${s.focus_until ? `<button class="btn red" data-h="stop">Dừng</button>`
+          : `<button class="btn" data-h="f25">25 phút</button><button class="btn" data-h="f50">50 phút</button><button class="btn" data-h="f90">90 phút</button>`}
+      </div></div>
+      <div class="card" style="margin-top:10px">
+        <div class="setting"><div class="grow"><b>Nhắc nghỉ mắt</b><span>Sau mỗi phiên dùng máy liên tục</span></div>
+          <input class="input num" type="number" min="10" max="180" value="${st.break_minutes}" data-k="break_minutes" /><span class="muted small">phút</span>
+          <button class="switch ${st.break_enabled ? "on" : ""}" data-k="break_enabled"></button></div>
+        <div class="setting"><div class="grow"><b>Nhắc uống nước</b><span>Linh vật vẫy nhẹ, không làm phiền</span></div>
+          <input class="input num" type="number" min="15" max="240" value="${st.water_minutes}" data-k="water_minutes" /><span class="muted small">phút</span>
+          <button class="switch ${st.water_enabled ? "on" : ""}" data-k="water_enabled"></button></div>
+        <div class="setting"><div class="grow"><b>Giờ đi ngủ</b><span>Sau giờ này linh vật sẽ ngáp ngủ</span></div>
+          <input class="input num" type="number" min="18" max="23" value="${st.sleep_hour}" data-k="sleep_hour" /><span class="muted small">giờ</span></div>
+      </div>`;
+  }
+  $("#view").addEventListener("click", async (e) => {
+    if (tab !== "health") return;
+    const b = e.target.closest("[data-h]");
+    if (!b) return;
+    const a = b.dataset.h;
+    if (a === "rested") { await api("health_break_done"); flashMood("happy"); }
+    if (a === "stop") await api("focus_stop");
+    if (a[0] === "f") { await api("focus_start", { minutes: Number(a.slice(1)) }); flashMood("focus", 2000); }
+    status = await api("get_status");
+    applyColor(); updateBar(); viewHealth();
+  });
+
+  // Lưu cài đặt chung (dùng ở tab Sức khoẻ & Cài đặt)
+  $("#view").addEventListener("click", async (e) => {
+    const sw = e.target.closest(".switch[data-k]");
+    if (!sw) return;
+    const st = await api("get_settings");
+    st[sw.dataset.k] = !st[sw.dataset.k];
+    await api("save_settings", { settings: st });
+    settingsCache = st;
+    sw.classList.toggle("on", st[sw.dataset.k]);
+    if (["sync_reminders", "sync_notes", "show_calendar"].includes(sw.dataset.k) && st[sw.dataset.k]) {
+      toast("macOS có thể hỏi quyền — bấm Cho phép nhé");
+      api("sync_now").then(() => tab === "settings" && viewSettings());
+    }
+    status = await api("get_status");
+    applyColor(); applyMood(); updateBar();
+  });
+  // ───────── Cài đặt › Giọng đọc của Asi (VieNeu / NghiTTS) ─────────
+  // Mỗi bộ đọc tải thêm ("gói giọng"): VieNeu (tự nhiên nhất) · NghiTTS (nhẹ nhất)
+  function voiceCard(tv) {
+    const voiceBtn = (engine, ready, [name, g, desc]) => {
+      const on = tv.engine === engine && tv.voice === name && ready;
+      return `<button class="voice-opt ${on ? "on" : ""}" data-tts="use" data-engine="${engine}" data-voice="${esc(name)}" ${ready ? "" : "disabled"}>
+        <span class="voice-av ${g}">${g === "female" ? "🌸" : "🌿"}</span><span class="grow"><b>${esc(name)}</b><span class="muted small">${esc(desc)}</span></span>
+        <span class="icon-btn" data-tts="hear" data-engine="${engine}" data-voice="${esc(name)}" title="Nghe thử">▶</span></button>`;
+    };
+    const sysOn = !tv.packs.some((p) => p.id === tv.engine && p.status.phase === "ready");
+    const sysOpt = `<button class="voice-opt ${sysOn ? "on" : ""}" data-tts="use" data-engine="system" data-voice=""><span class="voice-av">🍎</span><span class="grow"><b>Giọng của máy</b><span class="muted small">Linh / Samantha · có sẵn, không cần tải</span></span>
+        <span class="icon-btn" data-tts="hear" data-engine="system" data-voice="" title="Nghe thử">▶</span></button>`;
+    const qs = tv.qualities || [["compact", "Gọn", 210], ["high", "Chất lượng cao", 520]];
+    const qName = (id) => (qs.find((q) => q[0] === id) || [id, id])[1];
+    const packHtml = (p) => {
+      const ss = p.status, ph = ss.phase, ready = ph === "ready", vn = p.id === "vieneu";
+      let foot = "";
+      if (ph === "none" || ph === "error") {
+        const qpick = qsel || tv.default_quality || "compact";
+        const qOpts = vn ? `<div class="q-grid grow">${qs.map(([id, name, mb]) => `<button class="q-opt ${qpick === id ? "on" : ""}" data-tts="q" data-q="${id}"><b>${name}</b><span class="muted small">≈ ${mb} MB${id === tv.default_quality ? " · khuyên dùng" : ""}</span></button>`).join("")}</div>` : `<span class="muted small grow">2 giọng · ≈ ${p.model_mb} MB</span>`;
+        foot = `${ph === "error" ? `<div class="small" style="color:var(--red);margin-top:6px">Chưa tải được: ${esc(ss.error || "")}</div>` : ""}
+          <div class="row" style="margin-top:6px">${qOpts}<button class="btn primary sm" data-tts="install" data-engine="${p.id}">⬇︎ Tải ${esc(p.name)}</button></div>`;
+      } else if (ph === "installing") {
+        foot = `<div class="tts-prog" data-prog="${p.id}"><span class="spin"></span><div class="grow"><b class="small">${esc(ss.step || "Đang chuẩn bị…")}</b><div class="muted small tts-detail">${esc(ss.detail || "")}</div></div></div>`;
+      } else {
+        const using = tv.engine === p.id;
+        const other = vn ? qs.find((q) => q[0] !== ss.quality) || qs[0] : null;
+        foot = `<div class="row" style="margin-top:6px"><span class="muted small grow">${vn ? `bản ${esc(qName(ss.quality || "high"))} · ` : ""}${ss.size_mb ? `${ss.size_mb} MB trên máy` : ""}${using ? (ss.warm ? " · đã nạp sẵn" : " · nạp khi mở tai thỏ (vài giây lần đầu)") : ""}</span>
+          ${other ? `<button class="btn sm ghost" data-tts="install" data-engine="vieneu" data-q="${other[0]}" title="Tải bản kia và xoá bản đang dùng">Đổi sang ${esc(other[1])} (≈ ${other[2]} MB)</button>` : ""}
+          <button class="btn sm ghost" data-tts="uninstall" data-engine="${p.id}">Gỡ</button></div>`;
+      }
+      return `<div class="tts-pack"><div class="row"><b class="grow">${esc(p.name)}</b><span class="muted small">${esc(p.blurb)}</span></div>
+        <div class="voice-grid two">${p.voices.map((v) => voiceBtn(p.id, ready, v)).join("")}</div>${foot}</div>`;
+    };
+    return `<div class="card" id="ttsCard" style="margin-bottom:10px"><div class="row"><b class="grow">🗣 Giọng đọc của Asi</b>
+        <label class="row small"><input type="checkbox" data-k2="voice_reply" ${settingsCache.voice_reply !== false ? "checked" : ""}/> Asi đọc to câu trả lời</label></div>
+      <div class="voice-grid one">${sysOpt}</div>
+      ${tv.packs.map(packHtml).join("")}
+      <div class="muted small" style="margin-top:6px">Giọng tải thêm chạy ngay trên máy, không gửi dữ liệu đi.${tv.arm ? "" : " Máy chip Intel nên chọn VieNeu bản Chất lượng cao hoặc NghiTTS."}</div></div>`;
+  }
+  let qsel = null;
+  async function redrawVoice() {
+    const tv = await api("tts_info").catch(() => null);
+    const c = $("#ttsCard");
+    if (tv && c) c.outerHTML = voiceCard(tv);
+  }
+  on("tts-progress", (ev) => {
+    if (tab !== "settings") return;
+    const s = ev.status || ev, name = ev.engine === "nghi" ? "NghiTTS" : "VieNeu";
+    if (s.phase === "ready") { toast(`Đã tải xong ${name} 🎉 Asi sẽ đọc bằng giọng mới`); redrawVoice(); return; }
+    if (s.phase === "error") { toast(`Chưa tải được ${name}`); redrawVoice(); return; }
+    const c = $(`#ttsCard [data-prog="${ev.engine || "vieneu"}"]`);
+    if (!c) return redrawVoice();
+    c.querySelector("b").textContent = s.step || "";
+    c.querySelector(".tts-detail").textContent = s.detail || "";
+  });
+  $("#view").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-tts]");
+    if (!b || tab !== "settings") return;
+    e.stopPropagation();
+    const a = b.dataset.tts, voice = b.dataset.voice || "", engine = b.dataset.engine || "vieneu";
+    if (a === "q") { qsel = b.dataset.q; redrawVoice(); return; }
+    if (a === "install") {
+      try { await api("tts_install", { engine, quality: b.dataset.q || qsel || null }); } catch (err) { toast(String(err)); }
+      qsel = null; setTimeout(redrawVoice, 200); return;
+    }
+    if (a === "uninstall") {
+      if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Bấm lần nữa để gỡ"; return; }
+      await api("tts_uninstall", { engine }); toast("Đã gỡ giọng"); redrawVoice(); return;
+    }
+    if (a === "use") { await api("tts_use", { engine, voice, preview: false }); settingsCache.tts_engine = engine; settingsCache.tts_voice = voice; redrawVoice(); return; }
+    if (a === "hear") {
+      const ok = await api("tts_use", { engine, voice, preview: true });
+      settingsCache.tts_engine = engine; settingsCache.tts_voice = voice;
+      if (!ok) toast("Asi đang nạp giọng (vài giây lần đầu) — bấm nghe thử lại sau chút nhé");
+      redrawVoice();
+    }
+  });
+  $("#view").addEventListener("click", async (e) => {
+    const vc = e.target.closest("[data-vcount]");
+    if (vc && tab === "settings") {
+      const st = await api("get_settings");
+      st.vocab_count = Number(vc.dataset.vcount);
+      await api("save_settings", { settings: st });
+      settingsCache = st;
+      vc.parentElement.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === vc));
+      return;
+    }
+    const w = e.target.closest("[data-wing]");
+    if (w && tab === "settings") {
+      const st = await api("get_settings");
+      st.wing_size = w.dataset.wing;
+      await api("save_settings", { settings: st });
+      setTimeout(() => location.reload(), 120); // vẽ lại tai thỏ theo độ rộng mới
+    }
+  });
+  $("#view").addEventListener("click", async (e) => {
+    const dsp = e.target.closest("[data-disp]");
+    if (dsp && tab === "settings") {
+      await api("set_display", { mode: dsp.dataset.disp });
+      setTimeout(() => location.reload(), 150); // nạp lại giao diện theo kiểu mới
+    }
+  });
+  $("#view").addEventListener("click", async (e) => {
+    const sw = e.target.closest(".switch[data-bk]");
+    if (!sw) return;
+    const on = !sw.classList.contains("on");
+    await api("backup_set", { [sw.dataset.bk === "auto_backup" ? "autoBackup" : "deviceSync"]: on });
+    sw.classList.toggle("on", on);
+    if (sw.dataset.bk === "device_sync" && on) api("device_sync_now").then(() => tab === "settings" && viewSettings()).catch((err) => toast(String(err)));
+  });
+  $("#view").addEventListener("change", async (e) => {
+    if (e.target.dataset && e.target.dataset.feat) {
+      const st = await api("get_settings");
+      const set = new Set(st.visible_tabs && st.visible_tabs.length ? st.visible_tabs : ["home", "tasks", "notes", "clips", "journal", "words", "threads"]);
+      e.target.checked ? set.add(e.target.dataset.feat) : set.delete(e.target.dataset.feat);
+      set.add("home");
+      st.visible_tabs = [...set];
+      await api("save_settings", { settings: st });
+      settingsCache = st;
+      e.target.closest(".feat").classList.toggle("on", e.target.checked);
+      renderTabs();
+      return;
+    }
+    if (e.target.dataset && e.target.dataset.idle) {
+      const st = await api("get_settings");
+      const cur = new Set(Array.isArray(st.idle_items) ? st.idle_items : IDLE_DEFAULT);
+      if (e.target.checked) cur.add(e.target.dataset.idle); else cur.delete(e.target.dataset.idle);
+      const order = ["focus", "overdue", "event", "next", "time", "tasks", "notes", "clips", "disk", "mic"];
+      st.idle_items = order.filter((k) => cur.has(k));
+      await api("save_settings", { settings: st });
+      settingsCache = st;
+      e.target.closest(".feat").classList.toggle("on", e.target.checked);
+      updateBar();
+      return;
+    }
+    if (e.target.dataset && e.target.dataset.k2) {
+      const st = await api("get_settings");
+      st[e.target.dataset.k2] = e.target.checked;
+      await api("save_settings", { settings: st });
+      settingsCache = st;
+      return;
+    }
+    if (e.target.id === "bkDir") {
+      if (e.target.value === "__pick") { await api("backup_pick_dir"); } else { await api("backup_set", { dir: e.target.value }); }
+      viewSettings();
+      return;
+    }
+    const el = e.target.closest("[data-k]");
+    if (!el || el.classList.contains("switch")) return;
+    const st = await api("get_settings");
+    st[el.dataset.k] = el.type === "number" ? Number(el.value) : el.value;
+    await api("save_settings", { settings: st });
+    settingsCache = st;
+    toast("Đã lưu");
+  });
+
+  // ═════════ CÀI ĐẶT ═════════
+  async function viewSettings() {
+    const st = await api("get_settings");
+    const lic = await api("license_info");
+    const mac = geo.platform === "macos";
+    const ax = await api("accessibility_status");
+    const si = await api("sync_info");
+    settingsCache = st;
+    const perms = await api("permissions_status");
+    const bk = await api("backup_info");
+    const permIcon = { granted: "✅", denied: "⛔", not_asked: "⚪", unknown: "⚪", manual: "🔸" };
+    const permCard = `<div class="card" id="permCard" style="margin-bottom:10px">
+        <div class="row"><div class="grow"><b>🔐 Quyền cho Mini-Asi</b><div class="muted small">Bấm một lần, macOS sẽ lần lượt hỏi từng quyền — chọn “Cho phép”.</div></div>
+          <button class="btn primary" data-s="permall">Cấp tất cả quyền</button></div>
+        <div class="perm-list">${perms.map((p) => `<div class="perm-row"><span>${permIcon[p.state] || "⚪"}</span>
+          <div class="grow"><b>${p.name}</b> ${p.required ? "" : '<span class="chip">Tuỳ chọn</span>'} <span class="muted small">${p.why}</span></div>
+          ${p.state === "granted" ? '<span class="chip green">Đã cấp</span>' : `<button class="btn sm ghost" data-s="perm" data-p="${p.id}">${p.state === "denied" && ["accessibility", "disk"].includes(p.id) ? "Mở cài đặt" : "Cấp quyền"}</button>`}</div>`).join("")}</div>
+      </div>`;
+    const ago = (ms) => (ms ? fmtDue(ms).replace("trễ ", "") + " trước" : "chưa có");
+    const backupCard = `<div class="sec">☁️ Sao lưu & đồng bộ nhiều máy</div>
+      <div class="card">
+        <div class="setting"><div class="grow"><b>Thư mục đám mây</b><span>${bk.current ? esc(bk.current) : "Chưa tìm thấy Google Drive — cài “Google Drive cho máy tính” hoặc chọn thư mục"}</span></div>
+          <select class="input" id="bkDir">${bk.dirs.map((d) => `<option value="${esc(d.path)}" ${bk.current === d.path ? "selected" : ""}>${esc(d.label)}</option>`).join("")}
+            ${bk.chosen && !bk.dirs.some((d) => d.path === bk.chosen) ? `<option value="${esc(bk.chosen)}" selected>${esc(bk.chosen.split(/[\\/]/).pop())}</option>` : ""}
+            <option value="__pick">Chọn thư mục khác…</option></select></div>
+        <div class="setting"><div class="grow"><b>Sao lưu</b><span>Lần cuối: ${ago(bk.last_backup)} · giữ 14 bản gần nhất</span></div>
+          <button class="btn sm" data-s="bknow" ${bk.current ? "" : "disabled"}>Sao lưu ngay</button>
+          <button class="switch ${bk.auto_backup ? "on" : ""}" data-bk="auto_backup" title="Tự sao lưu mỗi ngày"></button></div>
+        <div class="setting"><div class="grow"><b>Đồng bộ giữa các máy</b><span>Máy này: “${esc(bk.device_name)}” · ${bk.devices.length} máy dùng chung · lần cuối ${ago(bk.last_device_sync)}</span></div>
+          <button class="btn sm" data-s="devsync" ${bk.current ? "" : "disabled"}>Đồng bộ ngay</button>
+          <button class="switch ${bk.device_sync ? "on" : ""}" data-bk="device_sync" title="Tự đồng bộ mỗi 15 phút"></button></div>
+        ${bk.snapshots.length ? `<div class="setting" style="display:block"><b>Khôi phục</b>
+          ${bk.snapshots.slice(0, 6).map((f) => `<div class="row small" style="margin-top:6px"><span class="grow">${esc(f.device || "")} · ${new Date(f.modified).toLocaleString("vi-VN")} · ${bytes(f.size)}</span>
+            <button class="btn sm ghost" data-s="restore" data-p="${esc(f.path)}">Khôi phục</button></div>`).join("")}</div>` : ""}
+      </div>`;
+    const vis = st.visible_tabs && st.visible_tabs.length ? st.visible_tabs : ["home", "tasks", "notes", "clips", "journal", "words", "threads"];
+    const featCard = `<details class="card feat-card" style="margin-bottom:10px"><summary><b>🧩 Quản lý tính năng</b> <span class="muted small">— chọn tính năng hiện trên thanh, còn lại nằm trong “Tất cả”</span></summary>
+      <div class="feat-grid">${TABS.filter(([id]) => !["home", "settings"].includes(id)).map(([id, name, ic]) => `<label class="feat ${vis.includes(id) ? "on" : ""}">
+        <input type="checkbox" data-feat="${id}" ${vis.includes(id) ? "checked" : ""}/>${ic}<span>${name}</span></label>`).join("")}</div>
+      <div class="row" style="margin-top:8px"><label class="row small grow"><input type="checkbox" data-k2="threads_embed_beta" ${st.threads_embed_beta ? "checked" : ""}/> Thử nghiệm: Threads nằm trong khung Asi</label></div>
+      <div class="row" style="margin-top:4px"><span class="muted small grow">Trang “Tất cả” (⊞ trên thanh) luôn có đủ mọi tính năng.</span></div>
+    </details>`;
+    const ime = await api("ime_info").catch(() => null);
+    const tv = await api("tts_info").catch(() => null);
+    const ttsCard = tv ? voiceCard(tv) : "";
+    const dispCard = `<div class="card" style="margin-bottom:10px"><b>🪄 Kiểu hiển thị</b>
+      <div class="disp-grid">${[["notch", "Tai thỏ", "Ôm sát tai thỏ (máy có tai thỏ)"], ["pill", "Viên thuốc", "Nổi giữa, ngay dưới thanh menu"], ["bubble", "Bong bóng", "Nút tròn nổi trên mọi cửa sổ, kéo đi đâu cũng được"]]
+        .map(([id, name, why]) => `<button class="disp-opt ${DISP === id ? "on" : ""}" data-disp="${id}"><span class="disp-pv pv-${id}"></span><b>${name}</b><span class="muted small">${why}</span></button>`).join("")}</div></div>`;
+    const IDLE_OPTS = [["focus", "⏱", "Đồng hồ tập trung"], ["overdue", "🔴", "Số việc trễ"], ["event", "📅", "Lịch sắp tới"], ["next", "⏰", "Việc sắp đến hạn"], ["time", "🕒", "Giờ hiện tại"],
+      ["tasks", "✅", "Số việc còn lại"], ["notes", "✎", "Số ghi chú"], ["clips", "📋", "Số mục clipboard"], ["disk", "💾", "Dung lượng trống"], ["mic", "🎙", "Nút mic"]];
+    const idl = idleItems();
+    const idleCard = `<div class="card" style="margin-bottom:10px"><b>🌙 Chế độ chờ — tai thỏ thu gọn hiện gì</b>
+      <div class="muted small" style="margin-top:2px">Chạm để bật/tắt. Chỗ cạnh tai thỏ hẹp nên Asi chỉ hiện những mục quan trọng nhất vừa đủ chỗ (theo thứ tự trong danh sách).</div>
+      <div class="row" style="margin-top:8px"><span class="small grow">Độ rộng hai bên tai thỏ</span>
+        <div class="seg">${[["s", "Gọn"], ["m", "Vừa"], ["l", "Rộng"]].map(([v, n]) => `<button class="${(st.wing_size || "s") === v ? "on" : ""}" data-wing="${v}">${n}</button>`).join("")}</div></div>
+      <div class="idle-grid">${IDLE_OPTS.map(([id, ic, name]) => `<label class="feat ${idl.includes(id) ? "on" : ""}"><input type="checkbox" data-idle="${id}" ${idl.includes(id) ? "checked" : ""}/><span>${ic}</span><span>${name}</span></label>`).join("")}</div></div>`;
+    const vocabCard = `<div class="card" style="margin-bottom:10px"><div class="row"><div class="grow"><b>📚 Học từ mới tiếng Anh</b>
+        <div class="muted small">Mỗi lần mở tai thỏ, trang chủ hiện vài từ mới kèm phiên âm; tab “Từ mới” để nghe mẫu và đọc thử.</div></div>
+        <div class="seg">${[2, 3].map((n) => `<button class="${(st.vocab_count || 3) === n ? "on" : ""}" data-vcount="${n}">${n} từ</button>`).join("")}</div>
+        <label class="row small" style="margin-left:8px"><input type="checkbox" data-k2="vocab_enabled" ${st.vocab_enabled !== false ? "checked" : ""}/> Bật</label></div></div>`;
+    const imeCard = ime ? `<div class="card" style="margin-bottom:10px"><div class="row"><div class="grow"><b>⌨️ Bộ gõ đang dùng trên máy</b>
+        <div class="muted small">${esc(ime.current || "không rõ")} · ${ime.recognized ? `Asi nhận ra bộ gõ tiếng Việt (${ime.recognized === "vni" ? "VNI" : "Telex"}) → tự gõ dấu giúp bạn` : "Asi chưa nhận ra bộ gõ này — chọn “Luôn Telex” hoặc “Luôn VNI”"}</div></div>
+        <select class="input" data-k="viet_engine"><option value="auto" ${st.viet_engine === "auto" ? "selected" : ""}>Tự động</option><option value="telex" ${st.viet_engine === "telex" ? "selected" : ""}>Luôn Telex</option><option value="vni" ${st.viet_engine === "vni" ? "selected" : ""}>Luôn VNI</option><option value="off" ${st.viet_engine === "off" ? "selected" : ""}>Tắt</option></select></div></div>` : "";
+    $("#view").innerHTML = permCard + dispCard + idleCard + ttsCard + vocabCard + imeCard + featCard + backupCard + `<div style="height:10px"></div>
+      <div class="card ${lic.pro ? "" : "upsell"}" style="margin:0 0 10px">
+        ${lic.pro
+          ? `<div class="row">${I.sparkle}<div class="grow"><b>Mini-Asi Pro</b><div class="muted small">${esc(lic.email)}${lic.expires ? ` · hết hạn ${new Date(lic.expires * 1000).toLocaleDateString("vi-VN")}` : " · vĩnh viễn"}</div></div>
+             <button class="btn sm ghost" data-s="unlic">Gỡ khoá</button></div>`
+          : `<div class="grow"><b>${I.sparkle} Nâng cấp Mini-Asi Pro</b>
+             <div class="muted small" style="margin:2px 0 8px">Dọn sâu: file cài đặt, thư mục build, file lớn, sao lưu iPhone, ảnh chụp màn hình cũ.</div>
+             <div class="row"><input class="input" id="licKey" placeholder="Dán khoá bản quyền MASI1.…" style="height:32px" />
+             <button class="btn primary" data-s="lic">Kích hoạt</button></div>
+             <div class="small" id="licMsg" style="color:var(--red);margin-top:4px"></div></div>`}
+      </div>
+      <div class="card">
+        <div class="setting"><div class="grow"><b>Khởi động cùng máy</b><span>Mini-Asi luôn có mặt khi bạn mở máy</span></div>
+          <button class="switch ${st.launch_at_login ? "on" : ""}" data-k="launch_at_login"></button></div>
+        <div class="setting"><div class="grow"><b>Chế độ tập trung</b><span>Tắt màu đỏ báo trễ việc và nhắc nghỉ</span></div>
+          <button class="switch ${st.focus_mode ? "on" : ""}" data-k="focus_mode"></button></div>
+        <div class="setting"><div class="grow"><b>Chất lượng nén PDF mặc định</b><span>Cân bằng phù hợp gửi email</span></div>
+          <select class="input" data-k="pdf_quality">
+            <option value="screen" ${st.pdf_quality === "screen" ? "selected" : ""}>Nhỏ nhất</option>
+            <option value="ebook" ${st.pdf_quality === "ebook" ? "selected" : ""}>Cân bằng</option>
+            <option value="printer" ${st.pdf_quality === "printer" ? "selected" : ""}>Đẹp (in ấn)</option></select></div>
+        <div class="setting"><div class="grow"><b>Phím tắt mở nhanh</b><span>Mở/đóng tai thỏ từ bất kỳ đâu</span></div>
+          <span class="chip">${mac ? "⌘ ⇧ Space" : "Ctrl ⇧ Space"}</span></div>
+        <div class="setting"><div class="grow"><b>Màn hình</b><span>${geo.has_notch ? `Có tai thỏ (${Math.round(geo.notch_width)}×${Math.round(geo.notch_height)})` : "Không có tai thỏ — dùng tai thỏ ảo"}</span></div></div>
+      </div>
+      <div class="sec">${I.clip} Clipboard</div>
+      <div class="card">
+        <div class="setting"><div class="grow"><b>Lưu lịch sử clipboard</b><span>Chữ, ảnh, file — bỏ qua mật khẩu từ trình quản lý mật khẩu</span></div>
+          <button class="switch ${st.clip_enabled ? "on" : ""}" data-k="clip_enabled"></button></div>
+        <div class="setting"><div class="grow"><b>Số mục tối đa</b><span>Mục đã ghim luôn được giữ</span></div>
+          <input class="input num" type="number" min="20" max="2000" value="${st.clip_max}" data-k="clip_max" /></div>
+        <div class="setting"><div class="grow"><b>Chọn là dán luôn</b><span>${ax ? "Đã có quyền Trợ năng" : "Cần bật quyền Trợ năng cho Mini-Asi"}</span></div>
+          ${ax ? "" : `<button class="btn sm ghost" data-s="ax">Mở cài đặt</button>`}
+          <button class="switch ${st.clip_autopaste ? "on" : ""}" data-k="clip_autopaste"></button></div>
+        <div class="setting"><div class="grow"><b>Phím tắt mở clipboard</b><span>Mở thẳng danh sách đã chép</span></div>
+          <span class="chip">${esc(st.clip_shortcut.replace("Control", "⌃").replace("Shift", "⇧").replace("Alt", "⌥").replace(/\+/g, " "))}</span></div>
+      </div>
+      <div class="sec">${I.mic} Giọng nói & nhật ký</div>
+      <div class="card">
+        <div class="setting"><div class="grow"><b>Bộ gõ tiếng Việt của Asi</b><span>Tự gõ dấu trong tai thỏ — tự bật khi máy đang dùng bộ gõ tiếng Việt</span></div>
+          <select class="input" data-k="viet_engine">
+            <option value="auto" ${st.viet_engine === "auto" ? "selected" : ""}>Tự động</option>
+            <option value="telex" ${st.viet_engine === "telex" ? "selected" : ""}>Luôn Telex</option>
+            <option value="vni" ${st.viet_engine === "vni" ? "selected" : ""}>Luôn VNI</option>
+            <option value="off" ${st.viet_engine === "off" ? "selected" : ""}>Tắt (dùng bộ gõ macOS)</option></select></div>
+        <div class="setting"><div class="grow"><b>Ngôn ngữ giọng nói</b><span>Dùng khi ghi chú, thêm việc, viết nhật ký bằng giọng nói</span></div>
+          <select class="input" data-k="voice_lang"><option value="vi-VN" ${st.voice_lang === "vi-VN" ? "selected" : ""}>Tiếng Việt</option>
+          <option value="en-US" ${st.voice_lang === "en-US" ? "selected" : ""}>English (US)</option><option value="en-GB" ${st.voice_lang === "en-GB" ? "selected" : ""}>English (UK)</option></select></div>
+        <div class="setting"><div class="grow"><b>Asi hỏi chuyện nhật ký mỗi tối</b><span>Hỏi về ngày hôm nay và ghi lại giúp bạn</span></div>
+          <input class="input num" type="number" min="17" max="23" value="${st.journal_hour}" data-k="journal_hour" /><span class="muted small">giờ</span>
+          <button class="switch ${st.journal_enabled ? "on" : ""}" data-k="journal_enabled"></button></div>
+      </div>
+      ${mac ? `<div class="sec">${I.sync} Đồng bộ với app Apple</div>
+      <div class="card">
+        <div class="setting"><div class="grow"><b>Việc ⇄ Lời nhắc (Reminders)</b><span>Hai chiều, trong danh sách “${esc(st.reminders_list)}”</span></div>
+          <input class="input" style="width:110px;height:28px" value="${esc(st.reminders_list)}" data-k="reminders_list" />
+          <button class="switch ${st.sync_reminders ? "on" : ""}" data-k="sync_reminders"></button></div>
+        <div class="setting"><div class="grow"><b>Ghi chú ⇄ Ghi chú (Notes)</b><span>Hai chiều, trong thư mục “${esc(st.notes_folder)}”</span></div>
+          <input class="input" style="width:110px;height:28px" value="${esc(st.notes_folder)}" data-k="notes_folder" />
+          <button class="switch ${st.sync_notes ? "on" : ""}" data-k="sync_notes"></button></div>
+        <div class="setting"><div class="grow"><b>Lịch (Calendar)</b><span>Hiện lịch họp hôm nay, nhắc trước giờ họp, thêm việc vào Lịch</span></div>
+          <input class="input num" type="number" min="1" max="60" value="${st.event_alert_minutes}" data-k="event_alert_minutes" /><span class="muted small">phút</span>
+          <button class="switch ${st.show_calendar ? "on" : ""}" data-k="show_calendar"></button></div>
+        <div class="setting"><div class="grow"><b>Trạng thái</b><span id="syncState">${si.last_run ? "Đồng bộ lần cuối " + fmtDue(si.last_run).replace("trễ ", "") + " trước · " + si.linked_tasks + " việc · " + si.linked_notes + " ghi chú" : "Chưa đồng bộ"}${si.last_error ? `<br><span style="color:var(--red)">${esc(si.last_error)}</span>` : ""}</span></div>
+          <button class="btn sm" data-s="sync">${I.sync}Đồng bộ ngay</button></div>
+      </div>` : ""}
+      <div class="row" style="margin-top:12px"><span class="muted small grow">Mini-Asi 0.10.0 · Dữ liệu chỉ lưu trên máy bạn</span>
+        <button class="btn ghost" data-s="quit">Thoát Mini-Asi</button></div>`;
+  }
+  $("#view").addEventListener("click", async (e) => {
+    if (tab !== "settings") return;
+    const b = e.target.closest("[data-s]");
+    if (!b) return;
+    const a = b.dataset.s;
+    if (a === "lic") {
+      const r = await api("activate_license", { key: $("#licKey").value });
+      if (r.pro) { confetti(40); flashMood("love", 4000); scan = null; viewSettings(); }
+      else $("#licMsg").textContent = r.error || "Khoá không hợp lệ";
+    }
+    if (a === "unlic") { await api("deactivate_license"); viewSettings(); }
+    if (a === "ax") api("open_privacy", { pane: "accessibility" });
+    if (a === "permall" || a === "perm") {
+      b.disabled = true;
+      b.innerHTML = '<span class="spin"></span>Đang xin quyền…';
+      await api("request_permissions", { which: a === "permall" ? "all" : b.dataset.p });
+      toast("Xong — kiểm tra lại danh sách quyền nhé");
+      viewSettings();
+      return;
+    }
+    if (a === "bknow") {
+      b.disabled = true; b.innerHTML = '<span class="spin"></span>';
+      try { const [p, n] = await api("backup_now"); toast(`Đã sao lưu ${bytes(n)} lên ${p.includes("Google") ? "Google Drive" : "thư mục đám mây"} ✓`); confetti(14); } catch (err) { toast(String(err)); }
+      viewSettings(); return;
+    }
+    if (a === "devsync") {
+      b.disabled = true; b.innerHTML = '<span class="spin"></span>';
+      try { const r = await api("device_sync_now"); const n = r.stats.tasks + r.stats.notes + r.stats.journal + r.stats.clips; toast(r.devices.length ? `Đã gộp ${n} mục từ ${r.devices.join(", ")}` : "Chưa thấy máy nào khác — cài Mini-Asi trên máy kia và bật đồng bộ"); } catch (err) { toast(String(err)); }
+      viewSettings(); return;
+    }
+    if (a === "restore") {
+      if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Chắc chưa? Bấm lần nữa"; b.classList.add("red"); return; }
+      try { await api("backup_restore", { path: b.dataset.p }); toast("Đã khôi phục ✓ (bản cũ được cất riêng)"); await refreshTasks(); } catch (err) { toast(String(err)); }
+      viewSettings(); return;
+    }
+    if (a === "sync") {
+      b.disabled = true;
+      b.innerHTML = '<span class="spin"></span>Đang đồng bộ…';
+      const r = await api("sync_now");
+      toast(r.errors.length ? "⚠ " + r.errors[0] : `Xong: ↑${r.tasks_pushed + r.notes_pushed} ↓${r.tasks_pulled + r.notes_pulled} · ${r.events} sự kiện`);
+      viewSettings();
+    }
+    if (a === "quit") api("quit");
+  });
+
+  // ───────── Vòng cập nhật ─────────
+  function onStatus(s) {
+    const prevLevel = status ? status.lateness.level : 0;
+    status = s;
+    applyColor();
+    applyMood();
+    updateBar();
+    if (mode === "peek") renderPeek();
+    if (mode === "expanded") renderTabs();
+    if (s.lateness.level > prevLevel && prevLevel === 0) flashMood("alarm", 1800);
+    if (s.lateness.level === 0 && prevLevel > 0) { flashMood("happy", 2500); confetti(14); }
+  }
+  on("status", onStatus);
+  setInterval(() => { if (status && mode !== "expanded" && (status.focus_until || idleItems().includes("time"))) updateBar(); }, 1000);
+  setInterval(() => { if (mode === "expanded" && tab === "tasks" && !typing()) drawTaskList(); }, 30000);
+
+  await refreshTasks();
+  onStatus(await api("get_status"));
+  await setMode("collapsed", { force: true });
+  flashMood("happy", 1800); // chào khi khởi động
+
+  // Cho phép extra.js (Clipboard, Nhật ký) dùng chung tiện ích
+  window.ASI = {
+    api, on, $, $$, esc, I, toast, askAsi, voiceCommand, isComposing, typing, updateBar, placeEmbed, hideEmbed, switchTab, threadsInline, confetti, flashMood, fmtDue, hm, bytes, mins, dictate, micBtn, langPill, geo,
+    views: EXTRA_VIEWS,
+    get tab() { return tab; }, set tab(t) { tab = t; },
+    get mode() { return mode; }, setMode, renderView,
+    get settings() { return settingsCache; },
+    takeFreshOpen() { const f = freshOpen; freshOpen = false; return f; },
+    refreshTasks,
+  };
+  document.dispatchEvent(new Event("asi-ready"));
+
+  // Cho phép bản thử nghiệm điều khiển từ ngoài (chụp màn hình, test)
+  window.__asi = { setMode, get mode() { return mode; }, set tab(t) { tab = t; }, renderView, showAlert, flashMood, addFiles };
+})();

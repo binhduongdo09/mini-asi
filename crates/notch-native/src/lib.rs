@@ -1,0 +1,207 @@
+//! Lớp native của Mini-Asi.
+//!
+//! - `notch_info()`        : màn hình chính có tai thỏ không, kích thước tai thỏ (đơn vị point)
+//! - `configure_window()`  : đưa cửa sổ lên trên thanh menu, hiện trên mọi Space (macOS)
+//! - `idle_seconds()`      : số giây kể từ lần cuối người dùng chạm bàn phím/chuột
+
+use std::ffi::c_void;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NotchInfo {
+    /// true nếu màn hình có tai thỏ thật
+    pub has_notch: bool,
+    /// Chiều rộng tai thỏ (point). 0 nếu không có.
+    pub notch_width: f64,
+    /// Chiều cao vùng tai thỏ / thanh menu (point)
+    pub notch_height: f64,
+    /// Chiều rộng màn hình (point)
+    pub screen_width: f64,
+    /// Toạ độ x của mép trái màn hình (point, hệ toạ độ toàn cục)
+    pub screen_x: f64,
+    pub scale: f64,
+}
+
+// ─────────────────────────── macOS ───────────────────────────
+#[cfg(target_os = "macos")]
+mod imp {
+    use super::*;
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSScreen, NSWindow, NSWindowCollectionBehavior};
+
+    /// Phải gọi trên main thread.
+    pub fn notch_info() -> Option<NotchInfo> {
+        let mtm = MainThreadMarker::new()?;
+        // Ưu tiên màn hình tích hợp có tai thỏ; nếu không có thì lấy màn hình chính.
+        let screens = NSScreen::screens(mtm);
+        let mut chosen = None;
+        for s in screens.iter() {
+            let insets = s.safeAreaInsets();
+            if insets.top > 0.0 {
+                chosen = Some(s.clone());
+                break;
+            }
+        }
+        let screen = match chosen {
+            Some(s) => s,
+            None => NSScreen::mainScreen(mtm)?,
+        };
+        let frame = screen.frame();
+        let insets = screen.safeAreaInsets();
+        let scale = screen.backingScaleFactor();
+        if insets.top > 0.0 {
+            let left = screen.auxiliaryTopLeftArea();
+            let right = screen.auxiliaryTopRightArea();
+            let notch_w = (frame.size.width - left.size.width - right.size.width).max(0.0);
+            Some(NotchInfo {
+                has_notch: notch_w > 0.0,
+                notch_width: notch_w,
+                notch_height: insets.top,
+                screen_width: frame.size.width,
+                screen_x: frame.origin.x,
+                scale,
+            })
+        } else {
+            // Không có tai thỏ: chiều cao thanh menu = frame - visibleFrame (phần trên)
+            let visible = screen.visibleFrame();
+            let menu_h = (frame.origin.y + frame.size.height) - (visible.origin.y + visible.size.height);
+            Some(NotchInfo {
+                has_notch: false,
+                notch_width: 0.0,
+                notch_height: if menu_h > 0.0 { menu_h } else { 24.0 },
+                screen_width: frame.size.width,
+                screen_x: frame.origin.x,
+                scale,
+            })
+        }
+    }
+
+    /// `ns_window` là con trỏ NSWindow (Tauri: `window.ns_window()`).
+    ///
+    /// # Safety
+    /// Con trỏ phải là NSWindow hợp lệ và hàm phải chạy trên main thread.
+    pub unsafe fn configure_window(ns_window: *mut c_void) {
+        if ns_window.is_null() {
+            return;
+        }
+        let win: &NSWindow = &*(ns_window as *const NSWindow);
+        // NSMainMenuWindowLevel = 24. Đặt cao hơn để nằm trên thanh menu, che vùng tai thỏ.
+        win.setLevel(25 + 2);
+        win.setCollectionBehavior(
+            NSWindowCollectionBehavior::CanJoinAllSpaces
+                | NSWindowCollectionBehavior::Stationary
+                | NSWindowCollectionBehavior::FullScreenAuxiliary
+                | NSWindowCollectionBehavior::IgnoresCycle,
+        );
+        win.setHasShadow(false);
+        win.setMovable(false);
+    }
+
+    /// Đổi tầng cửa sổ: 27 = trên thanh menu (bình thường), 0 = tầng thường (để hộp thoại xin quyền không bị che)
+    ///
+    /// # Safety
+    /// `ns_window` phải là NSWindow hợp lệ, gọi trên main thread.
+    pub unsafe fn set_window_level(ns_window: *mut c_void, level: isize) {
+        if ns_window.is_null() {
+            return;
+        }
+        let win: &NSWindow = &*(ns_window as *const NSWindow);
+        win.setLevel(level);
+    }
+
+    /// Trả lại quyền điều khiển bàn phím cho app trước đó khi thu gọn tai thỏ.
+    pub fn deactivate_app() {
+        if let Some(mtm) = MainThreadMarker::new() {
+            let app = objc2_app_kit::NSApplication::sharedApplication(mtm);
+            app.deactivate();
+        }
+    }
+
+    /// Đưa Mini-Asi lên trước (để cửa sổ mới như Threads không bị app khác che)
+    #[allow(deprecated)]
+    pub fn activate_app() {
+        if let Some(mtm) = MainThreadMarker::new() {
+            let app = objc2_app_kit::NSApplication::sharedApplication(mtm);
+            app.activateIgnoringOtherApps(true);
+        }
+    }
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventSourceSecondsSinceLastEventType(state_id: i32, event_type: u32) -> f64;
+    }
+
+    pub fn idle_seconds() -> Option<f64> {
+        // kCGEventSourceStateCombinedSessionState = 0, kCGAnyInputEventType = !0
+        let s = unsafe { CGEventSourceSecondsSinceLastEventType(0, u32::MAX) };
+        if s.is_finite() && s >= 0.0 { Some(s) } else { None }
+    }
+}
+
+// ─────────────────────────── Windows ───────────────────────────
+#[cfg(target_os = "windows")]
+mod imp {
+    use super::*;
+    use windows_sys::Win32::System::SystemInformation::GetTickCount;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
+
+    pub fn notch_info() -> Option<NotchInfo> {
+        None // Windows không có tai thỏ → dùng viên thuốc ảo, kích thước lấy từ Tauri
+    }
+
+    pub unsafe fn configure_window(_ns_window: *mut c_void) {}
+
+    pub fn deactivate_app() {}
+
+    pub fn activate_app() {}
+
+    pub unsafe fn set_window_level(_w: *mut c_void, _l: isize) {}
+
+    pub fn idle_seconds() -> Option<f64> {
+        let mut info = LASTINPUTINFO { cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
+        let ok = unsafe { GetLastInputInfo(&mut info) };
+        if ok == 0 {
+            return None;
+        }
+        let now = unsafe { GetTickCount() };
+        Some(now.wrapping_sub(info.dwTime) as f64 / 1000.0)
+    }
+}
+
+// ─────────────────────────── Linux & khác ───────────────────────────
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+mod imp {
+    use super::*;
+
+    pub fn notch_info() -> Option<NotchInfo> {
+        None
+    }
+
+    pub unsafe fn configure_window(_ns_window: *mut c_void) {}
+
+    pub fn deactivate_app() {}
+
+    pub fn activate_app() {}
+
+    pub unsafe fn set_window_level(_w: *mut c_void, _l: isize) {}
+
+    /// Dùng `xprintidle` nếu có (X11). Wayland: không hỗ trợ → None.
+    pub fn idle_seconds() -> Option<f64> {
+        let out = std::process::Command::new("xprintidle").output().ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        let ms: f64 = String::from_utf8_lossy(&out.stdout).trim().parse().ok()?;
+        Some(ms / 1000.0)
+    }
+}
+
+pub use imp::{activate_app, configure_window, deactivate_app, idle_seconds, notch_info, set_window_level};
+
+/// Tầng cửa sổ tai thỏ bình thường (trên thanh menu)
+pub const NOTCH_LEVEL: isize = 27;
+
+pub mod calendar;
+pub mod clip;
+pub mod speech;
+pub mod ime;
+pub mod perm;

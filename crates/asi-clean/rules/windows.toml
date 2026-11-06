@@ -1,0 +1,63 @@
+# Bộ luật dọn dẹp Mini-Asi cho Windows (khung sườn — hoàn thiện ở giai đoạn 3)
+# "~" = %USERPROFILE%
+
+[[rule]]
+id = "system-temp"
+name = "File tạm (%TEMP%)"
+category = "system"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/AppData/Local/Temp"]
+min_age_days = 1
+action = "delete"
+active_guard_minutes = 60
+
+[[rule]]
+id = "browser-chrome"
+name = "Cache Google Chrome"
+category = "browser"
+level = "safe"
+tier = "free"
+kind = "glob"
+paths = ["~/AppData/Local/Google/Chrome/User Data"]
+patterns = ["Cache", "Code Cache", "GPUCache"]
+depth = 2
+action = "delete"
+active_guard_minutes = 30
+
+[[rule]]
+id = "browser-edge"
+name = "Cache Microsoft Edge"
+category = "browser"
+level = "safe"
+tier = "free"
+kind = "glob"
+paths = ["~/AppData/Local/Microsoft/Edge/User Data"]
+patterns = ["Cache", "Code Cache", "GPUCache"]
+depth = 2
+action = "delete"
+active_guard_minutes = 30
+
+[[rule]]
+id = "dev-package-caches"
+name = "Cache npm / pip"
+category = "dev"
+level = "safe"
+tier = "free"
+kind = "contents"
+paths = ["~/AppData/Local/npm-cache/_cacache", "~/AppData/Local/pip/Cache"]
+action = "delete"
+
+[[rule]]
+id = "files-installers"
+name = "File cài đặt đã dùng xong (.exe, .msi, .iso)"
+category = "files"
+level = "review"
+tier = "pro"
+kind = "glob"
+paths = ["~/Downloads", "~/Desktop"]
+patterns = ["*.msi", "*.iso", "*Setup*.exe", "*setup*.exe", "*installer*.exe"]
+depth = 2
+min_age_days = 3
+action = "trash"
