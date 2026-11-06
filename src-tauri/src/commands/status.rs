@@ -29,6 +29,7 @@ pub(crate) struct Status {
     pub(crate) pro: bool,
     pub(crate) next_event: Option<EventView>,
     pub(crate) threads_unread: u32,
+    pub(crate) update_version: Option<String>,
     pub(crate) now: i64,
 }
 
@@ -64,6 +65,14 @@ pub(crate) fn build_status(st: &AppState) -> Status {
         pro: tier(st) == asi_clean::rules::Tier::Pro,
         next_event: st.events.lock().unwrap().iter().filter(|e| !e.all_day && e.end > now && e.start < now + 86_400_000).min_by_key(|e| e.start).cloned(),
         threads_unread: st.threads.lock().unwrap().unread,
+        update_version: {
+            let u = st.update.lock().unwrap();
+            if u.phase == "available" {
+                u.release.as_ref().filter(|r| r.has_update).map(|r| r.latest_version.clone())
+            } else {
+                None
+            }
+        },
         now,
     }
 }

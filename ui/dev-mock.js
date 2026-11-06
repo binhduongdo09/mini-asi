@@ -24,7 +24,7 @@
   const settings = { break_enabled: true, break_minutes: 50, water_enabled: true, water_minutes: 60, sleep_hour: 23, focus_mode: false, launch_at_login: true, license_key: null, pdf_quality: "ebook", shortcut: "CmdOrCtrl+Shift+Space",
     clip_enabled: true, clip_max: 200, clip_shortcut: "Control+Shift+V", clip_autopaste: false, sync_reminders: true, reminders_list: "Mini-Asi", sync_notes: true, notes_folder: "Mini-Asi",
     show_calendar: true, event_alert_minutes: 10, voice_lang: "vi-VN", journal_enabled: true, journal_hour: 21,
-    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", visible_tabs: ["home", "tasks", "notes", "clips", "journal", "threads"] };
+    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", visible_tabs: ["home", "tasks", "notes", "clips", "journal", "threads"], auto_update_check: true, update_repo: "binhduongdo09/mini-asi" };
   const today0 = new Date(); today0.setHours(0, 0, 0, 0);
   const at = (h, m = 0) => today0.getTime() + h * H + m * 60e3;
   const events = [
@@ -155,7 +155,28 @@
     threads_save_app: () => null, threads_login: () => "https://threads.net/oauth/authorize?...", threads_finish: () => null, threads_set_token: () => null, threads_logout: () => null,
     threads_replies: async () => { await wait(400); return [{ id: "r1", username: "lan.content", text: "Mục 2 hay quá anh ơi, em thử ngay", timestamp: new Date(Date.now() - 2 * H).toISOString().replace("Z", "+0000") }, { id: "r2", username: "minh.ads", text: "Anh có template brief không ạ?", timestamp: new Date(Date.now() - 1 * H).toISOString().replace("Z", "+0000") }]; },
     set_display: ({ mode }) => { settings.display_mode = mode; const u = new URL(location.href); u.searchParams.set("disp", mode); history.replaceState(null, "", u); },
-    move_bubble: () => null, threads_close: () => null,
+    move_bubble: ({ x, y, save }) => { if (save) { settings.bubble_x = x <= 0 && y <= 0 ? 0 : x; settings.bubble_y = x <= 0 && y <= 0 ? 0 : y; } }, threads_close: () => null,
+    update_info: () => ({
+      current_version: "0.10.0",
+      repo: "binhduongdo09/mini-asi",
+      auto_check: settings.auto_update_check,
+      status: {
+        phase: q.get("update") === "1" ? "available" : "up_to_date",
+        percent: q.get("update") === "1" ? 0 : 100,
+        downloaded_bytes: 0,
+        total_bytes: q.get("update") === "1" ? 14.2e6 : 0,
+        message: q.get("update") === "1" ? "Đã có phiên bản mới v0.11.0" : "Bạn đang dùng bản mới nhất (v0.10.0)",
+        error: null,
+        release: q.get("update") === "1" ? { current_version: "0.10.0", latest_version: "0.11.0", tag: "v0.11.0", title: "Mini-Asi v0.11.0", notes: "Bổ sung tự động cập nhật trong app & ghim vị trí bất kỳ trên màn hình", published_at: new Date().toISOString(), html_url: "https://github.com/binhduongdo09/mini-asi/releases", has_update: true, asset: { id: 1, name: "Mini-Asi_0.11.0_universal.dmg", size: 14.2e6, browser_download_url: "", api_url: "" } } : null,
+      },
+    }),
+    update_check: async () => { await wait(500); return H_.update_info(); },
+    update_install: async () => {
+      for (const p of [20, 55, 90, 100]) {
+        await wait(300);
+        emit("update-progress", { phase: p < 100 ? "downloading" : "restarting", percent: p, downloaded_bytes: (p / 100) * 14.2e6, total_bytes: 14.2e6, message: p < 100 ? `Đang tải v0.11.0… ${p}%` : "Đã nâng cấp xong! Đang khởi động lại Mini-Asi…", error: null, release: null });
+      }
+    },
     tts_info: () => {
       const st = (ph, extra) => ({ phase: ph, step: "4/4 · Tải mô hình giọng (≈ 122 MB, chỉ 1 lần)", detail: "mai-phuong.onnx: 45% (27 MB)", error: null, warm: false, size_mb: 0, quality: null, ...extra });
       return { engine: settings.tts_engine || "system", voice: settings.tts_voice || "Trúc Ly", arm: true, default_quality: "compact",

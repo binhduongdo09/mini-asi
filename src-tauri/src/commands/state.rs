@@ -27,6 +27,8 @@ pub struct AppState {
     /// NghiTTS (Piper)
     pub nghi: Arc<tts::Tts>,
     pub vocab: Mutex<vocab::Vocab>,
+    /// Trạng thái kiểm tra & tải bản cập nhật
+    pub update: Mutex<updater::UpdateProgress>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]

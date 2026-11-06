@@ -626,12 +626,30 @@ body.mock::after {
 .feat.on { opacity: 1; box-shadow: inset 0 0 0 1px rgba(79, 179, 255, 0.5); }
 .feat input { accent-color: var(--blue); }
 
-/* ───────── Kiểu hiển thị: viên thuốc & bong bóng ───────── */
-body.disp-pill #island, body.disp-bubble #island { border-radius: var(--r); }
+/* ───────── Kiểu hiển thị: viên thuốc, bong bóng & vị trí ghim tuỳ chọn ───────── */
+body.disp-pill #island, body.disp-bubble #island, body.floating-pos #island { border-radius: var(--r); }
 body.disp-pill #island::before, body.disp-pill #island::after,
-body.disp-bubble #island::before, body.disp-bubble #island::after { display: none; }
+body.disp-bubble #island::before, body.disp-bubble #island::after,
+body.floating-pos #island::before, body.floating-pos #island::after { display: none; }
 body.disp-pill #island.mode-collapsed { --r: 999px; }
-body.disp-pill #island { box-shadow: 0 8px 26px -6px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(255, 255, 255, 0.08), 0 6px 22px -4px var(--glow); }
+body.disp-pill #island, body.floating-pos #island { box-shadow: 0 8px 26px -6px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(255, 255, 255, 0.08), 0 6px 22px -4px var(--glow); }
+body.floating-pos .notch-gap { width: 10px; }
+#island.mode-collapsed, #island .bar { cursor: grab; }
+#island.dragging, #island.dragging .bar { cursor: grabbing !important; }
+
+/* Banner & hộp cập nhật trong ứng dụng */
+.upd-banner {
+  background: linear-gradient(135deg, rgba(79, 179, 255, 0.18), rgba(191, 140, 255, 0.16)), var(--card);
+  border: 1px solid rgba(79, 179, 255, 0.35);
+  padding: 9px 12px;
+  margin-bottom: 6px;
+}
+.upd-box {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(50, 215, 75, 0.12), rgba(79, 179, 255, 0.12));
+  border: 1px solid rgba(79, 179, 255, 0.3);
+}
 
 /* Bong bóng: neo mép trái cửa sổ để khi mở bảng không bị nhảy chỗ */
 body.disp-bubble #island { left: 18px; --tx: 0px; box-shadow: 0 10px 28px -6px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 6px 22px -4px var(--glow); }

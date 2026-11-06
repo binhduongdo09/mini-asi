@@ -109,6 +109,7 @@
   root.style.setProperty("--bar-h", BAR + "px");
   root.style.setProperty("--gap-w", (ON_NOTCH ? Math.round(geo.notch_width) : 0) + "px");
   if (!ON_NOTCH) island.classList.add("virtual");
+  if (early.bubble_x > 0 || early.bubble_y > 0) document.body.classList.add("floating-pos");
 
   const SIZES = {
     collapsed: DISP === "bubble" ? [58, 58] : [BASE_W, BAR],
@@ -124,7 +125,7 @@
   const MAX_H = Math.max(420, Math.round((geo.screen_height || 900) - 40));
   const clampW = (w) => Math.round(Math.min(Math.max(w, Math.max(BASE_W + 40, 460)), MAX_W));
   const clampH = (h) => Math.round(Math.min(Math.max(h, 360), MAX_H));
-  let settingsCache = {};
+  let settingsCache = { ...early };
   // Nhúng Threads vào bảng: hiện hỗ trợ macOS (Windows/Linux mở cửa sổ riêng)
   // Nhúng Threads vào bảng: đang thử nghiệm (macOS) — mặc định dùng cửa sổ Threads riêng
   const EMBED_OK = geo.platform === "macos" || new URLSearchParams(location.search).has("embed");
@@ -259,8 +260,10 @@
     if (mode === "expanded") {
       const V = window.VNKey;
       const ime = V && V.mode ? `${V.mode === "vni" ? "VNI" : "Telex"}` : "EN";
+      const hasCustomPos = (settingsCache.bubble_x > 0 || settingsCache.bubble_y > 0);
       rw.innerHTML = `<button class="ime-pill ${V && V.mode ? "on" : ""}" data-act="ime" title="Bộ gõ tiếng Việt của Asi — bấm để bật/tắt">${V && V.mode ? "VI · " : ""}${ime}</button>
-        <button class="icon-btn ${pinned ? "on" : ""}" data-act="pin" title="Ghim mở">${I.pin}</button>
+        ${hasCustomPos ? `<button class="icon-btn on" data-act="reset-pos" title="Đang ghim vị trí tuỳ chọn — bấm để đặt về vị trí mặc định">📍</button>` : ""}
+        <button class="icon-btn ${pinned ? "on" : ""}" data-act="pin" title="Ghim mở popup (không tự đóng khi bấm ra ngoài)">${I.pin}</button>
         <button class="icon-btn" data-act="close" title="Thu gọn (Esc)">${I.x}</button>`;
       rw.dataset.keys = "";
       return;
@@ -405,36 +408,67 @@
   island.addEventListener("transitionend", (e) => { if (e.target === island && e.propertyName === "width") { const rw = $("#rightWing"); rw.dataset.keys = ""; delete rw.dataset.retry; updateBar(); } });
   island.addEventListener("mouseenter", () => { hovering = true; if (mode === "collapsed" && DISP !== "bubble") modeTimer = setTimeout(() => hovering && setMode("peek"), 140); });
   island.addEventListener("mouseleave", () => { hovering = false; if (mode === "peek") modeTimer = setTimeout(() => !hovering && setMode("collapsed"), 380); });
-  // Bong bóng: kéo để di chuyển, bấm để mở
+  // Kéo & ghim vị trí bất kỳ trên màn hình (áp dụng cho cả Tai thỏ, Viên thuốc, Bong bóng và bảng Popup mở rộng)
   let justDragged = false;
-  if (DISP === "bubble") {
+  async function resetPosition() {
+    await api("move_bubble", { x: 0, y: 0, save: true });
+    settingsCache.bubble_x = 0;
+    settingsCache.bubble_y = 0;
+    document.body.classList.remove("floating-pos");
+    updateBar();
+    if (tab === "settings" && mode === "expanded") viewSettings();
+    toast("Đã đặt về vị trí mặc định trên màn hình");
+  }
+  {
     let d = null, raf = 0;
     island.addEventListener("pointerdown", (e) => {
-      if (mode !== "collapsed" || e.button !== 0) return;
+      if (e.button !== 0) return;
+      // Bỏ qua khi bấm vào các nút chức năng, tay kéo giãn hoặc ô nhập liệu
+      if (e.target.closest("[data-act], .grip, .grip-corner, button, input, select, textarea, a, label")) return;
+      // Khi đang mở bảng (expanded / alert / reply / listen): kéo ở thanh tiêu đề trên cùng (#bar) để di chuyển popup
+      if (mode !== "collapsed" && mode !== "peek" && !e.target.closest("#bar")) return;
       d = { sx: e.screenX, sy: e.screenY, wx: e.screenX - e.clientX, wy: e.screenY - e.clientY, moved: false, pid: e.pointerId };
     });
     island.addEventListener("pointermove", (e) => {
       if (!d) return;
       const dx = e.screenX - d.sx, dy = e.screenY - d.sy;
-      if (!d.moved && Math.hypot(dx, dy) < 4) return;
-      if (!d.moved) { try { island.setPointerCapture(d.pid); } catch (_) {} } // chỉ bắt chuột khi đã thật sự kéo, để cú bấm thường vẫn mở được bảng
+      if (!d.moved && Math.hypot(dx, dy) < 5) return;
+      if (!d.moved) {
+        try { island.setPointerCapture(d.pid); } catch (_) {} // chỉ bắt chuột khi đã thật sự kéo, để cú bấm thường vẫn mở được bảng
+        clearTimeout(modeTimer);
+      }
       d.moved = true;
       island.classList.add("dragging");
+      document.body.classList.add("floating-pos");
       cancelAnimationFrame(raf);
-      const x = d.wx + dx, y = d.wy + dy;
+      const x = Math.max(0, d.wx + dx), y = Math.max(0, d.wy + dy);
       raf = requestAnimationFrame(() => api("move_bubble", { x, y, save: false }));
       d.last = [x, y];
     });
-    island.addEventListener("pointerup", () => {
-      if (d && d.moved && d.last) { api("move_bubble", { x: d.last[0], y: d.last[1], save: true }); justDragged = true; setTimeout(() => (justDragged = false), 50); }
+    const endDrag = () => {
+      if (d && d.moved && d.last) {
+        const [nx, ny] = d.last;
+        api("move_bubble", { x: nx, y: ny, save: true });
+        settingsCache.bubble_x = nx;
+        settingsCache.bubble_y = ny;
+        document.body.classList.add("floating-pos");
+        updateBar();
+        if (tab === "threads" && embedShown) setTimeout(placeEmbed, 40);
+        if (tab === "settings" && mode === "expanded") viewSettings();
+        justDragged = true;
+        setTimeout(() => (justDragged = false), 80);
+      }
       island.classList.remove("dragging");
       d = null;
-    });
+    };
+    island.addEventListener("pointerup", endDrag);
+    island.addEventListener("pointercancel", endDrag);
   }
   $("#bar").addEventListener("click", (e) => {
     if (justDragged) return;
     const act = e.target.closest("[data-act]")?.dataset.act;
-    if (act === "pin") { pinned = !pinned; updateBar(); return; }
+    if (act === "reset-pos") { e.stopPropagation(); resetPosition(); return; }
+    if (act === "pin") { pinned = !pinned; toast(pinned ? "Đã ghim mở popup — không tự đóng khi bấm ra ngoài" : "Đã bỏ ghim mở popup"); updateBar(); return; }
     if (act === "vmic") { e.stopPropagation(); voiceCommand(); return; }
     if (act === "ime") {
       const V = window.VNKey;
@@ -728,7 +762,7 @@
   }
   function renderTabs() {
     $("#tabs").innerHTML = visibleTabs().map(([id, name, ic, c]) =>
-      `<button class="tab ${tab === id ? "active" : ""}" data-tab="${id}" style="--tc:${c}" title="${name}">${ic}<span class="lbl">${name}</span>${(id === "tasks" && status && status.lateness.overdue) || (id === "threads" && status && status.threads_unread) ? '<span class="dot"></span>' : ""}</button>`
+      `<button class="tab ${tab === id ? "active" : ""}" data-tab="${id}" style="--tc:${c}" title="${name}">${ic}<span class="lbl">${name}</span>${(id === "tasks" && status && status.lateness.overdue) || (id === "threads" && status && status.threads_unread) || (id === "settings" && status && status.update_version) ? '<span class="dot"></span>' : ""}</button>`
     ).join("");
   }
   $("#tabs").addEventListener("click", (e) => {
@@ -859,6 +893,96 @@
     if (b) runAction(b.dataset.ac, b.dataset.arg || "", true);
   });
 
+  // ───────── Tự cập nhật ứng dụng ─────────
+  let updateState = null; // UpdateProgress: { phase, percent, downloaded_bytes, total_bytes, message, error, release }
+  let updateVer = "0.10.0";
+  api("update_info").then((v) => { if (v) { updateVer = v.current_version || updateVer; updateState = v.status || v; } }).catch(() => {});
+  function updateBannerHtml() {
+    const u = updateState;
+    const rel = u && u.release && u.release.has_update ? u.release : null;
+    const ver = (rel && rel.latest_version) || (status && status.update_version);
+    if (!ver && (!u || !["downloading", "installing", "restarting"].includes(u.phase))) return "";
+    if (u && (u.phase === "downloading" || u.phase === "installing")) {
+      const dt = u.total_bytes ? `${bytes(u.downloaded_bytes || 0)} / ${bytes(u.total_bytes)}` : "";
+      return `<div class="card upd-banner" id="updBanner"><div class="row"><span class="spin"></span><div class="grow"><b>${esc(u.message || "Đang tải bản cập nhật…")}</b>${dt ? `<div class="muted small">${esc(dt)}</div>` : ""}</div></div>
+        <div class="meter" style="margin-top:6px"><i style="width:${u.percent || 5}%"></i></div></div>`;
+    }
+    if (u && u.phase === "restarting") {
+      return `<div class="card upd-banner" id="updBanner"><div class="row"><span class="grow"><b>✅ ${esc(u.message || "Đã nâng cấp xong! Đang khởi động lại…")}</b></span></div></div>`;
+    }
+    return `<div class="card upd-banner" id="updBanner"><div class="row"><span class="grow"><b>✨ Đã có Mini-Asi v${esc(ver)}</b>
+      <span class="muted small"> — cập nhật tự động ngay trong app, giữ nguyên dữ liệu, không cần cài lại</span></span>
+      <button class="btn sm primary" data-upd="install">Cập nhật ngay</button></div></div>`;
+  }
+  function updateCardHtml(st) {
+    const u = updateState || { phase: "idle", message: "" };
+    const ph = u.phase || "idle";
+    const rel = u.release && u.release.has_update ? u.release : null;
+    let body = "";
+    if (ph === "checking") {
+      body = `<div class="row" style="margin-top:8px"><span class="spin"></span><span class="muted small grow">Đang kiểm tra phiên bản mới trên GitHub…</span></div>`;
+    } else if (ph === "downloading" || ph === "installing") {
+      const dt = u.total_bytes ? `${bytes(u.downloaded_bytes || 0)} / ${bytes(u.total_bytes)}` : "";
+      body = `<div class="tts-prog" style="margin-top:8px"><span class="spin"></span><div class="grow"><b class="small">${esc(u.message || "Đang cập nhật…")}</b>${dt ? `<div class="muted small">${esc(dt)}</div>` : ""}
+        <div class="meter" style="margin-top:6px"><i style="width:${u.percent || 5}%"></i></div></div></div>`;
+    } else if (ph === "restarting") {
+      body = `<div class="row" style="margin-top:8px"><span class="chip green">Đã xong</span><span class="small grow">${esc(u.message || "Đã nâng cấp xong! Đang khởi động lại…")}</span></div>`;
+    } else if (rel) {
+      const sz = rel.asset && rel.asset.size ? `Dung lượng tải: ${bytes(rel.asset.size)} · ` : "";
+      body = `<div class="upd-box" style="margin-top:8px"><div class="row"><div class="grow"><b>🎉 Đã có bản mới v${esc(rel.latest_version)}</b>
+        <div class="muted small">${sz}Tự tải về, chép đè ứng dụng và mở lại ngay (không cần cài lại)</div>
+        ${rel.notes ? `<div class="muted small" style="margin-top:4px">${esc(rel.notes)}</div>` : ""}</div>
+        <button class="btn primary sm" data-upd="install">⬇︎ Cập nhật ngay</button></div></div>`;
+    } else {
+      body = `<div class="row" style="margin-top:8px"><span class="muted small grow">${ph === "error" ? `<span style="color:var(--red)">Lỗi: ${esc(u.error || "")}</span>` : esc(u.message || "Bạn đang dùng phiên bản mới nhất ✓")}</span>
+        <button class="btn sm" data-upd="check">Kiểm tra cập nhật</button></div>`;
+    }
+    return `<div class="card" id="updateCard" style="margin-bottom:10px">
+      <div class="row"><div class="grow"><b>🔄 Cập nhật ứng dụng</b> <span class="chip">v${esc(updateVer)}</span></div>
+        <label class="row small"><input type="checkbox" data-k2="auto_update_check" ${st.auto_update_check !== false ? "checked" : ""}/> Tự báo khi có bản mới</label></div>
+      ${body}</div>`;
+  }
+  function redrawUpdateUI() {
+    const b = $("#updBanner");
+    if (b) b.outerHTML = updateBannerHtml();
+    const c = $("#updateCard");
+    if (c) c.outerHTML = updateCardHtml(settingsCache);
+  }
+  on("update-available", (rel) => {
+    api("update_info").then((v) => { if (v) { updateVer = v.current_version || updateVer; updateState = v.status || v; } redrawUpdateUI(); renderTabs(); }).catch(() => {});
+    if (rel && rel.latest_version) toast(`✨ Đã có Mini-Asi v${rel.latest_version} mới — bấm “Cập nhật ngay” nhé!`);
+  });
+  on("update-progress", (u) => {
+    updateState = u.status || u;
+    redrawUpdateUI();
+    renderTabs();
+    if (updateState.phase === "restarting") { confetti(30); flashMood("love", 3500); toast("Đã cập nhật xong! Mini-Asi đang khởi động lại…"); }
+    if (updateState.phase === "error" && tab === "settings") toast("Chưa cập nhật được: " + (updateState.error || ""));
+  });
+  $("#view").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-upd]");
+    if (!b) return;
+    e.stopPropagation();
+    const act = b.dataset.upd;
+    if (act === "check") {
+      b.disabled = true;
+      b.innerHTML = '<span class="spin"></span>Đang kiểm tra…';
+      try {
+        const v = await api("update_check");
+        if (v) { updateVer = v.current_version || updateVer; updateState = v.status || v; }
+        redrawUpdateUI();
+        renderTabs();
+        const rel = updateState && updateState.release && updateState.release.has_update ? updateState.release : null;
+        toast(rel ? `Đã tìm thấy bản mới v${rel.latest_version} 🎉` : "Bạn đang dùng bản mới nhất ✓");
+      } catch (err) { toast(String(err)); redrawUpdateUI(); }
+    }
+    if (act === "install") {
+      b.disabled = true;
+      b.innerHTML = '<span class="spin"></span>Đang bắt đầu…';
+      try { await api("update_install"); } catch (err) { toast(String(err)); redrawUpdateUI(); }
+    }
+  });
+
   function greet() {
     const h = new Date().getHours();
     return h < 11 ? "Chào buổi sáng" : h < 14 ? "Chào buổi trưa" : h < 18 ? "Chào buổi chiều" : "Chào buổi tối";
@@ -871,6 +995,7 @@
       s.next_event ? `<span class="chip blue">${I.cal}${esc(s.next_event.title)} · ${hm(new Date(s.next_event.start))}</span>` : "",
     ].join("") : "";
     $("#view").innerHTML = `<div class="chat-home">
+      ${updateBannerHtml()}
       <div class="c-hero">
         <div class="big-face" id="bigFace"><span class="eye l"></span><span class="eye r"></span></div>
         <div><div class="c-greet">${greet()} 👋</div><div class="muted small">Hỏi Asi bằng chữ hoặc bấm mic để nói</div><div class="c-quick">${quick}</div></div>
@@ -926,6 +1051,7 @@
         <span class="tile-ic">${ic}</span><span class="tile-name">${name}</span>
         <b class="tile-val">${value}</b><span class="tile-sub">${sub}</span></button>`;
     $("#view").innerHTML = `
+      ${updateBannerHtml()}
       ${missing ? `<div class="card perm-banner"><div class="row"><span class="grow"><b>🔐 Còn thiếu: ${missingList.map((p) => p.name).join(", ")}</b>
         <span class="muted small"> — cấp một lần để mọi tính năng chạy trơn tru</span></span>
         <button class="btn sm primary" data-go="perm">Cấp tất cả quyền</button></div></div>` : ""}
@@ -1660,10 +1786,19 @@
     </details>`;
     const ime = await api("ime_info").catch(() => null);
     const tv = await api("tts_info").catch(() => null);
+    await api("update_info").then((v) => { if (v) { updateVer = v.current_version || updateVer; updateState = v.status || v; } }).catch(() => {});
     const ttsCard = tv ? voiceCard(tv) : "";
-    const dispCard = `<div class="card" style="margin-bottom:10px"><b>🪄 Kiểu hiển thị</b>
-      <div class="disp-grid">${[["notch", "Tai thỏ", "Ôm sát tai thỏ (máy có tai thỏ)"], ["pill", "Viên thuốc", "Nổi giữa, ngay dưới thanh menu"], ["bubble", "Bong bóng", "Nút tròn nổi trên mọi cửa sổ, kéo đi đâu cũng được"]]
-        .map(([id, name, why]) => `<button class="disp-opt ${DISP === id ? "on" : ""}" data-disp="${id}"><span class="disp-pv pv-${id}"></span><b>${name}</b><span class="muted small">${why}</span></button>`).join("")}</div></div>`;
+    const updCard = updateCardHtml(st);
+    const hasCustomPos = (st.bubble_x > 0 || st.bubble_y > 0);
+    const dispCard = `<div class="card" style="margin-bottom:10px"><b>🪄 Kiểu hiển thị & Vị trí ghim</b>
+      <div class="muted small" style="margin-top:2px">Kéo trực tiếp <b>tai thỏ, viên thuốc, bong bóng</b> hoặc <b>thanh tiêu đề trên cùng của popup</b> để ghim ở bất kỳ vị trí nào trên màn hình.</div>
+      <div class="disp-grid">${[["notch", "Tai thỏ", "Ôm sát tai thỏ hoặc kéo đi bất kỳ đâu"], ["pill", "Viên thuốc", "Viên thuốc nổi, kéo & ghim mọi vị trí"], ["bubble", "Bong bóng", "Nút tròn nổi gọn, kéo đi đâu cũng được"]]
+        .map(([id, name, why]) => `<button class="disp-opt ${DISP === id ? "on" : ""}" data-disp="${id}"><span class="disp-pv pv-${id}"></span><b>${name}</b><span class="muted small">${why}</span></button>`).join("")}</div>
+      <div class="row" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line)">
+        <div class="grow small"><b>📍 Vị trí trên màn hình:</b> <span class="muted">${hasCustomPos ? `Đang ghim tại (${Math.round(st.bubble_x)}, ${Math.round(st.bubble_y)})` : "Mặc định (giữa mép trên / góc phải)"}</span></div>
+        <button class="btn sm ${pinned ? "primary" : ""}" data-s="pin-toggle" title="Giữ bảng mở khi bấm sang ứng dụng khác">${I.pin} ${pinned ? "Đang ghim mở popup" : "Ghim mở popup"}</button>
+        <button class="btn sm ghost" data-s="reset-pos" ${hasCustomPos ? "" : "disabled"}>Đặt về vị trí mặc định</button>
+      </div></div>`;
     const IDLE_OPTS = [["focus", "⏱", "Đồng hồ tập trung"], ["overdue", "🔴", "Số việc trễ"], ["event", "📅", "Lịch sắp tới"], ["next", "⏰", "Việc sắp đến hạn"], ["time", "🕒", "Giờ hiện tại"],
       ["tasks", "✅", "Số việc còn lại"], ["notes", "✎", "Số ghi chú"], ["clips", "📋", "Số mục clipboard"], ["disk", "💾", "Dung lượng trống"], ["mic", "🎙", "Nút mic"]];
     const idl = idleItems();
@@ -1679,7 +1814,7 @@
     const imeCard = ime ? `<div class="card" style="margin-bottom:10px"><div class="row"><div class="grow"><b>⌨️ Bộ gõ đang dùng trên máy</b>
         <div class="muted small">${esc(ime.current || "không rõ")} · ${ime.recognized ? `Asi nhận ra bộ gõ tiếng Việt (${ime.recognized === "vni" ? "VNI" : "Telex"}) → tự gõ dấu giúp bạn` : "Asi chưa nhận ra bộ gõ này — chọn “Luôn Telex” hoặc “Luôn VNI”"}</div></div>
         <select class="input" data-k="viet_engine"><option value="auto" ${st.viet_engine === "auto" ? "selected" : ""}>Tự động</option><option value="telex" ${st.viet_engine === "telex" ? "selected" : ""}>Luôn Telex</option><option value="vni" ${st.viet_engine === "vni" ? "selected" : ""}>Luôn VNI</option><option value="off" ${st.viet_engine === "off" ? "selected" : ""}>Tắt</option></select></div></div>` : "";
-    $("#view").innerHTML = permCard + dispCard + idleCard + ttsCard + vocabCard + imeCard + featCard + backupCard + `<div style="height:10px"></div>
+    $("#view").innerHTML = updCard + permCard + dispCard + idleCard + ttsCard + vocabCard + imeCard + featCard + backupCard + `<div style="height:10px"></div>
       <div class="card ${lic.pro ? "" : "upsell"}" style="margin:0 0 10px">
         ${lic.pro
           ? `<div class="row">${I.sparkle}<div class="grow"><b>Mini-Asi Pro</b><div class="muted small">${esc(lic.email)}${lic.expires ? ` · hết hạn ${new Date(lic.expires * 1000).toLocaleDateString("vi-VN")}` : " · vĩnh viễn"}</div></div>
@@ -1753,6 +1888,14 @@
     const b = e.target.closest("[data-s]");
     if (!b) return;
     const a = b.dataset.s;
+    if (a === "reset-pos") { await resetPosition(); return; }
+    if (a === "pin-toggle") {
+      pinned = !pinned;
+      updateBar();
+      toast(pinned ? "Đã ghim mở popup — không tự đóng khi bấm ra ngoài" : "Đã bỏ ghim mở popup");
+      viewSettings();
+      return;
+    }
     if (a === "lic") {
       const r = await api("activate_license", { key: $("#licKey").value });
       if (r.pro) { confetti(40); flashMood("love", 4000); scan = null; viewSettings(); }

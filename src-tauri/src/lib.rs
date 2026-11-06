@@ -16,6 +16,7 @@ pub mod journal;
 pub mod sync;
 pub mod threads;
 pub mod tts;
+pub mod updater;
 pub mod vocab;
 pub mod voice;
 pub mod license;
@@ -118,6 +119,7 @@ pub fn run() {
                 tts: tts::Tts::new(&data_dir, tts::Engine::VieNeu),
                 nghi: tts::Tts::new(&data_dir, tts::Engine::Nghi),
                 vocab: Mutex::new(vocab::Vocab::open(&data_dir)),
+                update: Mutex::new(updater::UpdateProgress::default()),
             });
             app.manage(st.clone());
 
@@ -163,6 +165,8 @@ pub fn run() {
             std::thread::spawn(move || backup_loop(h, s2));
             let (h, s2) = (app.handle().clone(), st.clone());
             std::thread::spawn(move || sync_loop(h, s2, sync_rx));
+            let (h, s2) = (app.handle().clone(), st.clone());
+            std::thread::spawn(move || update_loop(h, s2));
             let h = app.handle().clone();
             std::thread::spawn(move || background_loop(h, st));
             let h = app.handle().clone();
@@ -185,7 +189,8 @@ pub fn run() {
             journal_get, journal_save, journal_delete, journal_snooze, journal_skip_today, journal_make_tasks, journal_export,
             threads_get, threads_save_app, threads_login, threads_finish, threads_set_token, threads_logout, threads_replies, threads_post, threads_mark_read, threads_web, open_link, threads_embed, threads_embed_ime, threads_embed_nav, threads_close, ime_info,
             permissions_status, request_permissions,
-            backup_info, backup_pick_dir, backup_set, backup_now, device_sync_now, backup_restore
+            backup_info, backup_pick_dir, backup_set, backup_now, device_sync_now, backup_restore,
+            update_info, update_check, update_install
         ])
         .run(tauri::generate_context!())
         .expect("Mini-Asi không khởi động được");

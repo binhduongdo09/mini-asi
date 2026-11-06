@@ -53,15 +53,20 @@ pub(crate) fn disp_of(st: &AppState) -> Disp {
 pub(crate) fn place(win: &WebviewWindow, geo: &Geometry, w: f64, h: f64) {
     let d = win.app_handle().try_state::<Arc<AppState>>().map(|st| disp_of(&st)).unwrap_or(Disp { mode: "notch".into(), bx: 0.0, by: 0.0 });
     let (sx, sy, sw, sh) = (geo.screen_x, geo.screen_y, geo.screen_width, geo.screen_height.max(400.0));
-    let (x, y) = match d.mode.as_str() {
-        "bubble" => {
-            // mặc định: góc phải phía trên
-            let bx = if d.bx > 0.0 { d.bx } else { sx + sw - 140.0 };
-            let by = if d.by > 0.0 { d.by } else { sy + 90.0 };
-            (bx.clamp(sx, (sx + sw - w).max(sx)), by.clamp(sy + geo.notch_height, (sy + sh - h).max(sy)))
+    let (x, y) = if d.bx > 0.0 || d.by > 0.0 {
+        // Người dùng đã kéo & ghim ở vị trí tuỳ chọn trên màn hình (áp dụng cho cả tai thỏ, viên thuốc, bong bóng & popup)
+        (d.bx.clamp(sx, (sx + sw - w).max(sx)), d.by.clamp(sy, (sy + sh - h).max(sy)))
+    } else {
+        match d.mode.as_str() {
+            "bubble" => {
+                // mặc định: góc phải phía trên
+                let bx = sx + sw - 140.0;
+                let by = sy + 90.0;
+                (bx.clamp(sx, (sx + sw - w).max(sx)), by.clamp(sy + geo.notch_height, (sy + sh - h).max(sy)))
+            }
+            "pill" => (sx + (sw - w) / 2.0, sy + geo.notch_height + 6.0),
+            _ => (sx + (sw - w) / 2.0, sy),
         }
-        "pill" => (sx + (sw - w) / 2.0, sy + geo.notch_height + 6.0),
-        _ => (sx + (sw - w) / 2.0, sy),
     };
     let _ = win.set_size(LogicalSize::new(w, h));
     let _ = win.set_position(LogicalPosition::new(x, y));
@@ -97,9 +102,24 @@ pub(crate) fn set_display(app: AppHandle, st: S, mode: String) -> Result<(), Str
     Ok(())
 }
 
-/// Kéo bong bóng: di chuyển cửa sổ tới (x, y) — toạ độ màn hình (logical). `save` = thả tay
+/// Kéo & ghim cửa sổ (tai thỏ / viên thuốc / bong bóng / popup): di chuyển tới (x, y) — toạ độ màn hình (logical).
+/// `save = true` khi thả tay. Truyền `x <= 0.0 && y <= 0.0 && save = true` để đặt lại vị trí mặc định.
 #[tauri::command]
 pub(crate) fn move_bubble(win: WebviewWindow, st: S, x: f64, y: f64, save: bool) {
+    if save && x <= 0.0 && y <= 0.0 {
+        {
+            let mut s = st.store.lock().unwrap();
+            s.settings.bubble_x = 0.0;
+            s.settings.bubble_y = 0.0;
+            let _ = s.save_settings();
+        }
+        let geo = st.geo.lock().unwrap().clone();
+        if let Ok(sz) = win.inner_size() {
+            let sf = win.scale_factor().unwrap_or(1.0);
+            place(&win, &geo, sz.width as f64 / sf, sz.height as f64 / sf);
+        }
+        return;
+    }
     let _ = win.set_position(LogicalPosition::new(x, y));
     if save {
         let mut s = st.store.lock().unwrap();

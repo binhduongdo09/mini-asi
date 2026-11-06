@@ -125,6 +125,10 @@ pub struct Settings {
     /// Học từ mới tiếng Anh: bật/tắt, số từ mỗi lần mở tai thỏ
     pub vocab_enabled: bool,
     pub vocab_count: u8,
+    /// Tự động kiểm tra bản cập nhật mới trên GitHub
+    pub auto_update_check: bool,
+    /// Kho GitHub để kiểm tra cập nhật (mặc định: binhduongdo09/mini-asi)
+    pub update_repo: String,
 }
 
 impl Default for Settings {
@@ -183,6 +187,8 @@ impl Default for Settings {
             vocab_enabled: true,
             vocab_count: 3,
             idle_items: ["focus", "overdue", "event", "next", "tasks", "mic"].iter().map(|s| s.to_string()).collect(),
+            auto_update_check: true,
+            update_repo: crate::updater::DEFAULT_REPO.into(),
         }
     }
 }

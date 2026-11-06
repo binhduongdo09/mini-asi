@@ -64,6 +64,6 @@ jobs:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', github.run_number) }}
           releaseName: "Mini-Asi ${{ github.ref_type == 'tag' && github.ref_name || github.run_number }}"
           releaseBody: "Tải file .dmg cho Mac, .msi cho Windows, .deb / .AppImage cho Linux."
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
