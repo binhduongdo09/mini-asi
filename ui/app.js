@@ -192,9 +192,10 @@
     root.style.setProperty("--gap-w", (ON_NOTCH ? Math.round(geo.notch_width) : 0) + "px");
     const smIcons = (st.icon_size || "large") === "small";
     SIZES.collapsed = DISP === "bubble" ? [58, 58] : [BASE_W, BAR];
-    SIZES.peek = [Math.max(BASE_W + 110, smIcons ? 490 : 532), BAR + (smIcons ? 132 : 176)];
+    SIZES.peek = [Math.max(BASE_W + 110, smIcons ? 490 : 532), BAR + (smIcons ? 162 : 208)];
     SIZES.alert = [Math.max(BASE_W + 80, 460), BAR + 120];
     SIZES.drop = [Math.max(BASE_W + 130, 500), BAR + 132];
+    SIZES.snap = [Math.max(BASE_W + 250, 560), BAR + 122];
     SIZES.expanded = [Math.max(BASE_W + 120, 700), 490];
     SIZES.listen = [Math.max(BASE_W + 80, 440), BAR + 84];
     SIZES.reply = [Math.max(BASE_W + 140, 500), BAR + 250];
@@ -278,7 +279,7 @@
 
   function currentMood() {
     if (moodOverride) return moodOverride;
-    if (mode === "drop") return "drop";
+    if (mode === "drop" || mode === "snap") return "drop";
     if (!status) return "idle";
     // Có việc trễ → Asi tức giận (mắt đỏ), càng trễ càng giận
     // Đang hẹn giờ tập trung: Asi giữ yên (không giận, không nhấp nháy) để bạn không bị phân tâm
@@ -459,6 +460,16 @@
           <span class="ios-ic">${I.target}</span>
           <span class="ios-meta"><b>Tập trung</b><span>${focusOn ? "Đang chạy" : "25 phút"}</span></span>
         </button>
+      </div>
+      <div class="peek-snap-row" title="Chia nhanh cửa sổ đang dùng (hoặc kéo thanh tiêu đề cửa sổ vào tai thỏ)">
+        <span class="peek-snap-lbl">🪟 Chia màn hình:</span>
+        <button class="peek-sbtn" data-peek="snap-left" title="Ghép cửa sổ đang dùng sang Nửa trái màn hình"><i class="snap-pv pv-left"></i><span>Trái</span></button>
+        <button class="peek-sbtn" data-peek="snap-right" title="Ghép cửa sổ đang dùng sang Nửa phải màn hình"><i class="snap-pv pv-right"></i><span>Phải</span></button>
+        <button class="peek-sbtn accent" data-peek="snap-split2" title="Chia đôi 2 ứng dụng gần nhất: Trái & Phải"><i class="snap-pv pv-split2"></i><span>Đôi 2 app</span></button>
+        <button class="peek-sbtn" data-peek="snap-max" title="Phóng to toàn vùng làm việc"><i class="snap-pv pv-max"></i><span>Toàn màn</span></button>
+        <button class="peek-sbtn" data-peek="snap-top" title="Ghép cửa sổ lên Nửa trên"><i class="snap-pv pv-top"></i></button>
+        <button class="peek-sbtn" data-peek="snap-bottom" title="Ghép cửa sổ xuống Nửa dưới"><i class="snap-pv pv-bottom"></i></button>
+        <button class="peek-sbtn" data-peek="snap-center" title="Đặt cửa sổ ngay chính giữa màn hình"><i class="snap-pv pv-center"></i></button>
       </div>`;
   }
 
@@ -657,6 +668,18 @@
       renderPeek();
       updateBar();
       toast("Đã ẩn hoàn toàn sau tai thỏ — rê chuột vào tai thỏ để mở");
+      return;
+    }
+    if (act && act.startsWith("snap-")) {
+      const snapAct = act.slice(5);
+      try {
+        const msg = await api("window_snap", { action: snapAct, pid: null, prevPid: null });
+        flashMood("happy", 1400);
+        toast("🪟 " + msg);
+        setTimeout(() => { if (mode === "peek") setMode("collapsed"); }, 500);
+      } catch (err) {
+        toast("⚠ " + String(err));
+      }
       return;
     }
     if (act === "airdrop") {
@@ -1254,6 +1277,98 @@
     await addFiles(paths);
     tab = "files";
     setMode("expanded", { force: true });
+  });
+
+  // ───────── Kéo cửa sổ ứng dụng vào tai thỏ để chia màn hình (Window Snap) ─────────
+  let activeSnapAction = null;
+  let lastSnapMeta = { pid: 0, prev_pid: 0, app_name: "", prev_name: "" };
+  function highlightSnapZone(action) {
+    activeSnapAction = action;
+    $$("#snapGrid .snap-card").forEach((c) => c.classList.toggle("active", c.dataset.snap === action));
+  }
+  function pickSnapZoneAt(x, y) {
+    const cards = $$("#snapGrid .snap-card");
+    if (!cards.length) return activeSnapAction || "max";
+    if (typeof x === "number" && typeof y === "number" && x > 0 && y > 0) {
+      const hit = document.elementFromPoint(x, y)?.closest?.(".snap-card");
+      if (hit && hit.dataset.snap) return hit.dataset.snap;
+      // Khi con trỏ còn ở mép trên thanh tai thỏ (#bar) hoặc khe giữa các ô: dóng theo cột ngang X gần nhất
+      let best = null;
+      let bestDist = Infinity;
+      for (const c of cards) {
+        const r = c.getBoundingClientRect();
+        if (r.width <= 0) continue;
+        const cx = r.left + r.width / 2;
+        const dx = x >= r.left && x <= r.right ? 0 : Math.min(Math.abs(x - r.left), Math.abs(x - r.right), Math.abs(x - cx));
+        if (dx < bestDist) {
+          bestDist = dx;
+          best = c.dataset.snap;
+        }
+      }
+      if (best) return best;
+    }
+    return activeSnapAction || "max";
+  }
+  $("#snapLayer")?.addEventListener("pointermove", (e) => {
+    const card = e.target.closest(".snap-card");
+    if (card) highlightSnapZone(card.dataset.snap);
+  });
+  $("#snapLayer")?.addEventListener("click", async (e) => {
+    const card = e.target.closest(".snap-card");
+    if (!card) return;
+    const action = card.dataset.snap;
+    await setMode("collapsed");
+    try {
+      await api("window_snap", {
+        action,
+        pid: lastSnapMeta.pid || null,
+        prevPid: lastSnapMeta.prev_pid || null,
+      });
+      flashMood("happy", 1500);
+    } catch (err) {
+      toast("⚠ " + String(err));
+    }
+  });
+  on("window-drag", async (ev) => {
+    if (!ev) return;
+    if (ev.pid) lastSnapMeta = ev;
+    if (ev.phase === "move") {
+      if (mode !== "snap" && mode !== "expanded") {
+        await setMode("snap");
+      }
+      const titleEl = $("#snapTitle");
+      const subEl = $("#snapSub");
+      if (titleEl) {
+        titleEl.textContent = ev.app_name
+          ? `🪟 Chia cửa sổ: ${ev.app_name}`
+          : "🪟 Thả cửa sổ vào ô để chia màn hình";
+      }
+      if (subEl) {
+        subEl.textContent = ev.prev_name
+          ? `Chia đôi 2 app sẽ ghép với ${ev.prev_name}`
+          : "Di chuột vào bố cục muốn ghép rồi thả chuột";
+      }
+      highlightSnapZone(pickSnapZoneAt(ev.x, ev.y));
+    } else if (ev.phase === "leave") {
+      highlightSnapZone(null);
+      if (mode === "snap") setMode("collapsed");
+    } else if (ev.phase === "drop") {
+      const action = pickSnapZoneAt(ev.x, ev.y);
+      highlightSnapZone(null);
+      if (mode === "snap") await setMode("collapsed");
+      if (action) {
+        try {
+          await api("window_snap", {
+            action,
+            pid: ev.pid || lastSnapMeta.pid || null,
+            prevPid: ev.prev_pid || lastSnapMeta.prev_pid || null,
+          });
+          flashMood("happy", 1600);
+        } catch (err) {
+          toast("⚠ " + String(err));
+        }
+      }
+    }
   });
 
   // ───────── Các tab (bảng màu chuẩn iOS App Icon) ─────────

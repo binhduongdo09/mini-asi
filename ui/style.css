@@ -53,13 +53,9 @@ button { cursor: pointer; border: 0; background: none; }
   --cur: var(--bg);
   background: var(--cur);
   border-radius: 0 0 var(--r) var(--r);
-  box-shadow:
-    0 18px 42px -10px rgba(0, 0, 0, 0.68),
-    0 6px 22px -4px var(--glow),
-    inset 0 -0.5px 0 rgba(255, 255, 255, 0.12),
-    0 0 0 0.5px rgba(255, 255, 255, 0.06);
+  box-shadow: none;
   transition: width 0.44s var(--spring), height 0.44s var(--spring), border-radius 0.38s var(--ease),
-    background-color 1s var(--ease), box-shadow 0.8s var(--ease);
+    background-color 1s var(--ease);
   overflow: visible;
   isolation: isolate;
 }
@@ -75,7 +71,7 @@ button { cursor: pointer; border: 0; background: none; }
 #island::before { left: -12px; background: radial-gradient(circle at 0 100%, transparent 11.5px, var(--cur) 12px); }
 #island::after { right: -12px; background: radial-gradient(circle at 100% 100%, transparent 11.5px, var(--cur) 12px); }
 
-#island.mode-peek, #island.mode-alert, #island.mode-drop { --r: 24px; }
+#island.mode-peek, #island.mode-alert, #island.mode-drop, #island.mode-snap { --r: 24px; }
 #island.mode-expanded { --r: 28px; --cur: var(--bg-x, #0b0b0e); }
 
 #island.shake { animation: shake 0.5s 3; }
@@ -84,11 +80,7 @@ button { cursor: pointer; border: 0; background: none; }
   25% { transform: translateX(calc(var(--tx, -50%) - 3px)) rotate(-0.6deg); }
   75% { transform: translateX(calc(var(--tx, -50%) + 3px)) rotate(0.6deg); }
 }
-#island.pulse { animation: breathe 3.2s ease-in-out infinite; }
-@keyframes breathe {
-  0%, 100% { box-shadow: 0 6px 22px -4px var(--glow); }
-  50% { box-shadow: 0 8px 34px 2px var(--glow); }
-}
+#island.pulse { animation: none; }
 
 /* ───────── Thanh trên ───────── */
 .bar {
@@ -170,8 +162,8 @@ button { cursor: pointer; border: 0; background: none; }
   transition: opacity 0.22s var(--ease), transform 0.36s var(--spring);
   padding: 4px 16px 14px;
 }
-.mode-peek .peek, .mode-alert .alert, .mode-drop .dropzone, .mode-expanded .panel {
-  opacity: 1; pointer-events: auto; transform: none; transition-delay: 0.1s;
+.mode-peek .peek, .mode-alert .alert, .mode-drop .dropzone, .mode-snap .snapzone, .mode-expanded .panel {
+  opacity: 1; pointer-events: auto; transform: none; transition-delay: 0.08s;
 }
 
 /* Ló ra khi rê chuột (Peek): Trung tâm điều khiển kiểu iOS (Control Center) */
@@ -330,6 +322,67 @@ body.icons-sm .ios-meta span { display: none; }
   border-color: rgba(50, 215, 75, 0.8); background: rgba(50, 215, 75, 0.1);
   box-shadow: 0 0 18px -4px rgba(50, 215, 75, 0.3); transform: scale(1.01);
 }
+
+/* ───────── Kéo cửa sổ vào tai thỏ để chia màn hình (Window Snap) ───────── */
+.snapzone { display: flex; flex-direction: column; justify-content: space-between; gap: 6px; padding: 4px 14px 12px; }
+.snap-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 2px; }
+.snap-head b { font-size: 12px; font-weight: 650; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.snap-head span { font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.snap-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; flex: 1; min-height: 0; }
+.snap-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  padding: 6px 4px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1.5px solid rgba(255, 255, 255, 0.11);
+  transition: 0.16s var(--spring);
+}
+.snap-card b { font-size: 10.5px; font-weight: 620; color: #f5f5f7; white-space: nowrap; }
+.snap-card.hover, .snap-card.active, .snap-card:hover {
+  background: rgba(10, 132, 255, 0.22);
+  border-color: #0a84ff;
+  transform: translateY(-2px) scale(1.03);
+}
+.snap-card.accent.active, .snap-card.accent:hover {
+  background: rgba(48, 209, 88, 0.22);
+  border-color: #30d158;
+}
+/* Hình minh hoạ bố cục màn hình thu nhỏ (Window Tiling Diagram) */
+.snap-pv {
+  position: relative; display: inline-block; width: 32px; height: 20px; border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.26);
+  overflow: hidden; flex: none;
+}
+.snap-pv::before, .snap-pv::after {
+  content: ""; position: absolute; border-radius: 2.5px; transition: 0.16s;
+}
+.snap-pv.pv-left::before { top: 2px; bottom: 2px; left: 2px; width: 13px; background: #0a84ff; }
+.snap-pv.pv-right::before { top: 2px; bottom: 2px; right: 2px; width: 13px; background: #0a84ff; }
+.snap-pv.pv-split2::before { top: 2px; bottom: 2px; left: 2px; width: 12.5px; background: #0a84ff; }
+.snap-pv.pv-split2::after { top: 2px; bottom: 2px; right: 2px; width: 12.5px; background: #30d158; }
+.snap-pv.pv-max::before { inset: 2px; background: #5ac8fa; }
+.snap-pv.pv-top::before { top: 2px; left: 2px; right: 2px; height: 7px; background: #bf5af2; }
+.snap-pv.pv-bottom::before { bottom: 2px; left: 2px; right: 2px; height: 7px; background: #bf5af2; }
+.snap-pv.pv-center::before { top: 3.5px; bottom: 3.5px; left: 6px; right: 6px; background: #ff9f0a; }
+
+/* Thanh chia nhanh cửa sổ ngay trong Peek */
+.peek-snap-row {
+  display: flex; align-items: center; gap: 4px; padding: 5px 8px; border-radius: 13px;
+  background: rgba(255, 255, 255, 0.045); border: 1px solid rgba(255, 255, 255, 0.075);
+}
+.peek-snap-lbl { font-size: 10.5px; font-weight: 600; color: var(--muted); margin-right: 2px; white-space: nowrap; }
+.peek-sbtn {
+  display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 6px; border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 10.5px; font-weight: 600; color: #e5e5ea; transition: 0.15s var(--spring); white-space: nowrap;
+}
+.peek-sbtn:hover { background: rgba(10, 132, 255, 0.22); border-color: rgba(10, 132, 255, 0.6); color: #fff; transform: translateY(-1px); }
+.peek-sbtn.accent:hover { background: rgba(48, 209, 88, 0.22); border-color: rgba(48, 209, 88, 0.65); }
+.peek-sbtn .snap-pv { width: 18px; height: 12px; border-radius: 3.5px; }
+.peek-sbtn .snap-pv.pv-left::before, .peek-sbtn .snap-pv.pv-right::before { width: 7px; top: 1.5px; bottom: 1.5px; }
+.peek-sbtn .snap-pv.pv-split2::before, .peek-sbtn .snap-pv.pv-split2::after { width: 6.5px; top: 1.5px; bottom: 1.5px; }
+.peek-sbtn .snap-pv.pv-max::before { inset: 1.5px; }
+.peek-sbtn .snap-pv.pv-top::before, .peek-sbtn .snap-pv.pv-bottom::before { height: 4px; left: 1.5px; right: 1.5px; }
+.peek-sbtn .snap-pv.pv-center::before { top: 2px; bottom: 2px; left: 3.5px; right: 3.5px; }
 
 /* ───────── Bảng điều khiển ───────── */
 .panel { display: flex; flex-direction: column; gap: 10px; padding: 6px 16px 14px; }
@@ -895,7 +948,7 @@ body.disp-pill #island::before, body.disp-pill #island::after,
 body.disp-bubble #island::before, body.disp-bubble #island::after,
 body.floating-pos #island::before, body.floating-pos #island::after { display: none; }
 body.disp-pill #island.mode-collapsed { --r: 999px; }
-body.disp-pill #island, body.floating-pos #island { box-shadow: 0 8px 26px -6px rgba(0, 0, 0, 0.55), 0 0 0 0.5px rgba(255, 255, 255, 0.08), 0 6px 22px -4px var(--glow); }
+body.disp-pill #island, body.floating-pos #island { box-shadow: none; }
 body.floating-pos .notch-gap { width: 10px; }
 #island.mode-collapsed, #island .bar { cursor: grab; }
 #island.dragging, #island.dragging .bar { cursor: grabbing !important; }
@@ -915,7 +968,7 @@ body.floating-pos .notch-gap { width: 10px; }
 }
 
 /* Bong bóng: neo mép trái cửa sổ để khi mở bảng không bị nhảy chỗ */
-body.disp-bubble #island { left: 18px; --tx: 0px; box-shadow: 0 10px 28px -6px rgba(0, 0, 0, 0.6), 0 0 0 0.5px rgba(255, 255, 255, 0.1), 0 6px 22px -4px var(--glow); }
+body.disp-bubble #island { left: 18px; --tx: 0px; box-shadow: none; }
 body.disp-bubble #island.mode-collapsed { --r: 999px; cursor: grab; }
 body.disp-bubble #island.mode-collapsed.dragging { cursor: grabbing; }
 body.disp-bubble #island.mode-collapsed .bar { justify-content: center; padding: 0; height: 100%; }

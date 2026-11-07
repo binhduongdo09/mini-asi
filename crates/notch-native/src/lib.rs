@@ -186,16 +186,209 @@ mod imp {
         }
     }
 
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    struct CGPoint {
+        x: f64,
+        y: f64,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    struct CGSize {
+        width: f64,
+        height: f64,
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFRelease(cf: *const c_void);
+        fn CFRetain(cf: *const c_void) -> *const c_void;
+        fn CFArrayGetCount(the_array: *const c_void) -> isize;
+        fn CFArrayGetValueAtIndex(the_array: *const c_void, idx: isize) -> *const c_void;
+    }
+
     #[link(name = "CoreGraphics", kind = "framework")]
     extern "C" {
         fn CGEventSourceSecondsSinceLastEventType(state_id: i32, event_type: u32) -> f64;
+        fn CGEventSourceButtonState(state_id: i32, button: u32) -> bool;
         fn CGEventPost(tap: u32, event: *mut c_void);
+    }
+
+    #[link(name = "ApplicationServices", kind = "framework")]
+    extern "C" {
+        fn AXUIElementCreateApplication(pid: i32) -> *const c_void;
+        fn AXUIElementCopyAttributeValue(element: *const c_void, attribute: *const c_void, value: *mut *const c_void) -> i32;
+        fn AXUIElementSetAttributeValue(element: *const c_void, attribute: *const c_void, value: *const c_void) -> i32;
+        fn AXValueCreate(the_type: u32, value_ptr: *const c_void) -> *const c_void;
+        fn AXValueGetValue(value: *const c_void, the_type: u32, value_ptr: *mut c_void) -> bool;
     }
 
     pub fn idle_seconds() -> Option<f64> {
         // kCGEventSourceStateCombinedSessionState = 0, kCGAnyInputEventType = !0
         let s = unsafe { CGEventSourceSecondsSinceLastEventType(0, u32::MAX) };
         if s.is_finite() && s >= 0.0 { Some(s) } else { None }
+    }
+
+    /// Kiểm tra nút chuột trái có đang được nhấn giữ toàn cục không (kCGEventSourceStateCombinedSessionState = 0, kCGMouseButtonLeft = 0)
+    pub fn mouse_left_pressed() -> bool {
+        unsafe { CGEventSourceButtonState(0, 0) }
+    }
+
+    /// Trả về (pid, tên ứng dụng) của ứng dụng đang active phía trước (bỏ qua chính Mini-Asi)
+    pub fn frontmost_external_app() -> Option<(i32, String)> {
+        unsafe {
+            let cls = objc2::runtime::AnyClass::get(c"NSWorkspace")?;
+            let ws: *mut objc2::runtime::AnyObject = objc2::msg_send![cls, sharedWorkspace];
+            if ws.is_null() {
+                return None;
+            }
+            let app: *mut objc2::runtime::AnyObject = objc2::msg_send![ws, frontmostApplication];
+            if app.is_null() {
+                return None;
+            }
+            let pid: i32 = objc2::msg_send![app, processIdentifier];
+            if pid <= 0 || pid == std::process::id() as i32 {
+                return None;
+            }
+            let name_obj: *const objc2_foundation::NSString = objc2::msg_send![app, localizedName];
+            let name = if !name_obj.is_null() {
+                (*name_obj).to_string()
+            } else {
+                String::from("Ứng dụng")
+            };
+            Some((pid, name))
+        }
+    }
+
+    /// Đưa một ứng dụng theo PID lên phía trước
+    pub fn activate_pid(pid: i32) {
+        if pid <= 0 {
+            return;
+        }
+        unsafe {
+            let Some(cls) = objc2::runtime::AnyClass::get(c"NSRunningApplication") else { return };
+            let app: *mut objc2::runtime::AnyObject = objc2::msg_send![cls, runningApplicationWithProcessIdentifier: pid];
+            if !app.is_null() {
+                // NSApplicationActivateIgnoringOtherApps = 1 << 1 = 2
+                let _: bool = objc2::msg_send![app, activateWithOptions: 2usize];
+            }
+        }
+    }
+
+    /// Vùng làm việc khả dụng của màn hình chính (trừ thanh Menu Bar / Tai thỏ và thanh Dock) theo hệ toạ độ góc trên-trái (top-left).
+    /// Phải gọi trên main thread.
+    pub fn work_area() -> Option<(f64, f64, f64, f64)> {
+        let mtm = MainThreadMarker::new()?;
+        let screens = NSScreen::screens(mtm);
+        let primary_h = screens
+            .firstObject()
+            .or_else(|| NSScreen::mainScreen(mtm))
+            .map(|s| s.frame().size.height)
+            .unwrap_or(900.0);
+        let screen = NSScreen::mainScreen(mtm).or_else(|| screens.firstObject())?;
+        let vis = screen.visibleFrame();
+        let top_y = primary_h - (vis.origin.y + vis.size.height);
+        Some((vis.origin.x, top_y.max(24.0), vis.size.width, vis.size.height))
+    }
+
+    unsafe fn copy_ax_window(pid: i32) -> Option<*const c_void> {
+        if pid <= 0 {
+            return None;
+        }
+        let app_el = AXUIElementCreateApplication(pid);
+        if app_el.is_null() {
+            return None;
+        }
+        let mut win_el: *const c_void = std::ptr::null();
+        for key in ["AXFocusedWindow", "AXMainWindow"] {
+            let ns = objc2_foundation::NSString::from_str(key);
+            if AXUIElementCopyAttributeValue(app_el, (&*ns as *const objc2_foundation::NSString).cast(), &mut win_el) == 0 && !win_el.is_null() {
+                CFRelease(app_el);
+                return Some(win_el);
+            }
+        }
+        let mut arr: *const c_void = std::ptr::null();
+        let ns_wins = objc2_foundation::NSString::from_str("AXWindows");
+        if AXUIElementCopyAttributeValue(app_el, (&*ns_wins as *const objc2_foundation::NSString).cast(), &mut arr) == 0 && !arr.is_null() {
+            if CFArrayGetCount(arr) > 0 {
+                let item = CFArrayGetValueAtIndex(arr, 0);
+                if !item.is_null() {
+                    CFRetain(item);
+                    CFRelease(arr);
+                    CFRelease(app_el);
+                    return Some(item);
+                }
+            }
+            CFRelease(arr);
+        }
+        CFRelease(app_el);
+        None
+    }
+
+    /// Đọc toạ độ và kích thước hiện tại (x, y, w, h) của cửa sổ đang active thuộc `pid` (nếu đã có quyền Trợ năng)
+    pub fn window_rect_for_pid(pid: i32) -> Option<(f64, f64, f64, f64)> {
+        if super::perm::accessibility() != super::perm::State::Granted {
+            return None;
+        }
+        unsafe {
+            let win_el = copy_ax_window(pid)?;
+            let mut pos_val: *const c_void = std::ptr::null();
+            let mut sz_val: *const c_void = std::ptr::null();
+            let ns_pos = objc2_foundation::NSString::from_str("AXPosition");
+            let ns_sz = objc2_foundation::NSString::from_str("AXSize");
+            let mut pt = CGPoint::default();
+            let mut sz = CGSize::default();
+            let ok_pos = AXUIElementCopyAttributeValue(win_el, (&*ns_pos as *const objc2_foundation::NSString).cast(), &mut pos_val) == 0
+                && !pos_val.is_null()
+                && AXValueGetValue(pos_val, 1, (&mut pt as *mut CGPoint).cast());
+            if !pos_val.is_null() {
+                CFRelease(pos_val);
+            }
+            let ok_sz = AXUIElementCopyAttributeValue(win_el, (&*ns_sz as *const objc2_foundation::NSString).cast(), &mut sz_val) == 0
+                && !sz_val.is_null()
+                && AXValueGetValue(sz_val, 2, (&mut sz as *mut CGSize).cast());
+            if !sz_val.is_null() {
+                CFRelease(sz_val);
+            }
+            CFRelease(win_el);
+            if ok_pos && ok_sz {
+                Some((pt.x, pt.y, sz.width, sz.height))
+            } else {
+                None
+            }
+        }
+    }
+
+    /// Di chuyển và đổi kích thước cửa sổ của ứng dụng `pid` tới (x, y, w, h) bằng Accessibility API
+    pub fn snap_app_window(pid: i32, x: f64, y: f64, w: f64, h: f64) -> Result<(), String> {
+        if super::perm::accessibility() != super::perm::State::Granted {
+            let _ = super::perm::prompt_accessibility();
+            return Err("Cần bật quyền Trợ năng (Accessibility) cho Mini-Asi để chia cửa sổ — hãy gạt bật trong bảng Cài đặt vừa mở nhé!".into());
+        }
+        unsafe {
+            let win_el = copy_ax_window(pid).ok_or_else(|| "Không tìm thấy cửa sổ nào của ứng dụng này để chia màn hình".to_string())?;
+            let pt = CGPoint { x, y };
+            let sz = CGSize { width: w, height: h };
+            let pos_val = AXValueCreate(1, (&pt as *const CGPoint).cast());
+            let sz_val = AXValueCreate(2, (&sz as *const CGSize).cast());
+            let ns_pos = objc2_foundation::NSString::from_str("AXPosition");
+            let ns_sz = objc2_foundation::NSString::from_str("AXSize");
+            if !pos_val.is_null() && !sz_val.is_null() {
+                let _ = AXUIElementSetAttributeValue(win_el, (&*ns_pos as *const objc2_foundation::NSString).cast(), pos_val);
+                let _ = AXUIElementSetAttributeValue(win_el, (&*ns_sz as *const objc2_foundation::NSString).cast(), sz_val);
+                let _ = AXUIElementSetAttributeValue(win_el, (&*ns_pos as *const objc2_foundation::NSString).cast(), pos_val);
+            }
+            if !pos_val.is_null() {
+                CFRelease(pos_val);
+            }
+            if !sz_val.is_null() {
+                CFRelease(sz_val);
+            }
+            CFRelease(win_el);
+            activate_pid(pid);
+            Ok(())
+        }
     }
 
     /// Mở bảng chia sẻ AirDrop gốc của macOS cho danh sách đường dẫn file (gọi trên main thread).
@@ -296,6 +489,28 @@ mod imp {
         Err("AirDrop chỉ hỗ trợ trên macOS".into())
     }
 
+    pub fn mouse_left_pressed() -> bool {
+        false
+    }
+
+    pub fn frontmost_external_app() -> Option<(i32, String)> {
+        None
+    }
+
+    pub fn activate_pid(_pid: i32) {}
+
+    pub fn work_area() -> Option<(f64, f64, f64, f64)> {
+        None
+    }
+
+    pub fn window_rect_for_pid(_pid: i32) -> Option<(f64, f64, f64, f64)> {
+        None
+    }
+
+    pub fn snap_app_window(_pid: i32, _x: f64, _y: f64, _w: f64, _h: f64) -> Result<(), String> {
+        Err("Chia cửa sổ hiện chỉ hỗ trợ trên macOS".into())
+    }
+
     pub fn send_media_key(key: u32) -> bool {
         let vk: u8 = match key {
             16 => 0xB3, // VK_MEDIA_PLAY_PAUSE
@@ -351,6 +566,28 @@ mod imp {
         Err("AirDrop chỉ hỗ trợ trên macOS".into())
     }
 
+    pub fn mouse_left_pressed() -> bool {
+        false
+    }
+
+    pub fn frontmost_external_app() -> Option<(i32, String)> {
+        None
+    }
+
+    pub fn activate_pid(_pid: i32) {}
+
+    pub fn work_area() -> Option<(f64, f64, f64, f64)> {
+        None
+    }
+
+    pub fn window_rect_for_pid(_pid: i32) -> Option<(f64, f64, f64, f64)> {
+        None
+    }
+
+    pub fn snap_app_window(_pid: i32, _x: f64, _y: f64, _w: f64, _h: f64) -> Result<(), String> {
+        Err("Chia cửa sổ hiện chỉ hỗ trợ trên macOS".into())
+    }
+
     pub fn send_media_key(key: u32) -> bool {
         let cmd = match key {
             16 => "play-pause",
@@ -362,7 +599,11 @@ mod imp {
     }
 }
 
-pub use imp::{activate_app, airdrop_files, configure_window, deactivate_app, idle_seconds, is_main_thread, notch_info, send_media_key, set_window_frame_top_left, set_window_level};
+pub use imp::{
+    activate_app, activate_pid, airdrop_files, configure_window, deactivate_app, frontmost_external_app,
+    idle_seconds, is_main_thread, mouse_left_pressed, notch_info, send_media_key, set_window_frame_top_left,
+    set_window_level, snap_app_window, window_rect_for_pid, work_area,
+};
 
 /// Mã phím cứng điều khiển Media (chuẩn NX_KEYTYPE của macOS, ánh xạ đa nền tảng)
 pub const MEDIA_KEY_VOL_UP: u32 = 0;

@@ -234,6 +234,7 @@
       devices: [{ name: "a" }, { name: "b" }] }),
     backup_pick_dir: () => null, backup_set: () => null, backup_now: async () => { await wait(600); return ["/Users/binh/Library/CloudStorage/GoogleDrive-x/My Drive/Mini-Asi/backups/a.zip", 2.4e6]; },
     device_sync_now: async () => { await wait(600); return { devices: ["iMac văn phòng"], stats: { tasks: 3, notes: 1, journal: 0, clips: 5, removed: 0 } }; }, backup_restore: async () => { await wait(500); },
+    window_snap: async ({ action }) => `Đã ghép cửa sổ (${action})`,
   };
   window.__TAURI__ = {
     core: { invoke: async (cmd, args) => { if (!(cmd in H_)) throw "mock: thiếu lệnh " + cmd; return H_[cmd](args || {}); } },

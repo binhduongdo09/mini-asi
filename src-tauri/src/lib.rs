@@ -194,7 +194,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_geometry, set_frame, set_interactive, set_display, move_bubble, vocab_batch, vocab_learned, vocab_check, vocab_play, vocab_play_mine, tts_info, tts_install, tts_uninstall, tts_use,
+            get_geometry, set_frame, set_interactive, set_display, move_bubble, window_snap, vocab_batch, vocab_learned, vocab_check, vocab_play, vocab_play_mine, tts_info, tts_install, tts_uninstall, tts_use,
             parse_task, add_task, list_tasks, toggle_task, snooze_task, rename_task, delete_task, clear_done,
             list_notes, save_note, pin_note, delete_note,
             file_info, pick_files, file_zip, file_extract, file_compress_pdf, file_merge_pdf, reveal,

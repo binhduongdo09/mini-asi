@@ -49,6 +49,51 @@
       </div>
     </section>
 
+    <!-- Chia cửa sổ màn hình khi kéo cửa sổ ứng dụng vào tai thỏ -->
+    <section class="layer snapzone" id="snapLayer">
+      <div class="snap-head">
+        <span class="snap-title" id="snapTitle">🪟 Kéo thả cửa sổ vào ô để chia màn hình</span>
+        <span class="snap-sub" id="snapSub">Thả chuột vào bố cục bên dưới</span>
+      </div>
+      <div class="snap-grid" id="snapGrid">
+        <div class="snap-card" data-snap="left">
+          <span class="snap-pv pv-left"><i></i></span>
+          <b>Nửa Trái</b>
+          <span>50% trái</span>
+        </div>
+        <div class="snap-card" data-snap="right">
+          <span class="snap-pv pv-right"><i></i></span>
+          <b>Nửa Phải</b>
+          <span>50% phải</span>
+        </div>
+        <div class="snap-card" data-snap="split2">
+          <span class="snap-pv pv-split2"><i></i><b></b></span>
+          <b>Chia Đôi 2 App</b>
+          <span id="snapSplit2Sub">Trái & Phải</span>
+        </div>
+        <div class="snap-card" data-snap="max">
+          <span class="snap-pv pv-max"><i></i></span>
+          <b>Toàn Màn</b>
+          <span>Phóng tối đa</span>
+        </div>
+        <div class="snap-card" data-snap="top">
+          <span class="snap-pv pv-top"><i></i></span>
+          <b>Nửa Trên</b>
+          <span>50% trên</span>
+        </div>
+        <div class="snap-card" data-snap="bottom">
+          <span class="snap-pv pv-bottom"><i></i></span>
+          <b>Nửa Dưới</b>
+          <span>50% dưới</span>
+        </div>
+        <div class="snap-card" data-snap="center">
+          <span class="snap-pv pv-center"><i></i></span>
+          <b>Giữa Màn</b>
+          <span>Căn giữa 76%</span>
+        </div>
+      </div>
+    </section>
+
     <!-- Bảng điều khiển đầy đủ -->
     <section class="layer panel" id="panel">
       <nav class="tabs" id="tabs"></nav>
