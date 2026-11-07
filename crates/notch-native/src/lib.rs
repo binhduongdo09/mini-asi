@@ -75,6 +75,17 @@ mod imp {
         }
     }
 
+    /// Ngăn macOS AppKit tự động đẩy cửa sổ xuống dưới thanh Menu Bar (`Y = 33pt`)
+    /// khi cửa sổ tạm hạ xuống `level = 0` (xin quyền / chọn file) hoặc `level = 3` (AirDrop).
+    extern "C-unwind" fn unconstrained_frame_rect(
+        _this: *mut objc2::runtime::AnyObject,
+        _sel: objc2::runtime::Sel,
+        frame_rect: objc2_foundation::NSRect,
+        _screen: *mut objc2::runtime::AnyObject,
+    ) -> objc2_foundation::NSRect {
+        frame_rect
+    }
+
     /// `ns_window` là con trỏ NSWindow (Tauri: `window.ns_window()`).
     ///
     /// # Safety
@@ -82,6 +93,25 @@ mod imp {
     pub unsafe fn configure_window(ns_window: *mut c_void) {
         if ns_window.is_null() {
             return;
+        }
+        let cls = objc2::ffi::object_getClass(ns_window as *const objc2::runtime::AnyObject) as *mut objc2::runtime::AnyClass;
+        if !cls.is_null() {
+            let sel = objc2::sel!(constrainFrameRect:toScreen:);
+            let imp: objc2::runtime::Imp = std::mem::transmute(
+                unconstrained_frame_rect
+                    as extern "C-unwind" fn(
+                        *mut objc2::runtime::AnyObject,
+                        objc2::runtime::Sel,
+                        objc2_foundation::NSRect,
+                        *mut objc2::runtime::AnyObject,
+                    ) -> objc2_foundation::NSRect,
+            );
+            let _ = objc2::ffi::class_replaceMethod(
+                cls,
+                sel,
+                imp,
+                c"{CGRect={CGPoint=dd}{CGSize=dd}}@:{CGRect={CGPoint=dd}{CGSize=dd}}@".as_ptr(),
+            );
         }
         let win: &NSWindow = &*(ns_window as *const NSWindow);
         // NSMainMenuWindowLevel = 24. Đặt cao hơn để nằm trên thanh menu, che vùng tai thỏ.
@@ -94,6 +124,37 @@ mod imp {
         );
         win.setHasShadow(false);
         win.setMovable(false);
+    }
+
+    pub fn is_main_thread() -> bool {
+        MainThreadMarker::new().is_some()
+    }
+
+    /// Đặt kích thước và vị trí cửa sổ nguyên tử (atomic) theo hệ toạ độ góc trên-trái (top-left) của màn hình chính.
+    /// Tránh lỗi `set_size` và `set_position` của Tauri chạy ở 2 lệnh GCD tách rời làm lệch cạnh trên.
+    ///
+    /// # Safety
+    /// `ns_window` phải là NSWindow hợp lệ, gọi trên main thread.
+    pub unsafe fn set_window_frame_top_left(ns_window: *mut c_void, x: f64, top_y: f64, w: f64, h: f64) {
+        if ns_window.is_null() {
+            return;
+        }
+        let Some(mtm) = MainThreadMarker::new() else {
+            return;
+        };
+        let win: &NSWindow = &*(ns_window as *const NSWindow);
+        let screens = NSScreen::screens(mtm);
+        let primary_h = screens
+            .firstObject()
+            .or_else(|| NSScreen::mainScreen(mtm))
+            .map(|s| s.frame().size.height)
+            .unwrap_or(900.0);
+        let bottom_y = primary_h - top_y - h;
+        let rect = objc2_foundation::NSRect::new(
+            objc2_foundation::NSPoint::new(x, bottom_y),
+            objc2_foundation::NSSize::new(w, h),
+        );
+        win.setFrame_display(rect, true);
     }
 
     /// Đổi tầng cửa sổ: 27 = trên thanh menu (bình thường), 0 = tầng thường (để hộp thoại xin quyền không bị che)
@@ -215,6 +276,12 @@ mod imp {
 
     pub unsafe fn set_window_level(_w: *mut c_void, _l: isize) {}
 
+    pub unsafe fn set_window_frame_top_left(_w: *mut c_void, _x: f64, _top_y: f64, _width: f64, _height: f64) {}
+
+    pub fn is_main_thread() -> bool {
+        false
+    }
+
     pub fn idle_seconds() -> Option<f64> {
         let mut info = LASTINPUTINFO { cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32, dwTime: 0 };
         let ok = unsafe { GetLastInputInfo(&mut info) };
@@ -264,6 +331,12 @@ mod imp {
 
     pub unsafe fn set_window_level(_w: *mut c_void, _l: isize) {}
 
+    pub unsafe fn set_window_frame_top_left(_w: *mut c_void, _x: f64, _top_y: f64, _width: f64, _height: f64) {}
+
+    pub fn is_main_thread() -> bool {
+        false
+    }
+
     /// Dùng `xprintidle` nếu có (X11). Wayland: không hỗ trợ → None.
     pub fn idle_seconds() -> Option<f64> {
         let out = std::process::Command::new("xprintidle").output().ok()?;
@@ -289,7 +362,7 @@ mod imp {
     }
 }
 
-pub use imp::{activate_app, airdrop_files, configure_window, deactivate_app, idle_seconds, notch_info, send_media_key, set_window_level};
+pub use imp::{activate_app, airdrop_files, configure_window, deactivate_app, idle_seconds, is_main_thread, notch_info, send_media_key, set_window_frame_top_left, set_window_level};
 
 /// Mã phím cứng điều khiển Media (chuẩn NX_KEYTYPE của macOS, ánh xạ đa nền tảng)
 pub const MEDIA_KEY_VOL_UP: u32 = 0;

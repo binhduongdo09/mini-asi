@@ -174,8 +174,11 @@ pub(crate) async fn backup_info(st: S<'_>) -> Result<BackupInfo, String> {
 #[tauri::command]
 pub(crate) async fn backup_pick_dir(app: AppHandle, st: S<'_>) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
-    let picked = tauri::async_runtime::spawn_blocking(move || app.dialog().file().blocking_pick_folder()).await.map_err(|e| e.to_string())?;
-    let Some(p) = picked.and_then(|f| f.into_path().ok()) else { return Ok(None) };
+    apply_level(&app, 0);
+    let a2 = app.clone();
+    let picked = tauri::async_runtime::spawn_blocking(move || a2.dialog().file().blocking_pick_folder()).await.map_err(|e| e.to_string());
+    apply_level(&app, normal_level(&app));
+    let Some(p) = picked?.and_then(|f| f.into_path().ok()) else { return Ok(None) };
     let mut s = st.store.lock().unwrap();
     s.settings.backup_dir = p.to_string_lossy().to_string();
     let _ = s.save_settings();

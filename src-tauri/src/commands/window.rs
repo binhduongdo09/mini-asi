@@ -70,6 +70,18 @@ pub(crate) fn place(win: &WebviewWindow, geo: &Geometry, w: f64, h: f64) {
             _ => (sx + (sw - w) / 2.0, sy),
         }
     };
+    #[cfg(target_os = "macos")]
+    if let Ok(p) = win.ns_window() {
+        let p = p as usize;
+        if notch_native::is_main_thread() {
+            unsafe { notch_native::set_window_frame_top_left(p as *mut std::ffi::c_void, x, y, w, h) };
+        } else {
+            let _ = win.app_handle().run_on_main_thread(move || unsafe {
+                notch_native::set_window_frame_top_left(p as *mut std::ffi::c_void, x, y, w, h);
+            });
+        }
+        return;
+    }
     let _ = win.set_size(LogicalSize::new(w, h));
     let _ = win.set_position(LogicalPosition::new(x, y));
 }
@@ -86,7 +98,19 @@ pub(crate) fn apply_level(app: &AppHandle, level: isize) {
     if let Some(w) = app.get_webview_window("notch") {
         if let Ok(p) = w.ns_window() {
             let p = p as usize;
-            let _ = app.run_on_main_thread(move || unsafe { notch_native::set_window_level(p as *mut std::ffi::c_void, level) });
+            let h = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                unsafe { notch_native::set_window_level(p as *mut std::ffi::c_void, level) };
+                if level >= notch_native::NOTCH_LEVEL {
+                    if let (Some(win), Some(st)) = (h.get_webview_window("notch"), h.try_state::<Arc<AppState>>()) {
+                        if let Ok(sz) = win.inner_size() {
+                            let sf = win.scale_factor().unwrap_or(1.0);
+                            let geo = st.geo.lock().unwrap().clone();
+                            place(&win, &geo, sz.width as f64 / sf, sz.height as f64 / sf);
+                        }
+                    }
+                }
+            });
         }
     }
 }
@@ -108,24 +132,40 @@ pub(crate) fn set_display(app: AppHandle, st: S, mode: String) -> Result<(), Str
 /// `save = true` khi thả tay. Truyền `x <= 0.0 && y <= 0.0 && save = true` để đặt lại vị trí mặc định.
 #[tauri::command]
 pub(crate) fn move_bubble(win: WebviewWindow, st: S, x: f64, y: f64, save: bool) {
-    if save && x <= 0.0 && y <= 0.0 {
+    let sf = win.scale_factor().unwrap_or(1.0);
+    let (cur_w, cur_h) = win
+        .inner_size()
+        .map(|sz| (sz.width as f64 / sf, sz.height as f64 / sf))
+        .unwrap_or((300.0, 50.0));
+    let geo = st.geo.lock().unwrap().clone();
+    let disp_mode = st.store.lock().unwrap().settings.display_mode.clone();
+    let near_top_notch = disp_mode == "notch"
+        && y < 36.0
+        && ((x + cur_w / 2.0) - (geo.screen_x + geo.screen_width / 2.0)).abs() < 60.0;
+    if save && ((x <= 0.0 && y <= 0.0) || near_top_notch) {
         {
             let mut s = st.store.lock().unwrap();
             s.settings.bubble_x = 0.0;
             s.settings.bubble_y = 0.0;
             let _ = s.save_settings();
         }
-        let geo = st.geo.lock().unwrap().clone();
-        if let Ok(sz) = win.inner_size() {
-            let sf = win.scale_factor().unwrap_or(1.0);
-            place(&win, &geo, sz.width as f64 / sf, sz.height as f64 / sf);
-        }
+        place(&win, &geo, cur_w, cur_h);
         return;
     }
-    let _ = win.set_position(LogicalPosition::new(x, y));
+    #[cfg(target_os = "macos")]
+    if let Ok(p) = win.ns_window() {
+        let p = p as usize;
+        let _ = win.app_handle().run_on_main_thread(move || unsafe {
+            notch_native::set_window_frame_top_left(p as *mut std::ffi::c_void, x, y, cur_w, cur_h);
+        });
+    } else {
+        let _ = win.set_position(LogicalPosition::new(x, y));
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = win.set_position(LogicalPosition::new(x, y));
+    }
     if save {
-        let sf = win.scale_factor().unwrap_or(1.0);
-        let cur_w = win.inner_size().map(|sz| sz.width as f64 / sf).unwrap_or(300.0);
         let mut s = st.store.lock().unwrap();
         s.settings.bubble_x = if s.settings.display_mode == "bubble" { x } else { x + cur_w / 2.0 };
         s.settings.bubble_y = y.max(0.0);

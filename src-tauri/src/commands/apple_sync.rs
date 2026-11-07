@@ -259,9 +259,14 @@ pub(crate) fn sync_loop(app: AppHandle, st: Arc<AppState>, rx: mpsc::Receiver<()
 #[tauri::command]
 pub(crate) async fn sync_now(app: AppHandle, st: S<'_>) -> Result<SyncReport, String> {
     let st = st.inner().clone();
-    window_low(&app, true);
+    let may_prompt = needs_prompt(notch_native::perm::calendar()) || st.store.lock().unwrap().sync.last_run == 0;
+    if may_prompt {
+        window_low(&app, true);
+    }
     let rep = blocking(move || Ok(run_sync(&st))).await;
-    window_low(&app, false);
+    if may_prompt {
+        window_low(&app, false);
+    }
     let rep = rep?;
     let _ = app.emit("synced", &rep);
     push_status(&app);

@@ -208,9 +208,11 @@
   applyNotchGeometry(early, true);
 
   let freshOpen = true;
+  let frameTimer = null;
   async function setMode(next, opts = {}) {
     if (next === mode && !opts.force) return;
     clearTimeout(modeTimer);
+    clearTimeout(frameTimer);
     if (next === "collapsed" && mode !== "collapsed") {
       suppressHoverUntil = Date.now() + 500;
     }
@@ -224,7 +226,7 @@
     root.style.setProperty("--h", h + "px");
     const prev = mode;
     mode = next;
-    if (!growing) modeTimer = setTimeout(frame, 420); // thu hoạt cảnh xong mới thu cửa sổ
+    if (!growing) frameTimer = setTimeout(frame, 420); // dùng frameTimer riêng để hover không bao giờ huỷ lệnh thu cửa sổ
     if (next !== "peek" && peekCam.active) stopPeekCam(false);
     if (next !== "expanded" || tab !== "threads") hideEmbed();
     if (next === "expanded" && prev !== "expanded") {
@@ -766,7 +768,13 @@
       setMode("expanded", { force: true });
     });
   })();
-  on("perm-prompt", (low) => { if (low && mode !== "collapsed") setMode("collapsed"); });
+  on("perm-prompt", (low) => {
+    if (low && mode !== "collapsed") setMode("collapsed");
+    else if (!low) {
+      const [w, h] = sizeOf(mode);
+      api("set_frame", { width: w + MARGIN_X * 2, height: h + MARGIN_B });
+    }
+  });
   on("ime-warn", () => toast("Không chuyển được sang bàn phím ABC — hãy bật thêm bàn phím ABC trong Cài đặt hệ thống › Bàn phím › Nguồn nhập để Asi tự gõ tiếng Việt"));
   on("window-blur", () => {
     if (mode !== "expanded" || pinned) return;
@@ -811,12 +819,22 @@
       if (e.target.closest("[data-act], .grip, .grip-corner, .notch-edge, button, input, select, textarea, a, label")) return;
       // Khi đang mở bảng (expanded / alert / reply / listen): kéo ở thanh tiêu đề trên cùng (#bar) để di chuyển popup
       if (mode !== "collapsed" && mode !== "peek" && !e.target.closest("#bar")) return;
-      d = { sx: e.screenX, sy: e.screenY, wx: e.screenX - e.clientX, wy: e.screenY - e.clientY, moved: false, pid: e.pointerId };
+      const curW = sizeOf(mode)[0] + MARGIN_X * 2;
+      const sx0 = geo.screen_x || 0, sy0 = geo.screen_y || 0, sw0 = geo.screen_width || 1440;
+      const hasCustom = (settingsCache.bubble_x > 0 || settingsCache.bubble_y > 0);
+      const wx = hasCustom
+        ? (DISP === "bubble" ? settingsCache.bubble_x : settingsCache.bubble_x - curW / 2)
+        : (DISP === "bubble" ? sx0 + sw0 - 140 : sx0 + (sw0 - curW) / 2);
+      const wy = hasCustom
+        ? settingsCache.bubble_y
+        : (DISP === "bubble" ? sy0 + 90 : DISP === "pill" ? sy0 + (geo.notch_height || 30) + 6 : sy0);
+      d = { sx: e.screenX, sy: e.screenY, wx, wy, dockedNotch: DISP === "notch" && !hasCustom, moved: false, pid: e.pointerId };
     });
     island.addEventListener("pointermove", (e) => {
       if (!d) return;
       const dx = e.screenX - d.sx, dy = e.screenY - d.sy;
-      if (!d.moved && Math.hypot(dx, dy) < 5) return;
+      const minMove = d.dockedNotch ? 16 : 6;
+      if (!d.moved && Math.hypot(dx, dy) < minMove) return;
       if (!d.moved) {
         try { island.setPointerCapture(d.pid); } catch (_) {} // chỉ bắt chuột khi đã thật sự kéo, để cú bấm thường vẫn mở được bảng
         clearTimeout(modeTimer);
@@ -832,10 +850,19 @@
     const endDrag = () => {
       if (d && d.moved && d.last) {
         const [nx, ny] = d.last;
+        const curW = sizeOf(mode)[0] + MARGIN_X * 2;
+        const scrCenter = (geo.screen_x || 0) + (geo.screen_width || 1440) / 2;
+        const nearTopNotch = DISP === "notch" && ny < 36 && Math.abs((nx + curW / 2) - scrCenter) < 60;
         api("move_bubble", { x: nx, y: ny, save: true });
-        settingsCache.bubble_x = DISP === "bubble" ? nx : Math.round(nx + (sizeOf(mode)[0] + MARGIN_X * 2) / 2);
-        settingsCache.bubble_y = ny;
-        document.body.classList.add("floating-pos");
+        if (nearTopNotch) {
+          settingsCache.bubble_x = 0;
+          settingsCache.bubble_y = 0;
+          document.body.classList.remove("floating-pos");
+        } else {
+          settingsCache.bubble_x = DISP === "bubble" ? nx : Math.round(nx + curW / 2);
+          settingsCache.bubble_y = ny;
+          document.body.classList.add("floating-pos");
+        }
         updateBar();
         if (tab === "threads" && embedShown) setTimeout(placeEmbed, 40);
         if (tab === "settings" && mode === "expanded") viewSettings();
