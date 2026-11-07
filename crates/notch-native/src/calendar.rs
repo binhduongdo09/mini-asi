@@ -33,8 +33,8 @@ mod imp {
     /// Xin quyền đọc/ghi Lịch (hiện hộp thoại của macOS ở lần đầu).
     pub fn ensure_access() -> Result<(), String> {
         let status = unsafe { EKEventStore::authorizationStatusForEntityType(EKEntityType::Event) };
-        // FullAccess (= Authorized cũ) = 3
-        if status.0 == 3 {
+        // FullAccess (= Authorized cũ) = 3, WriteOnly = 4
+        if status.0 == 3 || status.0 == 4 {
             return Ok(());
         }
         if status == EKAuthorizationStatus::Denied || status == EKAuthorizationStatus::Restricted {

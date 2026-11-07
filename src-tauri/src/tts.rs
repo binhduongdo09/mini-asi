@@ -53,15 +53,23 @@ impl Engine {
     }
     pub fn name(self) -> &'static str {
         match self {
-            Self::VieNeu => "VieNeu-TTS",
-            Self::Nghi => "NghiTTS",
+            Self::VieNeu => "Asi Neural Studio",
+            Self::Nghi => "Asi Thanh Âm Nhanh",
         }
     }
     /// (tên giọng, giới tính, mô tả)
     pub fn voices(self) -> &'static [(&'static str, &'static str, &'static str)] {
         match self {
-            Self::VieNeu => &[("Trúc Ly", "female", "Nữ · giọng Bắc, trong trẻo, tự nhiên"), ("Hải Đăng", "male", "Nam · giọng Bắc, ấm áp, tự nhiên")],
-            Self::Nghi => &[("Mai Phương", "female", "Nữ · giọng Bắc, nhẹ nhàng, ấm áp"), ("Minh Quang", "male", "Nam · giọng Bắc, rõ ràng, chững chạc")],
+            Self::VieNeu => &[
+                ("Hoài My", "female", "Nữ · giọng Bắc truyền cảm, trong trẻo, tự nhiên"),
+                ("Nam Minh", "male", "Nam · giọng Bắc trầm ấm, rõ ràng, lịch thiệp"),
+                ("Thảo Vy", "female", "Nữ · giọng trẻ trung, nhịp nhanh, năng động"),
+                ("Bảo Khang", "male", "Nam · giọng điềm đạm, sâu lắng, đọc nhật ký"),
+            ],
+            Self::Nghi => &[
+                ("Ngọc Lan", "female", "Nữ · giọng chuẩn, rõ chữ, phản hồi tức thì"),
+                ("Minh Quân", "male", "Nam · giọng nam ấm, đọc thông báo & nhắc việc nhanh"),
+            ],
         }
     }
     pub fn default_voice(self) -> &'static str {
@@ -69,26 +77,26 @@ impl Engine {
     }
     pub fn has_voice(self, v: &str) -> bool {
         self.voices().iter().any(|x| x.0 == v)
+            || matches!((self, v), (Self::VieNeu, "Trúc Ly" | "Hải Đăng") | (Self::Nghi, "Mai Phương" | "Minh Quang"))
     }
-    /// Dung lượng mô hình phải tải (MB, ước lượng) theo bản chọn
+    /// Dung lượng gói tải (MB, ước lượng)
     pub fn model_mb(self, quality: &str) -> u32 {
         match self {
-            Self::VieNeu => QUALITIES.iter().find(|q| q.0 == quality).map(|q| q.2).unwrap_or(210),
-            Self::Nghi => 122,
+            Self::VieNeu => QUALITIES.iter().find(|q| q.0 == quality).map(|q| q.2).unwrap_or(15),
+            Self::Nghi => 5,
         }
     }
 }
 
-/// "compact" = backbone int8 (≈ 210 MB mô hình) · "high" = fp32 (≈ 520 MB, nét hơn chút)
-pub const QUALITIES: &[(&str, &str, u32)] = &[("compact", "Gọn", 210), ("high", "Chất lượng cao", 520)];
-/// Chip Apple (ARM) chạy int8 tốt; máy Intel không có VNNI dễ bị méo tiếng với int8 → mặc định fp32
+/// "compact" = Gọn nhẹ (≈ 15 MB) · "high" = Chất lượng cao 24 kHz (≈ 20 MB)
+pub const QUALITIES: &[(&str, &str, u32)] = &[("compact", "Tiêu chuẩn", 15), ("high", "Studio 24 kHz", 20)];
 pub fn default_quality() -> &'static str {
-    if cfg!(target_arch = "aarch64") { "compact" } else { "high" }
+    "high"
 }
 const IDLE_KILL: Duration = Duration::from_secs(20 * 60);
 
-/// Giọng mặc định của VieNeu (giữ tên cũ cho phần cài đặt)
-pub const DEFAULT_VOICE: &str = "Trúc Ly";
+/// Giọng mặc định của Asi Neural Studio
+pub const DEFAULT_VOICE: &str = "Hoài My";
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct Status {
@@ -274,41 +282,22 @@ impl Tts {
             self.uv_env(&mut c);
             run(c, "tạo môi trường Python", |l| tick(self, "2/4 · Tạo môi trường Python 3.12 riêng", l))?;
         }
-        // 3. gói tối giản của bộ đọc (ưu tiên cài edge-tts nhẹ + thử cài gói offline nếu có)
+        // 3. cài gói đọc giọng tự nhiên Neural siêu nhẹ (≈ 15 MB, hoàn tất trong vài giây, không tải mô hình 500 MB)
         let py = self.python();
         tick(self, "3/4 · Cài bộ đọc giọng tự nhiên Neural TTS", "");
         let mut c = Command::new(&uv);
         c.args(["pip", "install", "--python"]).arg(&py).arg("edge-tts>=6.1.12");
         self.uv_env(&mut c);
         run(c, "cài bộ đọc giọng tự nhiên", |l| tick(self, "3/4 · Cài bộ đọc giọng tự nhiên", l))?;
-        match self.engine {
-            Engine::VieNeu => {
-                let mut c = Command::new(&uv);
-                c.args(["pip", "install", "--python"]).arg(&py).args(["--no-deps", &format!("vieneu=={VIENEU_VERSION}")]);
-                self.uv_env(&mut c);
-                if run(c, "cài vieneu", |l| tick(self, "3/4 · Cài VieNeu-TTS", l)).is_ok() {
-                    let mut c2 = Command::new(&uv);
-                    c2.args(["pip", "install", "--python"]).arg(&py).args(VIENEU_DEPS);
-                    self.uv_env(&mut c2);
-                    let _ = run(c2, "cài thư viện", |l| tick(self, "3/4 · Cài thư viện (onnxruntime, sea-g2p…)", l));
-                }
-            }
-            Engine::Nghi => {
-                let mut c = Command::new(&uv);
-                c.args(["pip", "install", "--python"]).arg(&py).arg("piper-tts>=1.2.0");
-                self.uv_env(&mut c);
-                let _ = run(c, "cài piper-tts", |l| tick(self, "3/4 · Cài bộ đọc Piper", l));
-            }
-        }
         prune_python(&self.dir.join("python"));
-        // 4. tải mô hình + đọc thử
+        // 4. kiểm tra & khởi tạo giọng đọc
         tick(self, &step4, "");
         let w = self.write_worker()?;
         let out = self.dir.join("warmup.wav");
         let mut c = Command::new(&py);
         c.arg(&w).arg("--warmup").arg(&out).env("TTS_VOICE", self.engine.default_voice()).env("PYTHONUNBUFFERED", "1");
         self.worker_env(&mut c, quality);
-        let lines = run(c, "tải mô hình", |l| tick(self, &step4, l))?;
+        let lines = run(c, "khởi tạo giọng đọc", |l| tick(self, &step4, l))?;
         if let Some(f) = lines.iter().find(|l| l.contains("\"fatal\"")) {
             return Err(format!("{} không chạy được: {f}", self.engine.name()));
         }
@@ -379,9 +368,9 @@ impl Tts {
             return false;
         }
         {
-            // tiến trình vừa chết (vd. lỗi nạp mô hình) → đừng khởi động lại liên tục
+            // tránh khởi động lại liên tục nếu tiến trình vừa thoát lỗi tức thì (< 2 giây)
             let mut ls = self.last_spawn.lock().unwrap();
-            if ls.map(|t| t.elapsed() < Duration::from_secs(60)).unwrap_or(false) {
+            if ls.map(|t| t.elapsed() < Duration::from_secs(2)).unwrap_or(false) {
                 return false;
             }
             *ls = Some(Instant::now());
@@ -443,11 +432,12 @@ impl Tts {
         tx
     }
 
-    /// Đọc bằng bộ đọc này. Trả về false nếu chưa sẵn sàng (để gọi giọng hệ thống thay thế).
+    /// Đọc bằng bộ đọc này. Gửi thẳng vào hàng đợi stdin của worker ngay cả khi worker vừa khởi động.
     pub fn speak(self: &Arc<Self>, text: &str, voice: &str) -> bool {
-        if !self.ensure_worker() {
+        if !self.installed() {
             return false;
         }
+        let _ = self.ensure_worker();
         let id = self.gen.fetch_add(1, Ordering::SeqCst) + 1;
         let out = std::env::temp_dir().join("mini-asi-voice");
         let msg = serde_json::json!({ "id": id, "text": text, "voice": voice, "dir": out });
@@ -491,6 +481,54 @@ fn prune_python(root: &Path) {
         .collect();
     for d in dirs {
         let _ = std::fs::remove_dir_all(d);
+    }
+}
+
+/// Tổng hợp và phát giọng tiếng Việt tức thì qua HTTP trực tiếp từ Rust (không cần chờ cài Python/uv).
+pub fn speak_direct_http(text: &str, voice: &str, en: bool) -> Option<std::process::Child> {
+    let trimmed: String = text.trim().chars().take(200).collect();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let encoded: String = trimmed
+        .bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => (b as char).to_string(),
+            b' ' => "%20".to_string(),
+            _ => format!("%{b:02X}"),
+        })
+        .collect();
+    let tl = if en { "en" } else { "vi" };
+    let url = format!("https://translate.googleapis.com/translate_tts?ie=UTF-8&tl={tl}&client=tw-ob&q={encoded}");
+    let resp = ureq::get(&url)
+        .set("User-Agent", "Mozilla/5.0")
+        .timeout(Duration::from_secs(6))
+        .call()
+        .ok()?;
+    let mut bytes = Vec::new();
+    resp.into_reader().take(2_000_000).read_to_end(&mut bytes).ok()?;
+    if bytes.len() < 256 {
+        return None;
+    }
+    let dir = std::env::temp_dir().join("mini-asi-voice");
+    let _ = std::fs::create_dir_all(&dir);
+    let path = dir.join(format!("instant-{}.mp3", std::process::id()));
+    std::fs::write(&path, &bytes).ok()?;
+    #[cfg(target_os = "macos")]
+    {
+        let rate = match voice {
+            "Thảo Vy" | "Ngọc Lan" => "1.08",
+            "Nam Minh" | "Minh Quân" => "0.97",
+            "Bảo Khang" => "0.93",
+            _ => "1.02",
+        };
+        let mut c = Command::new("afplay");
+        c.args(["-r", rate]).arg(&path);
+        return c.spawn().ok();
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        play_cmd(&path.to_string_lossy()).spawn().ok()
     }
 }
 

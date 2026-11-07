@@ -112,38 +112,79 @@
   const DISP = ["notch", "pill", "bubble"].includes(early.display_mode) ? early.display_mode : "notch";
   document.body.classList.add("disp-" + DISP);
   const ON_NOTCH = DISP === "notch" && geo.has_notch;
-  // Độ rộng mỗi bên tai thỏ: gọn (mặc định) · vừa · rộng — chọn trong Cài đặt › Chế độ chờ
-  const WING = { m: 112, l: 150 }[early.wing_size] || 76;
-  const BAR = Math.round(ON_NOTCH ? geo.notch_height : DISP === "notch" ? 30 : 34);
-  const BASE_W = Math.round(ON_NOTCH ? geo.notch_width + WING * 2 : DISP === "bubble" ? 210 : 210);
-  root.style.setProperty("--bar-h", BAR + "px");
-  root.style.setProperty("--gap-w", (ON_NOTCH ? Math.round(geo.notch_width) : 0) + "px");
+  let settingsCache = { ...early };
+  let WING = 76;
+  let BAR = Math.round(ON_NOTCH ? geo.notch_height : DISP === "notch" ? 30 : 34);
+  let BASE_W = Math.round(ON_NOTCH ? geo.notch_width + WING * 2 : 210);
   if (!ON_NOTCH) island.classList.add("virtual");
   if (early.bubble_x > 0 || early.bubble_y > 0) document.body.classList.add("floating-pos");
 
+  function applyIconSize(sz) {
+    const small = (sz || settingsCache.icon_size || "large") === "small";
+    document.body.classList.toggle("icons-sm", small);
+    document.body.classList.toggle("icons-lg", !small);
+  }
+  applyIconSize(early.icon_size);
+
+  function currentWingPx(st = settingsCache) {
+    const ws = st.wing_size || "s";
+    if (ws === "hidden") return 0;
+    if (ws === "custom") return Math.max(0, Math.min(220, Math.round(Number(st.notch_w) || 0)));
+    return { hidden: 0, xs: 28, s: 76, m: 112, l: 150 }[ws] ?? 76;
+  }
+
   const SIZES = {
-    collapsed: DISP === "bubble" ? [58, 58] : [BASE_W, BAR],
-    peek: [Math.max(BASE_W + 120, 480), BAR + 110],
-    alert: [Math.max(BASE_W + 80, 460), BAR + 120],
-    drop: [Math.max(BASE_W + 130, 500), BAR + 132],
-    expanded: [Math.max(BASE_W + 120, 700), 470],
-    listen: [Math.max(BASE_W + 80, 440), BAR + 84],
-    reply: [Math.max(BASE_W + 140, 500), BAR + 250],
+    collapsed: [BASE_W, BAR],
+    peek: [500, BAR + 150],
+    alert: [460, BAR + 120],
+    drop: [500, BAR + 132],
+    expanded: [700, 490],
+    listen: [440, BAR + 84],
+    reply: [500, BAR + 250],
   };
+
+  function applyNotchGeometry(st = settingsCache) {
+    WING = currentWingPx(st);
+    const defaultBar = Math.round(ON_NOTCH ? geo.notch_height : DISP === "notch" ? 30 : 34);
+    const customH = Math.round(Number(st.notch_h) || 0);
+    BAR = WING === 0 && ON_NOTCH ? Math.max(18, Math.round(geo.notch_height - 2)) : customH >= 20 ? Math.min(54, customH) : defaultBar;
+    BASE_W = DISP === "bubble"
+      ? 58
+      : ON_NOTCH
+        ? Math.round(geo.notch_width + WING * 2)
+        : Math.max(90, Math.round(130 + WING * 1.4));
+    const hiddenBehindNotch = DISP !== "bubble" && WING <= 2;
+    island.classList.toggle("notch-hidden", hiddenBehindNotch);
+    root.style.setProperty("--bar-h", BAR + "px");
+    root.style.setProperty("--gap-w", (ON_NOTCH ? Math.round(geo.notch_width) : 0) + "px");
+    const smIcons = (st.icon_size || "large") === "small";
+    SIZES.collapsed = DISP === "bubble" ? [58, 58] : [BASE_W, BAR];
+    SIZES.peek = [Math.max(BASE_W + 120, smIcons ? 480 : 520), BAR + (smIcons ? 108 : 152)];
+    SIZES.alert = [Math.max(BASE_W + 80, 460), BAR + 120];
+    SIZES.drop = [Math.max(BASE_W + 130, 500), BAR + 132];
+    SIZES.expanded = [Math.max(BASE_W + 120, 700), 490];
+    SIZES.listen = [Math.max(BASE_W + 80, 440), BAR + 84];
+    SIZES.reply = [Math.max(BASE_W + 140, 500), BAR + 250];
+  }
+  applyNotchGeometry(early);
+
   const MARGIN_X = 18, MARGIN_B = 20;
   const MAX_W = Math.max(600, Math.round(geo.screen_width - 60));
   const MAX_H = Math.max(420, Math.round((geo.screen_height || 900) - 40));
   const clampW = (w) => Math.round(Math.min(Math.max(w, Math.max(BASE_W + 40, 460)), MAX_W));
   const clampH = (h) => Math.round(Math.min(Math.max(h, 360), MAX_H));
-  let settingsCache = { ...early };
   let peekCam = { active: false, stream: null };
+  let showPeekSizer = false;
   // Nhúng Threads vào bảng: hiện hỗ trợ macOS (Windows/Linux mở cửa sổ riêng)
   // Nhúng Threads vào bảng: đang thử nghiệm (macOS) — mặc định dùng cửa sổ Threads riêng
   const EMBED_OK = geo.platform === "macos" || new URLSearchParams(location.search).has("embed");
   const threadsInline = () => EMBED_OK && DISP !== "bubble" && tab === "threads" && (settingsCache.threads_embed_beta || new URLSearchParams(location.search).has("embed")) && !window.__thApi;
   // Kích thước bảng: theo tab, có thể kéo giãn & được nhớ lại
   function sizeOf(m) {
-    if (m === "peek" && peekCam.active) return [Math.max(BASE_W + 130, 480), BAR + 246];
+    if (m === "peek") {
+      const baseH = SIZES.peek[1] + (showPeekSizer ? 40 : 0) + (peekCam.active ? 136 : 0);
+      return [SIZES.peek[0], baseH];
+    }
     if (m !== "expanded") return SIZES[m];
     if (threadsInline()) {
       return [clampW(settingsCache.threads_w || Math.max(BASE_W + 120, 470)), clampH(settingsCache.threads_h || Math.min(MAX_H, 860))];
@@ -354,14 +395,19 @@
 
   function peekBarHtml() {
     const m = mediaQuick;
-    const trackText = m.title
-      ? `<b>${esc(m.title)}</b>${m.artist ? ` · <span>${esc(m.artist)}</span>` : ""}`
-      : `<span>${m.app ? esc(m.app) : "Điều khiển nhạc"}</span>`;
+    const s = status || {};
+    const trackTitle = m.title ? esc(m.title) : (m.app ? esc(m.app) : "Không có nhạc đang phát");
+    const trackSub = m.title
+      ? esc([m.artist, m.app].filter(Boolean).join(" · ") || "Đang phát")
+      : "Bấm ▶ để phát nhạc từ Spotify / Apple Music";
     const micMuted = !!m.mic_muted;
     const camOn = !!peekCam.active;
-    return `<div class="peek-media">
+    const focusOn = !!s.focus_until;
+    return `<div class="ios-media-card">
+        <div class="ios-art ${m.playing ? "playing" : ""}" title="${esc(m.app || "Media")}">${I.music}</div>
         <div class="peek-track" title="${esc(m.title ? `${m.title} — ${m.artist || m.app}` : "Điều khiển trình phát nhạc/video hệ thống")}">
-          ${m.playing ? '<span class="playing-dot"></span>' : I.music}${trackText}
+          <b>${trackTitle}</b>
+          <span>${trackSub}</span>
         </div>
         <div class="peek-mbtns">
           <button class="peek-mbtn" data-peek="prev" title="Bài trước">${I.prev}</button>
@@ -370,34 +416,59 @@
           <button class="peek-mbtn ${m.output_muted ? "muted" : ""}" data-peek="mute-out" title="${m.output_muted ? "Loa đang tắt tiếng — bấm để bật" : `Âm lượng loa ${m.output_volume}% — bấm để tắt tiếng`}">${m.output_muted ? I.volOff : I.vol}</button>
         </div>
       </div>
-      <div class="peek-sep"></div>
-      <div class="peek-actions">
-        <button class="peek-btn ${micMuted ? "danger" : "on"}" data-peek="mic" title="${micMuted ? "Micro hệ thống đang tắt tiếng — bấm để bật lại" : `Micro đang bật (${m.mic_volume}%) — bấm để tắt tiếng Micro`}">
-          ${micMuted ? I.micOff : I.mic}<span>${micMuted ? "Mic tắt" : "Mic"}</span>
+      <div class="ios-grid">
+        <button class="ios-tile ${micMuted ? "mic-off" : "mic-on"}" data-peek="mic" title="${micMuted ? "Micro hệ thống đang tắt tiếng — bấm để bật lại" : `Micro đang bật (${m.mic_volume}%) — bấm để tắt tiếng Micro`}">
+          <span class="ios-ic">${micMuted ? I.micOff : I.mic}</span>
+          <span class="ios-meta"><b>Micro</b><span>${micMuted ? "Đang tắt" : `Đang bật · ${m.mic_volume}%`}</span></span>
         </button>
-        <button class="peek-btn ${camOn ? "cam-on" : ""}" data-peek="cam" title="${camOn ? "Camera đang bật trên tai thỏ — bấm để tắt" : "Bật gương Camera nhanh trên tai thỏ"}">
-          ${I.cam}<span>${camOn ? "Tắt Cam" : "Cam"}</span>
+        <button class="ios-tile ${camOn ? "cam-on" : "cam-off"}" data-peek="cam" title="${camOn ? "Camera đang bật trên tai thỏ — bấm để tắt" : "Bật gương Camera nhanh trên tai thỏ"}">
+          <span class="ios-ic">${camOn ? I.camOff : I.cam}</span>
+          <span class="ios-meta"><b>Camera</b><span>${camOn ? "Đang soi gương" : "Gương nhanh"}</span></span>
         </button>
-        <button class="peek-btn blue" data-peek="airdrop" title="Chọn file gửi AirDrop (hoặc kéo thả file thẳng vào nửa trái tai thỏ)">
-          ${I.airdrop}<span>AirDrop</span>
+        <button class="ios-tile airdrop" data-peek="airdrop" title="Chọn file gửi AirDrop (hoặc kéo thả file vào nửa trái tai thỏ)">
+          <span class="ios-ic">${I.airdrop}</span>
+          <span class="ios-meta"><b>AirDrop</b><span>Gửi / Thả file</span></span>
+        </button>
+        <button class="ios-tile ${focusOn ? "focus-on" : "focus-off"}" data-peek="focus" title="${focusOn ? "Đang bật chế độ Tập trung — bấm để dừng" : "Bật nhanh Tập trung 25 phút"}">
+          <span class="ios-ic">${I.target}</span>
+          <span class="ios-meta"><b>Tập trung</b><span>${focusOn ? "Đang chạy" : "25 phút"}</span></span>
         </button>
       </div>`;
+  }
+
+  function peekSizerHtml() {
+    if (!showPeekSizer) return "";
+    const curW = currentWingPx(settingsCache);
+    return `<div class="peek-size-bar">
+      <span class="muted">↔ Cỡ tai thỏ:</span>
+      <button class="peek-pill-btn ${curW === 0 ? "on" : ""}" data-peek="wing-preset" data-w="hidden" title="Thu nhỏ hoàn toàn vào sau tai thỏ vật lý">Ẩn sau tai thỏ</button>
+      <input type="range" id="peekWingRange" min="0" max="180" step="2" value="${curW}" title="Kéo về 0 để ẩn hoàn toàn sau tai thỏ" />
+      <span id="peekWingVal" style="min-width:52px;text-align:right;font-variant-numeric:tabular-nums">${curW === 0 ? "Ẩn kín" : curW + " px"}</span>
+    </div>`;
   }
 
   function renderPeek() {
     const s = status;
     if (!s) return;
     const pk = $("#peek");
+    const smIcons = (settingsCache.icon_size || "large") === "small";
     // Nếu đang mở gương Camera trực tiếp, chỉ cập nhật phần chữ & thanh nút để không làm giật luồng video
     const topEl = pk.querySelector(".peek-top");
     const barEl = pk.querySelector(".peek-bar");
-    if (peekCam.active && topEl && barEl) {
+    if (peekCam.active && topEl && barEl && !showPeekSizer) {
       topEl.innerHTML = peekTopHtml(s);
       barEl.innerHTML = peekBarHtml();
       return;
     }
-    pk.innerHTML = `<div class="peek-top" title="Bấm để mở bảng điều khiển">${peekTopHtml(s)}</div>
+    pk.innerHTML = `<div class="peek-head">
+        <div class="peek-top" title="Bấm để mở bảng điều khiển">${peekTopHtml(s)}</div>
+        <div class="peek-tools">
+          <button class="peek-pill-btn" data-peek="toggle-sizer" title="Chỉnh kích thước tai thỏ hoặc ẩn hoàn toàn sau tai thỏ">↔ ${currentWingPx() === 0 ? "Đang ẩn" : "Cỡ tai thỏ"}</button>
+          <button class="peek-pill-btn" data-peek="icon-size" title="Đổi giữa Icon iOS To (có hình + chữ) và Icon Nhỏ">${smIcons ? "⊞ Icon To" : "⊟ Icon Nhỏ"}</button>
+        </div>
+      </div>
       <div class="peek-bar">${peekBarHtml()}</div>
+      ${peekSizerHtml()}
       ${peekCam.active ? `<div class="peek-cam-wrap" id="peekCamWrap">
         <video id="peekCamVideo" autoplay playsinline muted></video>
         <div class="peek-cam-bar">
@@ -408,6 +479,22 @@
           </div>
         </div>
       </div>` : ""}`;
+    const rng = $("#peekWingRange");
+    if (rng) {
+      rng.addEventListener("input", (e) => {
+        const val = Number(e.target.value);
+        settingsCache.wing_size = val === 0 ? "hidden" : "custom";
+        settingsCache.notch_w = val;
+        const lbl = $("#peekWingVal");
+        if (lbl) lbl.textContent = val === 0 ? "Ẩn kín" : val + " px";
+        applyNotchGeometry(settingsCache);
+        updateBar();
+      });
+      rng.addEventListener("change", async () => {
+        await api("save_settings", { settings: settingsCache });
+        toast(currentWingPx() === 0 ? "Đã ẩn hoàn toàn sau tai thỏ — rê chuột lên mép trên để mở" : "Đã lưu kích thước tai thỏ");
+      });
+    }
     if (peekCam.active && peekCam.stream) {
       const v = $("#peekCamVideo");
       if (v && v.srcObject !== peekCam.stream) v.srcObject = peekCam.stream;
@@ -498,6 +585,43 @@
       toast("📸 Đã chụp vào Clipboard — nhấn ⌘V để dán!");
       return;
     }
+    if (act === "focus") {
+      if (status && status.focus_until) {
+        await api("focus_stop");
+        toast("Đã dừng hẹn giờ Tập trung");
+      } else {
+        await api("focus_start", { minutes: 25 });
+        toast("🎯 Đã bật Tập trung 25 phút");
+      }
+      status = await api("get_status");
+      renderPeek();
+      updateBar();
+      return;
+    }
+    if (act === "icon-size") {
+      settingsCache.icon_size = (settingsCache.icon_size || "large") === "small" ? "large" : "small";
+      applyIconSize(settingsCache.icon_size);
+      applyNotchGeometry(settingsCache);
+      await api("save_settings", { settings: settingsCache });
+      await setMode("peek", { force: true });
+      toast(settingsCache.icon_size === "small" ? "Đã chuyển sang Icon iOS Nhỏ" : "Đã chuyển sang Icon iOS To");
+      return;
+    }
+    if (act === "toggle-sizer") {
+      showPeekSizer = !showPeekSizer;
+      await setMode("peek", { force: true });
+      return;
+    }
+    if (act === "wing-preset") {
+      settingsCache.wing_size = "hidden";
+      settingsCache.notch_w = 0;
+      applyNotchGeometry(settingsCache);
+      await api("save_settings", { settings: settingsCache });
+      renderPeek();
+      updateBar();
+      toast("Đã ẩn hoàn toàn sau tai thỏ — rê chuột vào tai thỏ để mở");
+      return;
+    }
     if (act === "airdrop") {
       const paths = await api("pick_files");
       if (!paths || !paths.length) return;
@@ -510,7 +634,7 @@
     }
   }
 
-  // ───────── Kéo giãn bảng ─────────
+  // ───────── Kéo giãn bảng & chỉnh kích thước Tai thỏ ─────────
   (function grips() {
     for (const cls of ["grip", "grip-corner l", "grip-corner r"]) {
       const g = document.createElement("div");
@@ -518,8 +642,24 @@
       g.title = "Kéo để đổi kích thước";
       island.appendChild(g);
     }
-    let drag = null, raf = 0;
+    for (const side of ["l", "r"]) {
+      const ne = document.createElement("div");
+      ne.className = `notch-edge ${side}`;
+      ne.title = "Kéo cạnh tai thỏ để chỉnh độ rộng (kéo sát vào giữa để ẩn hoàn toàn sau tai thỏ)";
+      island.appendChild(ne);
+    }
+    let drag = null, notchDrag = null, raf = 0;
     island.addEventListener("pointerdown", (e) => {
+      const ne = e.target.closest(".notch-edge");
+      if (ne && (mode === "collapsed" || mode === "peek") && DISP !== "bubble") {
+        e.preventDefault();
+        e.stopPropagation();
+        ne.setPointerCapture(e.pointerId);
+        const startWing = currentWingPx();
+        notchDrag = { ne, x: e.screenX, side: ne.classList.contains("l") ? -1 : 1, startWing, lastWing: startWing };
+        island.classList.add("resizing");
+        return;
+      }
       const g = e.target.closest(".grip, .grip-corner");
       if (!g || mode !== "expanded") return;
       e.preventDefault();
@@ -531,6 +671,16 @@
       api("set_frame", { width: MAX_W + MARGIN_X * 2, height: MAX_H + MARGIN_B });
     });
     island.addEventListener("pointermove", (e) => {
+      if (notchDrag) {
+        const delta = notchDrag.side * (e.screenX - notchDrag.x);
+        const nw = Math.max(0, Math.min(180, Math.round(notchDrag.startWing + delta)));
+        notchDrag.lastWing = nw;
+        settingsCache.notch_w = nw;
+        settingsCache.wing_size = nw <= 2 ? "hidden" : nw <= 34 ? "xs" : nw <= 60 ? "s" : nw <= 95 ? "m" : "l";
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => applyNotchGeometry());
+        return;
+      }
       if (!drag) return;
       const nh = clampH(drag.h + (e.screenY - drag.y));
       const nw = drag.corner ? clampW(drag.w + 2 * drag.side * (e.screenX - drag.x)) : drag.w;
@@ -543,6 +693,17 @@
       });
     });
     const end = async () => {
+      if (notchDrag) {
+        const nw = notchDrag.lastWing;
+        notchDrag = null;
+        island.classList.remove("resizing");
+        settingsCache.notch_w = nw;
+        settingsCache.wing_size = nw <= 2 ? "hidden" : nw <= 34 ? "xs" : nw <= 60 ? "s" : nw <= 95 ? "m" : "l";
+        applyNotchGeometry();
+        await api("save_settings", { settings: settingsCache });
+        toast(nw <= 2 ? "Đã ẩn hoàn toàn sau tai thỏ — rê chuột lên mép trên để mở lại" : `Độ rộng cánh tai thỏ: ${nw} px`);
+        return;
+      }
       if (!drag) return;
       const { nw, nh } = drag;
       drag = null;
@@ -559,6 +720,14 @@
     island.addEventListener("pointerup", end);
     island.addEventListener("pointercancel", end);
     island.addEventListener("dblclick", (e) => {
+      if (e.target.closest(".notch-edge")) {
+        settingsCache.notch_w = currentWingPx() <= 2 ? 52 : 0;
+        settingsCache.wing_size = settingsCache.notch_w === 0 ? "hidden" : "s";
+        applyNotchGeometry();
+        api("save_settings", { settings: settingsCache });
+        toast(settingsCache.notch_w === 0 ? "Đã ẩn hoàn toàn sau tai thỏ" : "Đã khôi phục kích thước tai thỏ");
+        return;
+      }
       if (!e.target.closest(".grip, .grip-corner")) return;
       // bấm đúp vào tay kéo → về kích thước mặc định
       if (threadsInline()) { settingsCache.threads_w = 0; settingsCache.threads_h = 0; } else { settingsCache.panel_w = 0; settingsCache.panel_h = 0; }
@@ -598,7 +767,7 @@
     island.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
       // Bỏ qua khi bấm vào các nút chức năng, tay kéo giãn hoặc ô nhập liệu
-      if (e.target.closest("[data-act], .grip, .grip-corner, button, input, select, textarea, a, label")) return;
+      if (e.target.closest("[data-act], .grip, .grip-corner, .notch-edge, button, input, select, textarea, a, label")) return;
       // Khi đang mở bảng (expanded / alert / reply / listen): kéo ở thanh tiêu đề trên cùng (#bar) để di chuyển popup
       if (mode !== "collapsed" && mode !== "peek" && !e.target.closest("#bar")) return;
       d = { sx: e.screenX, sy: e.screenY, wx: e.screenX - e.clientX, wy: e.screenY - e.clientY, moved: false, pid: e.pointerId };
@@ -677,7 +846,15 @@
       if (!document.hasFocus() && !hovering && !voice.active) setMode("collapsed");
     }, 450);
   });
-  window.addEventListener("focus", () => clearTimeout(modeTimer));
+  window.addEventListener("focus", () => {
+    clearTimeout(modeTimer);
+    if (mode === "expanded" && (tab === "settings" || tab === "all")) {
+      setTimeout(() => {
+        if (tab === "settings") viewSettings();
+        else if (tab === "all") viewHome();
+      }, 150);
+    }
+  });
   on("toggle", () => (mode === "expanded" ? setMode("collapsed") : setMode("expanded")));
   on("open-tab", (id) => {
     tab = { open: tab, clean: "clean", settings: "settings", clips: "clips", journal: "journal", threads: "threads" }[id] || tab;
@@ -1001,7 +1178,7 @@
   }
   function renderTabs() {
     $("#tabs").innerHTML = visibleTabs().map(([id, name, ic, c]) =>
-      `<button class="tab ${tab === id ? "active" : ""}" data-tab="${id}" style="--tc:${c}" title="${name}">${ic}<span class="lbl">${name}</span>${(id === "tasks" && status && status.lateness.overdue) || (id === "threads" && status && status.threads_unread) || (id === "settings" && status && status.update_version) ? '<span class="dot"></span>' : ""}</button>`
+      `<button class="tab ${tab === id ? "active" : ""}" data-tab="${id}" style="--tc:${c}" title="${name}"><span class="tab-ic">${ic}</span><span class="lbl">${name}</span>${(id === "tasks" && status && status.lateness.overdue) || (id === "threads" && status && status.threads_unread) || (id === "settings" && status && status.update_version) ? '<span class="dot"></span>' : ""}</button>`
     ).join("");
   }
   $("#tabs").addEventListener("click", (e) => {
@@ -1286,27 +1463,45 @@
     const wrote = jv && (jv.entry.answers.some((a) => a.a.trim()) || jv.entry.text.trim());
     const missingList = perms.filter((p) => p.required && p.state !== "granted" && p.state !== "unknown");
     const missing = missingList.length;
-    const tile = (id, ic, name, value, sub, cls = "") => `<button class="tile ${cls}" data-go="${id}">
+    const tile = (id, ic, name, value, sub, tc, cls = "") => `<button class="tile ${cls}" data-go="${id}" style="--tc:${tc}">
         <span class="tile-ic">${ic}</span><span class="tile-name">${name}</span>
         <b class="tile-val">${value}</b><span class="tile-sub">${sub}</span></button>`;
+    const isSmall = settingsCache.icon_size === "small";
     $("#view").innerHTML = `
       ${updateBannerHtml()}
+      <div class="row" style="margin-bottom:8px">
+        <span class="small muted grow">📱 Biểu tượng ứng dụng kiểu iOS</span>
+        <div class="seg">
+          <button class="${!isSmall ? "on" : ""}" data-icon-size="large">Icon To</button>
+          <button class="${isSmall ? "on" : ""}" data-icon-size="small">Icon Nhỏ</button>
+        </div>
+      </div>
       ${missing ? `<div class="card perm-banner"><div class="row"><span class="grow"><b>🔐 Còn thiếu: ${missingList.map((p) => p.name).join(", ")}</b>
         <span class="muted small"> — cấp một lần để mọi tính năng chạy trơn tru</span></span>
         <button class="btn sm primary" data-go="perm">Cấp tất cả quyền</button></div></div>` : ""}
       <div class="tiles">
-        ${tile("tasks", I.tasks, "Việc", s.open_count, s.lateness.overdue ? `<span style="color:var(--red)">${s.lateness.overdue} việc trễ</span>` : s.next ? "Tiếp: " + esc(s.next.title) : "Không có việc gấp", s.lateness.overdue ? "alert" : "")}
-        ${tile("notes", I.note, "Ghi chú", notesL.length, notesL[0] ? esc(notesL[0].text.split("\n")[0].slice(0, 28)) : "Ghi nhanh bằng chữ hoặc giọng nói")}
-        ${tile("clips", I.clip, "Clipboard", clipsL.length, "Đã chép · ⌃⇧V mở nhanh")}
-        ${tile("journal", I.book, "Nhật ký", wrote ? "✓" : "—", wrote ? `Đã viết hôm nay${jv.streak ? " · 🔥 " + jv.streak : ""}` : "Kể Asi nghe về hôm nay")}
-        ${tile("threads", I.at, "Threads", s.threads_unread || "@", s.threads_unread ? `${s.threads_unread} phản hồi mới` : "Lướt bảng tin")}
-        ${tile("files", I.file, "File", "ZIP", "Nén · giải nén · PDF")}
-        ${tile("clean", I.broom, "Dọn máy", s.disk ? Math.round(s.disk.free_percent) + "%" : "—", s.disk ? bytes(s.disk.free_bytes) + " trống" : "Quét rác", s.disk && s.disk.level !== "ok" ? "warn" : "")}
-        ${tile("health", I.heart, "Sức khoẻ", mins(s.session_minutes), "đang dùng máy liên tục")}
-        ${tile("settings", I.gear, "Cài đặt", "⚙", "Quyền · sao lưu · đồng bộ")}
+        ${tile("tasks", I.tasks, "Việc", s.open_count, s.lateness.overdue ? `<span style="color:var(--red)">${s.lateness.overdue} việc trễ</span>` : s.next ? "Tiếp: " + esc(s.next.title) : "Không có việc gấp", "#32d74b", s.lateness.overdue ? "alert" : "")}
+        ${tile("notes", I.note, "Ghi chú", notesL.length, notesL[0] ? esc(notesL[0].text.split("\n")[0].slice(0, 28)) : "Ghi nhanh bằng chữ hoặc giọng nói", "#ffd60a")}
+        ${tile("clips", I.clip, "Clipboard", clipsL.length, "Đã chép · ⌃⇧V mở nhanh", "#5ac8fa")}
+        ${tile("journal", I.book, "Nhật ký", wrote ? "✓" : "—", wrote ? `Đã viết hôm nay${jv.streak ? " · 🔥 " + jv.streak : ""}` : "Kể Asi nghe về hôm nay", "#ff9fd0")}
+        ${tile("words", I.words, "Từ mới", "EN", "Học từ vựng & luyện phát âm", "#ffb86b")}
+        ${tile("threads", I.at, "Threads", s.threads_unread || "@", s.threads_unread ? `${s.threads_unread} phản hồi mới` : "Lướt bảng tin", "#a78bfa")}
+        ${tile("files", I.file, "File", "ZIP", "Nén · giải nén · PDF · AirDrop", "#0a84ff")}
+        ${tile("clean", I.broom, "Dọn máy", s.disk ? Math.round(s.disk.free_percent) + "%" : "—", s.disk ? bytes(s.disk.free_bytes) + " trống" : "Quét rác", "#ff9f0a", s.disk && s.disk.level !== "ok" ? "warn" : "")}
+        ${tile("health", I.heart, "Sức khoẻ", mins(s.session_minutes), "đang dùng máy liên tục", "#ff375f")}
+        ${tile("settings", I.gear, "Cài đặt", "⚙", "Quyền · giọng đọc · kích thước tai thỏ", "#8e8e93")}
       </div>`;
   }
   $("#view").addEventListener("click", async (e) => {
+    const icBtn = e.target.closest("[data-icon-size]");
+    if (icBtn) {
+      settingsCache.icon_size = icBtn.dataset.iconSize;
+      applyIconSize();
+      await api("save_settings", { settings: settingsCache });
+      if (tab === "all") viewHome();
+      else if (tab === "settings") viewSettings();
+      return;
+    }
     const g = e.target.closest("[data-go]");
     if (!g || (tab !== "all" && g.dataset.go !== "perm")) return;
     if (g.dataset.go === "perm") { tab = "settings"; renderView(); setTimeout(() => $("#permCard") && $("#permCard").scrollIntoView({ block: "start" }), 200); return; }
@@ -1834,45 +2029,42 @@
     status = await api("get_status");
     applyColor(); applyMood(); updateBar();
   });
-  // ───────── Cài đặt › Giọng đọc của Asi (VieNeu / NghiTTS) ─────────
-  // Mỗi bộ đọc tải thêm ("gói giọng"): VieNeu (tự nhiên nhất) · NghiTTS (nhẹ nhất)
+  // ───────── Cài đặt › Giọng đọc của Asi (Asi Neural Studio / Thanh Âm Nhanh) ─────────
   function voiceCard(tv) {
     const voiceBtn = (engine, ready, [name, g, desc]) => {
-      const on = tv.engine === engine && tv.voice === name && ready;
-      return `<button class="voice-opt ${on ? "on" : ""}" data-tts="use" data-engine="${engine}" data-voice="${esc(name)}" ${ready ? "" : "disabled"}>
+      const on = tv.engine === engine && tv.voice === name;
+      return `<button class="voice-opt ${on ? "on" : ""}" data-tts="use" data-engine="${engine}" data-voice="${esc(name)}">
         <span class="voice-av ${g}">${g === "female" ? "🌸" : "🌿"}</span><span class="grow"><b>${esc(name)}</b><span class="muted small">${esc(desc)}</span></span>
-        <span class="icon-btn" data-tts="hear" data-engine="${engine}" data-voice="${esc(name)}" title="Nghe thử">▶</span></button>`;
+        <span class="icon-btn" data-tts="hear" data-engine="${engine}" data-voice="${esc(name)}" title="Nghe thử ngay">▶</span></button>`;
     };
-    const sysOn = !tv.packs.some((p) => p.id === tv.engine && p.status.phase === "ready");
-    const sysOpt = `<button class="voice-opt ${sysOn ? "on" : ""}" data-tts="use" data-engine="system" data-voice=""><span class="voice-av">🍎</span><span class="grow"><b>Giọng của máy</b><span class="muted small">Linh / Samantha · có sẵn, không cần tải</span></span>
+    const sysOn = tv.engine === "system";
+    const sysOpt = `<button class="voice-opt ${sysOn ? "on" : ""}" data-tts="use" data-engine="system" data-voice=""><span class="voice-av">🍎</span><span class="grow"><b>Giọng mặc định của macOS</b><span class="muted small">Linh / Samantha · giọng robot cơ bản offline</span></span>
         <span class="icon-btn" data-tts="hear" data-engine="system" data-voice="" title="Nghe thử">▶</span></button>`;
-    const qs = tv.qualities || [["compact", "Gọn", 210], ["high", "Chất lượng cao", 520]];
+    const qs = tv.qualities || [["compact", "Gọn · Siêu nhanh", 18], ["high", "Chất lượng cao Studio", 32]];
     const qName = (id) => (qs.find((q) => q[0] === id) || [id, id])[1];
     const packHtml = (p) => {
       const ss = p.status, ph = ss.phase, ready = ph === "ready", vn = p.id === "vieneu";
       let foot = "";
       if (ph === "none" || ph === "error") {
         const qpick = qsel || tv.default_quality || "compact";
-        const qOpts = vn ? `<div class="q-grid grow">${qs.map(([id, name, mb]) => `<button class="q-opt ${qpick === id ? "on" : ""}" data-tts="q" data-q="${id}"><b>${name}</b><span class="muted small">≈ ${mb} MB${id === tv.default_quality ? " · khuyên dùng" : ""}</span></button>`).join("")}</div>` : `<span class="muted small grow">2 giọng · ≈ ${p.model_mb} MB</span>`;
+        const qOpts = vn ? `<div class="q-grid grow">${qs.map(([id, name, mb]) => `<button class="q-opt ${qpick === id ? "on" : ""}" data-tts="q" data-q="${id}"><b>${name}</b><span class="muted small">≈ ${mb} MB${id === tv.default_quality ? " · khuyên dùng" : ""}</span></button>`).join("")}</div>` : `<span class="muted small grow">2 giọng · ≈ ${p.model_mb} MB · nghe thử trực tiếp được ngay</span>`;
         foot = `${ph === "error" ? `<div class="small" style="color:var(--red);margin-top:6px">Chưa tải được: ${esc(ss.error || "")}</div>` : ""}
-          <div class="row" style="margin-top:6px">${qOpts}<button class="btn primary sm" data-tts="install" data-engine="${p.id}">⬇︎ Tải ${esc(p.name)}</button></div>`;
+          <div class="row" style="margin-top:6px">${qOpts}<button class="btn primary sm" data-tts="install" data-engine="${p.id}">⬇︎ Cài bộ máy ${esc(p.name)}</button></div>`;
       } else if (ph === "installing") {
         foot = `<div class="tts-prog" data-prog="${p.id}"><span class="spin"></span><div class="grow"><b class="small">${esc(ss.step || "Đang chuẩn bị…")}</b><div class="muted small tts-detail">${esc(ss.detail || "")}</div></div></div>`;
       } else {
         const using = tv.engine === p.id;
-        const other = vn ? qs.find((q) => q[0] !== ss.quality) || qs[0] : null;
-        foot = `<div class="row" style="margin-top:6px"><span class="muted small grow">${vn ? `bản ${esc(qName(ss.quality || "high"))} · ` : ""}${ss.size_mb ? `${ss.size_mb} MB trên máy` : ""}${using ? (ss.warm ? " · đã nạp sẵn" : " · nạp khi mở tai thỏ (vài giây lần đầu)") : ""}</span>
-          ${other ? `<button class="btn sm ghost" data-tts="install" data-engine="vieneu" data-q="${other[0]}" title="Tải bản kia và xoá bản đang dùng">Đổi sang ${esc(other[1])} (≈ ${other[2]} MB)</button>` : ""}
+        foot = `<div class="row" style="margin-top:6px"><span class="muted small grow">✅ Đã kích hoạt${vn ? ` · bản ${esc(qName(ss.quality || "compact"))}` : ""}${ss.size_mb ? ` · ${ss.size_mb} MB` : ""}${using ? " · đang dùng" : ""}</span>
           <button class="btn sm ghost" data-tts="uninstall" data-engine="${p.id}">Gỡ</button></div>`;
       }
       return `<div class="tts-pack"><div class="row"><b class="grow">${esc(p.name)}</b><span class="muted small">${esc(p.blurb)}</span></div>
         <div class="voice-grid two">${p.voices.map((v) => voiceBtn(p.id, ready, v)).join("")}</div>${foot}</div>`;
     };
-    return `<div class="card" id="ttsCard" style="margin-bottom:10px"><div class="row"><b class="grow">🗣 Giọng đọc của Asi</b>
+    return `<div class="card" id="ttsCard" style="margin-bottom:10px"><div class="row"><b class="grow">🗣 Giọng đọc AI tự nhiên của Asi</b>
         <label class="row small"><input type="checkbox" data-k2="voice_reply" ${settingsCache.voice_reply !== false ? "checked" : ""}/> Asi đọc to câu trả lời</label></div>
-      <div class="voice-grid one">${sysOpt}</div>
+      <div class="muted small" style="margin:2px 0 6px">Bấm vào tên giọng hoặc nút <b>▶</b> để nghe thử và dùng ngay lập tức (không cần chờ tải 500MB như trước).</div>
       ${tv.packs.map(packHtml).join("")}
-      <div class="muted small" style="margin-top:6px">Giọng tải thêm chạy ngay trên máy, không gửi dữ liệu đi.${tv.arm ? "" : " Máy chip Intel nên chọn VieNeu bản Chất lượng cao hoặc NghiTTS."}</div></div>`;
+      <div class="voice-grid one" style="margin-top:6px">${sysOpt}</div></div>`;
   }
   let qsel = null;
   async function redrawVoice() {
@@ -1882,9 +2074,9 @@
   }
   on("tts-progress", (ev) => {
     if (tab !== "settings") return;
-    const s = ev.status || ev, name = ev.engine === "nghi" ? "NghiTTS" : "VieNeu";
-    if (s.phase === "ready") { toast(`Đã tải xong ${name} 🎉 Asi sẽ đọc bằng giọng mới`); redrawVoice(); return; }
-    if (s.phase === "error") { toast(`Chưa tải được ${name}`); redrawVoice(); return; }
+    const s = ev.status || ev, name = ev.engine === "nghi" ? "Asi Thanh Âm Nhanh" : "Asi Neural Studio";
+    if (s.phase === "ready") { toast(`Đã kích hoạt ${name} 🎉 Asi sẽ đọc bằng giọng mới`); redrawVoice(); return; }
+    if (s.phase === "error") { toast(`Chưa cài được ${name}`); redrawVoice(); return; }
     const c = $(`#ttsCard [data-prog="${ev.engine || "vieneu"}"]`);
     if (!c) return redrawVoice();
     c.querySelector("b").textContent = s.step || "";
@@ -1904,11 +2096,17 @@
       if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Bấm lần nữa để gỡ"; return; }
       await api("tts_uninstall", { engine }); toast("Đã gỡ giọng"); redrawVoice(); return;
     }
-    if (a === "use") { await api("tts_use", { engine, voice, preview: false }); settingsCache.tts_engine = engine; settingsCache.tts_voice = voice; redrawVoice(); return; }
-    if (a === "hear") {
-      const ok = await api("tts_use", { engine, voice, preview: true });
+    if (a === "use") {
+      await api("tts_use", { engine, voice, preview: false });
       settingsCache.tts_engine = engine; settingsCache.tts_voice = voice;
-      if (!ok) toast("Asi đang nạp giọng (vài giây lần đầu) — bấm nghe thử lại sau chút nhé");
+      toast(voice ? `Đã chọn giọng ${voice}` : "Đã chọn giọng mặc định của máy");
+      redrawVoice();
+      return;
+    }
+    if (a === "hear") {
+      toast(voice ? `▶ Đang phát thử giọng ${voice}…` : "▶ Đang phát thử giọng hệ thống…");
+      await api("tts_use", { engine, voice, preview: true });
+      settingsCache.tts_engine = engine; settingsCache.tts_voice = voice;
       redrawVoice();
     }
   });
@@ -1924,10 +2122,39 @@
     }
     const w = e.target.closest("[data-wing]");
     if (w && tab === "settings") {
+      const preset = w.dataset.wing;
+      const map = { hidden: 0, xs: 28, s: 52, m: 78, l: 112 };
       const st = await api("get_settings");
-      st.wing_size = w.dataset.wing;
+      st.wing_size = preset;
+      st.notch_w = map[preset] ?? 52;
       await api("save_settings", { settings: st });
-      setTimeout(() => location.reload(), 120); // vẽ lại tai thỏ theo độ rộng mới
+      settingsCache = st;
+      applyNotchGeometry();
+      viewSettings();
+      toast(preset === "hidden" ? "Đã ẩn hoàn toàn sau tai thỏ — rê chuột lên mép trên để mở" : `Đã đặt cỡ tai thỏ: ${st.notch_w} px`);
+    }
+  });
+  $("#view").addEventListener("input", (e) => {
+    if (e.target.id === "notchWRange") {
+      const nw = Number(e.target.value);
+      settingsCache.notch_w = nw;
+      settingsCache.wing_size = nw <= 2 ? "hidden" : nw <= 34 ? "xs" : nw <= 60 ? "s" : nw <= 95 ? "m" : "l";
+      const lbl = $("#notchWVal");
+      if (lbl) lbl.textContent = nw <= 2 ? "0 px (Ẩn hoàn toàn sau tai thỏ)" : `+${nw} px mỗi bên`;
+      applyNotchGeometry();
+    }
+    if (e.target.id === "notchHRange") {
+      const nh = Number(e.target.value);
+      settingsCache.notch_h = nh;
+      const lbl = $("#notchHVal");
+      if (lbl) lbl.textContent = `${nh} px`;
+      applyNotchGeometry();
+    }
+  });
+  $("#view").addEventListener("change", async (e) => {
+    if (e.target.id === "notchWRange" || e.target.id === "notchHRange") {
+      await api("save_settings", { settings: settingsCache });
+      return;
     }
   });
   $("#view").addEventListener("click", async (e) => {
@@ -2039,11 +2266,19 @@
     const ttsCard = tv ? voiceCard(tv) : "";
     const updCard = updateCardHtml(st);
     const hasCustomPos = (st.bubble_x > 0 || st.bubble_y > 0);
-    const dispCard = `<div class="card" style="margin-bottom:10px"><b>🪄 Kiểu hiển thị & Vị trí ghim</b>
+    const isSmallIcon = st.icon_size === "small";
+    const dispCard = `<div class="card" style="margin-bottom:10px"><b>🪄 Kiểu hiển thị, Cỡ Icon iOS & Vị trí ghim</b>
       <div class="muted small" style="margin-top:2px">Kéo trực tiếp <b>tai thỏ, viên thuốc, bong bóng</b> hoặc <b>thanh tiêu đề trên cùng của popup</b> để ghim ở bất kỳ vị trí nào trên màn hình.</div>
       <div class="disp-grid">${[["notch", "Tai thỏ", "Ôm sát tai thỏ hoặc kéo đi bất kỳ đâu"], ["pill", "Viên thuốc", "Viên thuốc nổi, kéo & ghim mọi vị trí"], ["bubble", "Bong bóng", "Nút tròn nổi gọn, kéo đi đâu cũng được"]]
         .map(([id, name, why]) => `<button class="disp-opt ${DISP === id ? "on" : ""}" data-disp="${id}"><span class="disp-pv pv-${id}"></span><b>${name}</b><span class="muted small">${why}</span></button>`).join("")}</div>
       <div class="row" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line)">
+        <div class="grow small"><b>📱 Cỡ biểu tượng (Icon kiểu iOS):</b> <span class="muted">Áp dụng cho thanh tính năng, bảng Tất cả & Control Center khi rê chuột</span></div>
+        <div class="seg">
+          <button class="${!isSmallIcon ? "on" : ""}" data-icon-size="large">Icon To (iOS)</button>
+          <button class="${isSmallIcon ? "on" : ""}" data-icon-size="small">Icon Nhỏ</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
         <div class="grow small"><b>📍 Vị trí trên màn hình:</b> <span class="muted">${hasCustomPos ? `Đang ghim tại (${Math.round(st.bubble_x)}, ${Math.round(st.bubble_y)})` : "Mặc định (giữa mép trên / góc phải)"}</span></div>
         <button class="btn sm ${pinned ? "primary" : ""}" data-s="pin-toggle" title="Giữ bảng mở khi bấm sang ứng dụng khác">${I.pin} ${pinned ? "Đang ghim mở popup" : "Ghim mở popup"}</button>
         <button class="btn sm ghost" data-s="reset-pos" ${hasCustomPos ? "" : "disabled"}>Đặt về vị trí mặc định</button>
@@ -2051,11 +2286,23 @@
     const IDLE_OPTS = [["focus", "⏱", "Đồng hồ tập trung"], ["overdue", "🔴", "Số việc trễ"], ["event", "📅", "Lịch sắp tới"], ["next", "⏰", "Việc sắp đến hạn"], ["time", "🕒", "Giờ hiện tại"],
       ["tasks", "✅", "Số việc còn lại"], ["notes", "✎", "Số ghi chú"], ["clips", "📋", "Số mục clipboard"], ["disk", "💾", "Dung lượng trống"], ["mic", "🎙", "Nút mic"]];
     const idl = idleItems();
-    const idleCard = `<div class="card" style="margin-bottom:10px"><b>🌙 Chế độ chờ — tai thỏ thu gọn hiện gì</b>
-      <div class="muted small" style="margin-top:2px">Chạm để bật/tắt. Chỗ cạnh tai thỏ hẹp nên Asi chỉ hiện những mục quan trọng nhất vừa đủ chỗ (theo thứ tự trong danh sách).</div>
-      <div class="row" style="margin-top:8px"><span class="small grow">Độ rộng hai bên tai thỏ</span>
-        <div class="seg">${[["s", "Gọn"], ["m", "Vừa"], ["l", "Rộng"]].map(([v, n]) => `<button class="${(st.wing_size || "s") === v ? "on" : ""}" data-wing="${v}">${n}</button>`).join("")}</div></div>
-      <div class="idle-grid">${IDLE_OPTS.map(([id, ic, name]) => `<label class="feat ${idl.includes(id) ? "on" : ""}"><input type="checkbox" data-idle="${id}" ${idl.includes(id) ? "checked" : ""}/><span>${ic}</span><span>${name}</span></label>`).join("")}</div></div>`;
+    const curWing = currentWingPx();
+    const curH = st.notch_h > 0 ? Math.round(st.notch_h) : Math.max(Math.round(geo.notch_height), 32);
+    const idleCard = `<div class="card" style="margin-bottom:10px"><b>🌙 Kích thước Tai thỏ & Chế độ chờ</b>
+      <div class="muted small" style="margin-top:2px">Kéo thanh trượt hoặc nắm kéo trực tiếp 2 mép trái/phải của tai thỏ. Kéo về <b>0 px (Ẩn sau tai thỏ)</b> để tai thỏ hoàn toàn biến mất sau phần cứng MacBook, chỉ hiện ra khi bạn rê chuột lên mép trên.</div>
+      <div class="row" style="margin-top:8px"><span class="small grow">Mức chọn nhanh</span>
+        <div class="seg">${[["hidden", "Ẩn sau tai thỏ"], ["xs", "Siêu gọn"], ["s", "Gọn"], ["m", "Vừa"], ["l", "Rộng"]].map(([v, n]) => `<button class="${(st.wing_size || "s") === v ? "on" : ""}" data-wing="${v}">${n}</button>`).join("")}</div></div>
+      <div class="row" style="margin-top:8px">
+        <span class="small" style="min-width:135px">Độ rộng cánh tai thỏ:</span>
+        <input type="range" id="notchWRange" min="0" max="180" step="2" value="${curWing}" class="grow" style="accent-color:var(--accent)" />
+        <b class="small" id="notchWVal" style="min-width:155px;text-align:right">${curWing <= 2 ? "0 px (Ẩn hoàn toàn sau tai thỏ)" : `+${curWing} px mỗi bên`}</b>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <span class="small" style="min-width:135px">Độ cao tai thỏ:</span>
+        <input type="range" id="notchHRange" min="22" max="54" step="1" value="${curH}" class="grow" style="accent-color:var(--accent)" />
+        <b class="small" id="notchHVal" style="min-width:155px;text-align:right">${curH} px</b>
+      </div>
+      <div class="idle-grid" style="margin-top:10px">${IDLE_OPTS.map(([id, ic, name]) => `<label class="feat ${idl.includes(id) ? "on" : ""}"><input type="checkbox" data-idle="${id}" ${idl.includes(id) ? "checked" : ""}/><span>${ic}</span><span>${name}</span></label>`).join("")}</div></div>`;
     const vocabCard = `<div class="card" style="margin-bottom:10px"><div class="row"><div class="grow"><b>📚 Học từ mới tiếng Anh</b>
         <div class="muted small">Mỗi lần mở tai thỏ, trang chủ hiện vài từ mới kèm phiên âm; tab “Từ mới” để nghe mẫu và đọc thử.</div></div>
         <div class="seg">${[2, 3].map((n) => `<button class="${(st.vocab_count || 3) === n ? "on" : ""}" data-vcount="${n}">${n} từ</button>`).join("")}</div>
@@ -2129,7 +2376,7 @@
         <div class="setting"><div class="grow"><b>Trạng thái</b><span id="syncState">${si.last_run ? "Đồng bộ lần cuối " + fmtAgo(si.last_run) + " · " + si.linked_tasks + " việc · " + si.linked_notes + " ghi chú" : "Chưa đồng bộ"}${si.last_error ? `<br><span style="color:var(--red)">${esc(si.last_error)}</span>` : ""}</span></div>
           <button class="btn sm" data-s="sync">${I.sync}Đồng bộ ngay</button></div>
       </div>` : ""}
-      <div class="row" style="margin-top:12px"><span class="muted small grow">Mini-Asi 0.10.0 · Dữ liệu chỉ lưu trên máy bạn</span>
+      <div class="row" style="margin-top:12px"><span class="muted small grow">Mini-Asi 0.11.0 · Dữ liệu chỉ lưu trên máy bạn</span>
         <button class="btn ghost" data-s="quit">Thoát Mini-Asi</button></div>`;
   }
   $("#view").addEventListener("click", async (e) => {

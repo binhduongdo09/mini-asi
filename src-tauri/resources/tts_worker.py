@@ -251,9 +251,16 @@ def reader():
 
 
 class EdgeBackend:
-    """Bộ đọc giọng Neural tiếng Việt tự nhiên qua edge-tts (dự phòng khi mô hình offline không khả dụng)."""
+    """Bộ đọc giọng Neural tiếng Việt tự nhiên 24 kHz qua edge-tts."""
 
     VOICE_MAP = {
+        "Hoài My": ("vi-VN-HoaiMyNeural", "+0%", "+0Hz"),
+        "Nam Minh": ("vi-VN-NamMinhNeural", "+0%", "+0Hz"),
+        "Thảo Vy": ("vi-VN-HoaiMyNeural", "+7%", "+4Hz"),
+        "Bảo Khang": ("vi-VN-NamMinhNeural", "-4%", "-3Hz"),
+        "Ngọc Lan": ("vi-VN-HoaiMyNeural", "+3%", "+2Hz"),
+        "Minh Quân": ("vi-VN-NamMinhNeural", "+4%", "+0Hz"),
+        # Tương thích tên giọng cũ
         "Trúc Ly": ("vi-VN-HoaiMyNeural", "+0%", "+0Hz"),
         "Hải Đăng": ("vi-VN-NamMinhNeural", "+0%", "+0Hz"),
         "Mai Phương": ("vi-VN-HoaiMyNeural", "+4%", "+2Hz"),
@@ -280,13 +287,12 @@ class EdgeBackend:
 
 
 def load_backend(warmup):
+    # Ưu tiên EdgeBackend (nhẹ, nhanh, không cần tải 500 MB mô hình ONNX);
+    # chỉ rơi về VieNeuBackend / NghiBackend khi môi trường không có edge_tts (như trong unit test giả lập).
     try:
+        return EdgeBackend()
+    except Exception:
         return NghiBackend(warmup) if ENGINE == "nghi" else VieNeuBackend(warmup)
-    except Exception as first_err:
-        try:
-            return EdgeBackend()
-        except Exception:
-            raise first_err
 
 
 def main():

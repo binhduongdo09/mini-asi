@@ -355,8 +355,12 @@ pub fn install_dmg_macos(dmg_path: &Path, target_app: &Path) -> Result<(), Strin
         Err(e) => return Err(format!("Lỗi khi chép bản mới: {e}")),
     }
 
-    // Gỡ cờ cách ly của macOS để khi khởi động lại không hỏi "Chuột phải → Open"
+    // Gỡ cờ cách ly của macOS và ký chuẩn Bundle Identifier com.miniasi.app để giữ nguyên nhận diện quyền hệ thống
     let _ = Command::new("xattr").args(["-cr"]).arg(&staging).status();
+    let _ = Command::new("codesign")
+        .args(["--force", "--deep", "--sign", "-", "--identifier", "com.miniasi.app"])
+        .arg(&staging)
+        .status();
 
     // Tráo nguyên tử: bản cũ -> .Mini-Asi-old.app, bản mới -> Mini-Asi.app
     if target_app.exists() {

@@ -24,7 +24,7 @@
   const settings = { break_enabled: true, break_minutes: 50, water_enabled: true, water_minutes: 60, sleep_hour: 23, focus_mode: false, launch_at_login: true, license_key: null, pdf_quality: "ebook", shortcut: "CmdOrCtrl+Shift+Space",
     clip_enabled: true, clip_max: 200, clip_shortcut: "Control+Shift+V", clip_autopaste: false, sync_reminders: true, reminders_list: "Mini-Asi", sync_notes: true, notes_folder: "Mini-Asi",
     show_calendar: true, event_alert_minutes: 10, voice_lang: "vi-VN", journal_enabled: true, journal_hour: 21,
-    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", visible_tabs: ["home", "tasks", "notes", "clips", "journal", "words", "threads"], auto_update_check: true, update_repo: "binhduongdo09/mini-asi", voice_reply: false, tts_engine: "system", tts_voice: "Trúc Ly" };
+    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", notch_w: 0, notch_h: 0, icon_size: q.get("icons") || "large", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", visible_tabs: ["home", "tasks", "notes", "clips", "journal", "words", "threads"], auto_update_check: true, update_repo: "binhduongdo09/mini-asi", voice_reply: false, tts_engine: "vieneu", tts_voice: "Hoài My" };
   const today0 = new Date(); today0.setHours(0, 0, 0, 0);
   const at = (h, m = 0) => today0.getTime() + h * H + m * 60e3;
   const events = [
@@ -185,14 +185,22 @@
       }
     },
     tts_info: () => {
-      const st = (ph, extra) => ({ phase: ph, step: "4/4 · Tải mô hình giọng (≈ 122 MB, chỉ 1 lần)", detail: "mai-phuong.onnx: 45% (27 MB)", error: null, warm: false, size_mb: 0, quality: null, ...extra });
-      return { engine: settings.tts_engine || "system", voice: settings.tts_voice || "Trúc Ly", arm: true, default_quality: "compact",
-        qualities: [["compact", "Gọn", 210], ["high", "Chất lượng cao", 520]],
+      const st = (ph, extra) => ({ phase: ph, step: "3/4 · Cài đặt bộ giải mã giọng Neural HD…", detail: "edge-tts", error: null, warm: true, size_mb: 18, quality: "compact", ...extra });
+      return { engine: settings.tts_engine || "vieneu", voice: settings.tts_voice || "Hoài My", arm: true, default_quality: "compact",
+        qualities: [["compact", "Gọn · Siêu nhanh", 18], ["high", "Chất lượng cao Studio", 32]],
         packs: [
-          { id: "vieneu", name: "VieNeu-TTS", blurb: "Tự nhiên nhất, 48 kHz · Apache-2.0", model_mb: 210, status: st(q.get("tts") || "none", q.get("tts") === "ready" ? { quality: "compact", size_mb: 388 } : {}),
-            voices: [["Trúc Ly", "female", "Nữ · giọng Bắc, trong trẻo, tự nhiên"], ["Hải Đăng", "male", "Nam · giọng Bắc, ấm áp, tự nhiên"]] },
-          { id: "nghi", name: "NghiTTS", blurb: "Nhẹ & nhanh nhất, 22 kHz · giọng thường", model_mb: 122, status: st(q.get("nghi") || "none", q.get("nghi") === "ready" ? { size_mb: 236 } : {}),
-            voices: [["Mai Phương", "female", "Nữ · giọng Bắc, nhẹ nhàng, ấm áp"], ["Minh Quang", "male", "Nam · giọng Bắc, rõ ràng, chững chạc"]] },
+          { id: "vieneu", name: "Asi Neural Studio", blurb: "4 giọng Bắc/Nam tự nhiên nhất · kích hoạt trong 2 giây", model_mb: 18, status: st(q.get("tts") || "ready", q.get("tts") === "ready" ? { quality: "compact", size_mb: 18 } : {}),
+            voices: [
+              ["Hoài My", "female", "Nữ · giọng chuẩn ấm áp, truyền cảm, tự nhiên nhất"],
+              ["Nam Minh", "male", "Nam · giọng chuẩn trầm ấm, lịch lãm, rõ chữ"],
+              ["Thảo Vy", "female", "Nữ · sắc thái nhẹ nhàng, trẻ trung, trong trẻo"],
+              ["Bảo Khang", "male", "Nam · sắc thái điềm đạm, dứt khoát, tin cậy"],
+            ] },
+          { id: "nghi", name: "Asi Thanh Âm Nhanh", blurb: "Nhẹ & phản hồi tức thì · tối ưu đọc thông báo ngắn", model_mb: 12, status: st(q.get("nghi") || "ready", q.get("nghi") === "ready" ? { size_mb: 12 } : {}),
+            voices: [
+              ["Ngọc Lan", "female", "Nữ · nhịp nhanh gọn, tươi sáng, đọc báo cáo cực mượt"],
+              ["Minh Quân", "male", "Nam · nhịp nhanh gọn, khoẻ khoắn, đọc nhắc việc rõ ràng"],
+            ] },
         ] };
     },
     vocab_batch: () => ({ learned: 12, total: 190, cards: [{"word": "schedule", "pos": "noun", "vi": "lịch trình", "details": {"ipa_us": "/ˈskɛdʒuːl/", "ipa_uk": "/ˈʃɛdjuːl/", "definition": "A plan for carrying out a process.", "example": "I have a busy schedule this week."}, "progress": {"learned": false, "correct": 0, "tries": 0, "best": 0, "shown": 1}}, {"word": "resilient", "pos": "adjective", "vi": "kiên cường", "details": {"ipa_us": "/rɪˈzɪliənt/", "ipa_uk": null, "definition": "Able to recover quickly from difficulties.", "example": "Kids are remarkably resilient."}, "progress": {"learned": false, "correct": 0, "tries": 0, "best": 0, "shown": 1}}, {"word": "prioritize", "pos": "verb", "vi": "ưu tiên", "details": {"ipa_us": "/praɪˈɒrɪtaɪz/", "ipa_uk": null, "definition": "To arrange in order of importance.", "example": "You need to prioritize your tasks."}, "progress": {"learned": false, "correct": 0, "tries": 0, "best": 0, "shown": 1}}] }),

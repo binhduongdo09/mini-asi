@@ -29,10 +29,20 @@ pub(crate) fn perm_list(app: &AppHandle) -> Vec<PermItem> {
     use tauri_plugin_notification::NotificationExt;
     use notch_native::perm;
     let notif = match app.notification().permission_state() {
-        Ok(tauri::plugin::PermissionState::Granted) => "granted",
         Ok(tauri::plugin::PermissionState::Denied) => "denied",
-        Ok(_) => "not_asked",
-        Err(_) => "unknown",
+        _ => "granted",
+    };
+    let auto_state = if let Some(st) = app.try_state::<Arc<AppState>>() {
+        let g = st.sync.lock().unwrap();
+        if g.last_run > 0 && g.last_error.is_none() {
+            "granted"
+        } else if g.last_error.as_deref().unwrap_or("").contains("Chưa cho phép") {
+            "denied"
+        } else {
+            "manual"
+        }
+    } else {
+        "manual"
     };
     vec![
         PermItem { id: "notifications", name: "Thông báo", why: "Nhắc việc, nhắc nghỉ, báo giờ họp", state: notif, required: true },
@@ -40,10 +50,15 @@ pub(crate) fn perm_list(app: &AppHandle) -> Vec<PermItem> {
         PermItem { id: "camera", name: "Camera", why: "Gương xem nhanh & bật/tắt camera trên tai thỏ (tuỳ chọn)", state: state_str(perm::camera()), required: false },
         PermItem { id: "speech", name: "Nhận dạng giọng nói", why: "Chuyển giọng nói tiếng Việt / Anh thành chữ", state: state_str(perm::speech()), required: true },
         PermItem { id: "calendar", name: "Lịch", why: "Hiện lịch họp, báo trước giờ họp", state: state_str(perm::calendar()), required: false },
-        PermItem { id: "automation", name: "Lời nhắc & Ghi chú", why: "Đồng bộ việc và ghi chú với app Apple", state: "manual", required: false },
+        PermItem { id: "automation", name: "Lời nhắc & Ghi chú", why: "Đồng bộ việc và ghi chú với app Apple", state: auto_state, required: false },
         PermItem { id: "accessibility", name: "Trợ năng", why: "Tự dán từ Clipboard (tuỳ chọn)", state: state_str(perm::accessibility()), required: false },
         PermItem { id: "disk", name: "Full Disk Access", why: "Quét dọn rác sâu hơn (tuỳ chọn)", state: state_str(perm::full_disk_access()), required: false },
     ]
+}
+
+#[cfg(target_os = "macos")]
+fn reset_tcc_if_denied(service: &str) {
+    let _ = std::process::Command::new("tccutil").args(["reset", service, "com.miniasi.app"]).status();
 }
 
 #[tauri::command]
@@ -68,23 +83,54 @@ pub(crate) async fn request_permissions(app: AppHandle, which: String) -> Vec<Pe
             let _ = app.notification().request_permission();
         }
         if want("microphone") {
+            #[cfg(target_os = "macos")]
+            if notch_native::perm::microphone() == notch_native::perm::State::Denied {
+                reset_tcc_if_denied("Microphone");
+            }
             notch_native::perm::request_microphone();
         }
         if want("camera") {
+            #[cfg(target_os = "macos")]
+            if notch_native::perm::camera() == notch_native::perm::State::Denied {
+                reset_tcc_if_denied("Camera");
+            }
             notch_native::perm::request_camera();
         }
         if want("speech") {
+            #[cfg(target_os = "macos")]
+            if notch_native::perm::speech() == notch_native::perm::State::Denied {
+                reset_tcc_if_denied("SpeechRecognition");
+            }
             let _ = notch_native::speech::ensure_access();
         }
         if want("calendar") {
+            #[cfg(target_os = "macos")]
+            if notch_native::perm::calendar() == notch_native::perm::State::Denied {
+                reset_tcc_if_denied("Calendar");
+            }
             let _ = notch_native::calendar::ensure_access();
         }
         if want("automation") {
-            // chạm nhẹ vào Lời nhắc & Ghi chú → macOS hỏi quyền Tự động hoá
-            let _ = apple::reminders_pull("Mini-Asi");
-            let _ = apple::notes_pull("Mini-Asi");
+            #[cfg(target_os = "macos")]
+            reset_tcc_if_denied("AppleEvents");
+            // chạm nhẹ vào Lời nhắc & Ghi chú → macOS hỏi quyền Tự động hoá và lưu ngay kết quả
+            let r1 = apple::reminders_pull("Mini-Asi");
+            let r2 = apple::notes_pull("Mini-Asi");
+            if let Some(st) = app.try_state::<Arc<AppState>>() {
+                let mut g = st.sync.lock().unwrap();
+                g.last_run = now_ms();
+                g.last_error = match (r1, r2) {
+                    (Err(e), _) | (_, Err(e)) => Some(e),
+                    _ => None,
+                };
+                let _ = g.save();
+            }
         }
         if want("accessibility") && notch_native::perm::accessibility() != notch_native::perm::State::Granted {
+            #[cfg(target_os = "macos")]
+            if !all {
+                reset_tcc_if_denied("Accessibility");
+            }
             let _ = on_main(&app, notch_native::perm::prompt_accessibility);
         }
         if (all || which == "disk") && notch_native::perm::full_disk_access() != notch_native::perm::State::Granted {

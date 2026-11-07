@@ -120,8 +120,13 @@ pub struct Settings {
     pub visible_tabs: Vec<String>,
     /// Thứ hiện trên tai thỏ khi thu gọn: focus, overdue, event, next, time, tasks, notes, clips, disk, mic
     pub idle_items: Vec<String>,
-    /// Độ rộng hai bên tai thỏ: s | m | l
+    /// Độ rộng hai bên tai thỏ: hidden | xs | s | m | l | custom
     pub wing_size: String,
+    /// Chiều rộng & chiều cao tai thỏ thu gọn do người dùng kéo/chỉnh (0 = dùng theo wing_size)
+    pub notch_w: f64,
+    pub notch_h: f64,
+    /// Cỡ nút/biểu tượng kiểu iOS: "large" (ô lớn có hình + chữ) | "small" (ô nhỏ gọn)
+    pub icon_size: String,
     /// Học từ mới tiếng Anh: bật/tắt, số từ mỗi lần mở tai thỏ
     pub vocab_enabled: bool,
     pub vocab_count: u8,
@@ -180,10 +185,13 @@ impl Default for Settings {
             bubble_x: 0.0,
             bubble_y: 0.0,
             voice_reply: false,
-            tts_engine: "system".into(),
+            tts_engine: "vieneu".into(),
             tts_voice: crate::tts::DEFAULT_VOICE.into(),
             visible_tabs: ["home", "tasks", "notes", "clips", "journal", "words", "threads"].iter().map(|s| s.to_string()).collect(),
             wing_size: "s".into(),
+            notch_w: 0.0,
+            notch_h: 0.0,
+            icon_size: "large".into(),
             vocab_enabled: true,
             vocab_count: 3,
             idle_items: ["focus", "overdue", "event", "next", "tasks", "mic"].iter().map(|s| s.to_string()).collect(),

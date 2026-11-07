@@ -103,15 +103,22 @@ mod imp {
         }
     }
 
-    /// Không có API kiểm tra trực tiếp → thử đọc thư mục được bảo vệ
+    /// Không có API kiểm tra trực tiếp → thử đọc các thư mục được TCC bảo vệ
     pub fn full_disk_access() -> State {
         let Some(home) = std::env::var_os("HOME") else { return State::Unknown };
-        let p = std::path::Path::new(&home).join("Library/Safari");
-        match std::fs::read_dir(&p) {
-            Ok(_) => State::Granted,
-            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => State::Denied,
-            Err(_) => State::Unknown,
+        let home = std::path::Path::new(&home);
+        let mut saw_denied = false;
+        for rel in ["Library/Safari", "Library/Messages", "Library/Mail", "Library/HomeKit"] {
+            match std::fs::read_dir(home.join(rel)) {
+                Ok(_) => return State::Granted,
+                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => saw_denied = true,
+                Err(_) => {}
+            }
         }
+        if std::fs::File::open("/Library/Application Support/com.apple.TCC/TCC.db").is_ok() {
+            return State::Granted;
+        }
+        if saw_denied { State::Denied } else { State::Unknown }
     }
 }
 

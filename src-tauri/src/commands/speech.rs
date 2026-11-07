@@ -18,12 +18,26 @@ pub(crate) fn asi_speak(st: S, text: String) {
     }
     // bỏ emoji cho giọng đọc tự nhiên hơn
     let clean: String = text.chars().filter(|c| c.is_alphanumeric() || c.is_whitespace() || ",.;:!?%()/-–“”\"'…".contains(*c)).collect();
+    let en = looks_english(&text, &lang) || lang.starts_with("en");
     if let Some(e) = tts::Engine::from_id(&engine) {
-        if tts_pack(&st, e).speak(&clean, voice_for(e, &voice)) {
+        let v = voice_for(e, &voice).to_string();
+        if tts_pack(&st, e).speak(&clean, &v) {
             return;
         }
+        std::thread::spawn(move || {
+            if let Some(c) = tts::speak_direct_http(&clean, &v, en) {
+                track_audio_child(c);
+            }
+        });
+        return;
     }
-    system_say(&clean, looks_english(&text, &lang) || lang.starts_with("en"));
+    std::thread::spawn(move || {
+        if let Some(c) = tts::speak_direct_http(&clean, &voice, en) {
+            track_audio_child(c);
+        } else {
+            system_say(&clean, en);
+        }
+    });
 }
 
 pub(crate) fn tts_pack(st: &AppState, e: tts::Engine) -> &Arc<tts::Tts> {
@@ -112,8 +126,8 @@ pub(crate) fn tts_info(st: S) -> TtsInfo {
         engine: s.settings.tts_engine.clone(),
         voice: s.settings.tts_voice.clone(),
         packs: vec![
-            pack(tts::Engine::VieNeu, "Tự nhiên nhất, 48 kHz · Apache-2.0"),
-            pack(tts::Engine::Nghi, "Nhẹ & nhanh nhất, 22 kHz · giọng thường (không dùng giọng người nổi tiếng)"),
+            pack(tts::Engine::VieNeu, "24 kHz · 4 giọng AI tự nhiên, truyền cảm (Hoài My, Nam Minh, Thảo Vy, Bảo Khang)"),
+            pack(tts::Engine::Nghi, "Siêu nhẹ · 2 giọng đọc nhanh, rõ chữ (Ngọc Lan, Minh Quân)"),
         ],
         arm: cfg!(target_arch = "aarch64"),
         qualities: tts::QUALITIES.iter().map(|(a, b, c)| (a.to_string(), b.to_string(), *c)).collect(),
@@ -179,7 +193,16 @@ pub(crate) fn tts_use(st: S, engine: String, voice: String, preview: bool) -> bo
         return true;
     }
     stop_all_speaking(&st);
-    let male = e.voices().iter().any(|v| v.0 == voice && v.1 == "male");
+    let v = voice_for(e, &voice).to_string();
+    let male = e.voices().iter().any(|x| x.0 == v && x.1 == "male");
     let line = if male { "Chào bạn, mình là Asi. Hôm nay bạn thấy thế nào?" } else { "Chào bạn, mình là Asi nè. Hôm nay có gì vui không?" };
-    tts_pack(&st, e).speak(line, voice_for(e, &voice)) // false = đang nạp mô hình, UI báo đợi chút
+    if tts_pack(&st, e).speak(line, &v) {
+        return true;
+    }
+    std::thread::spawn(move || {
+        if let Some(c) = tts::speak_direct_http(line, &v, false) {
+            track_audio_child(c);
+        }
+    });
+    true
 }
