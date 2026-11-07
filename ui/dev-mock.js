@@ -89,7 +89,7 @@
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const H_ = {
     get_geometry: () => ({ has_notch: q.get("notch") !== "0", notch_width: 185, notch_height: 32, screen_x: 0, screen_y: 0, screen_width: 1512, platform: "macos" }),
-    set_frame: () => null, set_interactive: ({ on }) => (on ? "telex" : null),
+    set_frame: () => null, set_interactive: ({ on }) => (on ? (settings.viet_engine === "off" ? null : settings.viet_engine === "vni" ? "vni" : "telex") : null),
     get_status: status,
     parse_task: ({ text }) => parse(text),
     add_task: ({ text }) => { const p = parse(text); const t = { id: ++id, title: p.title, due: p.due, created: Date.now(), done_at: null }; tasks.push(t); emit("status", status()); return t; },

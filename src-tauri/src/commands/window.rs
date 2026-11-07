@@ -122,6 +122,8 @@ pub(crate) fn set_display(app: AppHandle, st: S, mode: String) -> Result<(), Str
     {
         let mut s = st.store.lock().unwrap();
         s.settings.display_mode = m;
+        s.settings.bubble_x = 0.0;
+        s.settings.bubble_y = 0.0;
         s.save_settings()?;
     }
     apply_level(&app, normal_level(&app));
@@ -199,52 +201,82 @@ pub(crate) fn on_main<T: Send + 'static>(app: &AppHandle, f: impl FnOnce() -> T 
 /// Trả về chế độ bộ gõ tiếng Việt của Asi ("telex" | "vni") nếu cần bật.
 ///
 /// Vì sao: bộ gõ tiếng Việt có sẵn của macOS ghép chữ không ổn định trong cửa sổ nằm trên
-/// thanh menu. Khi mở bảng, Asi tạm chuyển bàn phím sang ABC và tự gõ dấu (ui/vnkey.js);
-/// khi đóng bảng thì trả lại đúng bộ gõ cũ.
+/// thanh menu. Khi mở bảng, Asi tạm chuyển bàn phím sang ABC trước khi focus cửa sổ và tự gõ dấu (ui/vnkey.js);
+/// khi đóng bảng (hoặc khi người dùng bấm ra ngoài lúc đang ghim popup) thì trả lại đúng bộ gõ cũ.
 #[tauri::command]
-pub(crate) async fn set_interactive(app: AppHandle, win: WebviewWindow, st: S<'_>, on: bool) -> Result<Option<String>, String> {
+pub(crate) async fn set_interactive(app: AppHandle, win: WebviewWindow, st: S<'_>, on: bool, keep_focus: Option<bool>) -> Result<Option<String>, String> {
     let (engine, tts_on) = {
         let g = st.store.lock().unwrap();
         (g.settings.viet_engine.clone(), if g.settings.voice_reply { tts::Engine::from_id(&g.settings.tts_engine) } else { None })
     };
     if on {
-        let _ = win.set_focus();
         if let Some(e) = tts_on {
             tts_pack(&st, e).ensure_worker(); // nạp sẵn giọng khi mở tai thỏ
         }
         if engine == "off" {
+            if let Some(prev) = st.ime_prev.lock().unwrap().take() {
+                on_main(&app, move || notch_native::ime::select(&prev));
+            }
+            if keep_focus != Some(false) {
+                let _ = win.set_focus();
+            }
             return Ok(None);
         }
-        let cur = on_main(&app, notch_native::ime::current).flatten().unwrap_or_default();
-        let sys_mode = notch_native::ime::vietnamese_mode(&cur);
-        // bộ gõ ghép chữ bất kỳ (không phải bàn phím ABC/US…)
+        let (cur, enabled) = on_main(&app, || {
+            (notch_native::ime::current().unwrap_or_default(), notch_native::ime::enabled())
+        })
+        .unwrap_or_default();
         let is_ime = !cur.is_empty() && !notch_native::ime::is_latin_layout(&cur);
-        let (mode, switch) = match engine.as_str() {
-            "telex" => (Some("telex"), is_ime),
-            "vni" => (Some("vni"), is_ime),
-            _ => (sys_mode, sys_mode.is_some()),
+        if is_ime || st.ime_prev.lock().unwrap().is_none() {
+            if !cur.is_empty() {
+                *st.ime_last.lock().unwrap() = cur.clone();
+            }
+        }
+        let effective = if is_ime {
+            cur.clone()
+        } else {
+            st.ime_prev.lock().unwrap().clone().unwrap_or_else(|| cur.clone())
         };
-        *st.ime_last.lock().unwrap() = cur.clone();
-        if switch {
+        let sys_mode = notch_native::ime::vietnamese_mode(&effective)
+            .or_else(|| enabled.iter().find_map(|id| notch_native::ime::vietnamese_mode(id)))
+            .or(Some("telex"));
+        let mode = match engine.as_str() {
+            "telex" => Some("telex"),
+            "vni" => Some("vni"),
+            _ => sys_mode,
+        };
+        if is_ime {
+            // Chuyển bàn phím hệ thống sang ABC/U.S. TRƯỚC khi focus cửa sổ để tránh bộ gõ ngoài kích hoạt composition
             let ok = on_main(&app, notch_native::ime::select_latin).unwrap_or(false);
             if ok {
-                *st.ime_prev.lock().unwrap() = Some(cur);
+                let mut prev_guard = st.ime_prev.lock().unwrap();
+                if prev_guard.is_none() {
+                    *prev_guard = Some(cur);
+                }
             } else {
                 // Không có bàn phím ABC/U.S. nào đang bật → không chuyển được.
                 // Tắt bộ gõ của Asi để khỏi ghép chữ hai lần, để bộ gõ hệ thống tự lo.
                 let _ = app.emit("ime-warn", cur);
+                if keep_focus != Some(false) {
+                    let _ = win.set_focus();
+                }
                 return Ok(None);
             }
+        }
+        if keep_focus != Some(false) {
+            let _ = win.set_focus();
         }
         Ok(mode.map(String::from))
     } else {
         if let Some(prev) = st.ime_prev.lock().unwrap().take() {
             on_main(&app, move || notch_native::ime::select(&prev));
         }
-        // Đang dùng cửa sổ Threads của Mini-Asi thì không trả focus cho app khác
-        let threads_front = app.get_webview_window("threads-web").is_some_and(|w| w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false));
-        if !threads_front {
-            let _ = app.run_on_main_thread(notch_native::deactivate_app);
+        if keep_focus != Some(true) {
+            // Đang dùng cửa sổ Threads của Mini-Asi thì không trả focus cho app khác
+            let threads_front = app.get_webview_window("threads-web").is_some_and(|w| w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false));
+            if !threads_front {
+                let _ = app.run_on_main_thread(notch_native::deactivate_app);
+            }
         }
         Ok(None)
     }

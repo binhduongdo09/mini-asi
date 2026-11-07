@@ -8,6 +8,10 @@ const cases = [
  ['xin chaof cacs banj','xin chào các bạn'],['Hoom nay troiwf ddepj quas!','Hôm nay trời đẹp quá!'],['ngayf mai 9h goij khachs','ngày mai 9h gọi khách'],
  ['thuws 6 noopj baos caos','thứ 6 nộp báo cáo'],['DDaf Naüng',''],['tieengs Anh','tiếng Anh'],['khoong','không'],['ddaauf','đầu'],['nuwowcs','nước'],['huwowngs','hướng'],
  ['oiw','ơi'],['xem phim','xem phim'],['google','gôgle'],['hoir','hỏi'],['quyeenr','quyển'],['giuwax','giữa'],['vaof','vào'],['nhieeuf','nhiều'],
+ ['dduwocj','được'],['nuwocs','nước'],['thuwong','thương'],['chuwong','chương'],['tuwongr','tưởng'],['luwongj','lượng'],['huwongs','hướng'],
+ ['nguwoif','người'],['muwoif','mười'],['huwou','hươu'],['ruwouj','rượu'],['buwoms','bướm'],['cuwois','cưới'],['tuwoi','tươi'],
+ ['duwocjd','được'],['dangd','đang'],['gifa','già'],['gisa','giá'],['toasn','toán'],['tieensg','tiếng'],['vietej','việt'],
+ ['developer','developer'],['follow','follow'],['david','david'],
 ];
 let fail=0;
 for (const [i,exp] of cases) { if (!exp) continue; const got=type(i); if (got!==exp) { fail++; console.log('TELEX FAIL', i, '=>', got, 'expected', exp); } }

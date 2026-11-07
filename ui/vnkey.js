@@ -39,6 +39,7 @@
 
   function currentTone(chars, sp) {
     for (let i = sp.s; i < sp.e; i++) if (INFO[chars[i]].tone) return INFO[chars[i]].tone;
+    for (let i = 0; i < chars.length; i++) if (INFO[chars[i]] && INFO[chars[i]].tone) return INFO[chars[i]].tone;
     return 0;
   }
 
@@ -52,9 +53,34 @@
     return idx[1];
   }
 
+  function setMark(chars, i, mark) {
+    const v = INFO[chars[i]];
+    chars[i] = compose(v.base, mark, v.tone, v.up);
+  }
+
+  // Chuẩn hoá cụm "ưo" / "uơ" → "ươ" khi có âm cuối hoặc bán nguyên âm cuối (i, u):
+  // Giúp gõ tự nhiên kiểu dduwocj → được, nuwocs → nước, thuwong → thương, nguwoif → người, ruwouj → rượu
+  function normalizeCluster(chars, sp) {
+    if (sp.s >= sp.e || !sp.valid) return;
+    const cl = [];
+    for (let i = sp.s; i < sp.e; i++) cl.push(i);
+    const clStr = cl.map((i) => INFO[chars[i]].base).join("");
+    const uo = clStr.indexOf("uo");
+    if (uo >= 0) {
+      const ui = cl[uo], oi = cl[uo + 1];
+      const um = INFO[chars[ui]].mark, om = INFO[chars[oi]].mark;
+      const hasAfter = uo + 2 < cl.length || sp.tail.length > 0;
+      if (hasAfter && (um === "+" || om === "+") && !(um === "+" && om === "+")) {
+        setMark(chars, ui, "+");
+        setMark(chars, oi, "+");
+      }
+    }
+  }
+
   function setTone(chars, tone) {
     const sp = split(chars);
     if (sp.s >= sp.e) return chars;
+    normalizeCluster(chars, sp);
     const out = chars.map((c) => (INFO[c] ? compose(INFO[c].base, INFO[c].mark, 0, INFO[c].up) : c));
     if (tone) {
       const p = tonePos(out, sp);
@@ -62,11 +88,6 @@
       out[p] = compose(v.base, v.mark, tone, v.up);
     }
     return out;
-  }
-
-  function setMark(chars, i, mark) {
-    const v = INFO[chars[i]];
-    chars[i] = compose(v.base, mark, v.tone, v.up);
   }
 
   const TELEX_TONE = { s: 1, f: 2, r: 3, x: 4, j: 5, z: 0 };
@@ -89,16 +110,27 @@
       if (tone === t) return setTone(chars, 0).join("") + key; // gõ lặp → bỏ dấu, giữ phím
       return setTone(chars, t).join("");
     }
-    // 2. đ
+    // 2. đ (hỗ trợ cả gõ đầu từ dd lẫn cuối âm tiết hợp lệ như dangd → đang, duwocjd → được)
     if ((mode === "telex" && k === "d") || (mode === "vni" && k === "9")) {
       const f = chars[0];
-      if (f === "d" || f === "D") { chars[0] = f === "d" ? "đ" : "Đ"; return chars.join(""); }
-      if (f === "đ" || f === "Đ") { chars[0] = f === "đ" ? "d" : "D"; return chars.join("") + key; }
+      if (chars.length === 1 || sp.valid) {
+        if (f === "d" || f === "D") {
+          chars[0] = f === "d" ? "đ" : "Đ";
+          return (sp.valid ? setTone(chars, tone) : chars).join("");
+        }
+        if (f === "đ" || f === "Đ") {
+          chars[0] = f === "đ" ? "d" : "D";
+          return chars.join("") + key;
+        }
+      }
       return plain;
     }
     if (sp.s >= sp.e) {
       return mode === "telex" && k === "w" && sp.tail.length <= 2 ? word + (key === "W" ? "Ư" : "ư") : plain;
     }
+    // Nếu đã có phụ âm cuối nhưng không phải phụ âm cuối tiếng Việt hợp lệ (vd: developer, follow) → không bỏ dấu mũ/móc
+    if (sp.tail.length > 0 && !sp.valid) return plain;
+
     const low = (i) => INFO[chars[i]].base;
     const mk = (i) => INFO[chars[i]].mark;
     const cl = [];
@@ -109,10 +141,11 @@
     const circ = (mode === "telex" && ["a", "e", "o"].includes(k)) || (mode === "vni" && k === "6");
     if (circ) {
       const target = [...cl].reverse().find((i) => (mode === "vni" ? ["a", "e", "o"].includes(low(i)) : low(i) === k));
-      if (target === undefined) return plain;
-      if (mk(target) === "^") { setMark(chars, target, ""); return chars.join("") + key; }
-      setMark(chars, target, "^");
-      return setTone(chars, tone).join("");
+      if (target !== undefined) {
+        if (mk(target) === "^") { setMark(chars, target, ""); return chars.join("") + key; }
+        setMark(chars, target, "^");
+        return setTone(chars, tone).join("");
+      }
     }
     // 4. Móc / trăng: w (Telex), 7 = ơ ư, 8 = ă (VNI)
     const horn = (mode === "telex" && k === "w") || (mode === "vni" && (k === "7" || k === "8"));
@@ -141,8 +174,8 @@
       targets.forEach(([i, m]) => setMark(chars, i, m));
       return setTone(chars, tone).join("");
     }
-    // 5. Chữ thường: đặt lại vị trí dấu thanh (hòa + n → hoàn)
-    if (tone && /^[a-z]$/i.test(key)) {
+    // 5. Chữ thường tiếp theo: chuẩn hoá cụm ưo → ươ và đặt lại vị trí dấu thanh (hòa + n → hoàn, thuwong → thương)
+    if (/^[a-z]$/i.test(key)) {
       const next = [...chars, key];
       const sp2 = split(next);
       if (sp2.valid) return setTone(next, tone).join("");
@@ -152,30 +185,39 @@
 
   // ───────── Gắn vào ô nhập ─────────
   const WORD = /[A-Za-zÀ-ỹĐđ]+$/;
+  let composing = false;
   const engine = {
     mode: null, // "telex" | "vni" | null (tắt)
     suspended: false,
     apply,
     attach(doc) {
-      doc.addEventListener("compositionstart", () => { if (engine.mode) engine.suspended = true; }, true);
+      doc.addEventListener("compositionstart", () => { composing = true; }, true);
+      doc.addEventListener("compositionend", () => { composing = false; }, true);
+      doc.addEventListener("focusin", () => { composing = false; engine.suspended = false; }, true);
       doc.addEventListener("beforeinput", (e) => {
-        if (!engine.mode || engine.suspended || e.isComposing) return;
+        if (!engine.mode || engine.suspended || composing || e.isComposing) return;
         if (e.inputType !== "insertText" || !e.data || e.data.length !== 1) return;
         const el = e.target;
         if (el && el.isContentEditable) return editable(e);
         if (!el || !(el.tagName === "INPUT" || el.tagName === "TEXTAREA") || el.type === "password" || el.type === "number") return;
         const start = el.selectionStart, end = el.selectionEnd;
-        if (start == null || start !== end) return;
-        const before = el.value.slice(0, start);
-        const m = before.match(WORD);
+        if (start == null || end == null) return;
+        const hasSel = start !== end;
+        const before = hasSel ? "" : el.value.slice(0, start);
+        const m = hasSel ? null : before.match(WORD);
         const word = m ? m[0] : "";
         const out = apply(word, e.data, engine.mode);
         if (out === word + e.data) return; // để trình duyệt gõ bình thường
         e.preventDefault();
-        const head = before.slice(0, before.length - word.length);
-        el.value = head + out + el.value.slice(end);
-        const caret = head.length + out.length;
-        el.setSelectionRange(caret, caret);
+        const repStart = start - word.length;
+        if (typeof el.setRangeText === "function") {
+          el.setRangeText(out, repStart, end, "end");
+        } else {
+          const head = el.value.slice(0, repStart);
+          el.value = head + out + el.value.slice(end);
+          const caret = head.length + out.length;
+          el.setSelectionRange(caret, caret);
+        }
         el.dispatchEvent(new Event("input", { bubbles: true }));
       }, true);
     },

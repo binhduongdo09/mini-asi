@@ -209,6 +209,23 @@
 
   let freshOpen = true;
   let frameTimer = null;
+  async function syncImeInteractive(on, keepFocus) {
+    const V = window.VNKey;
+    if (!on) {
+      if (V) { V.mode = null; V.suspended = false; }
+      await api("set_interactive", { on: false, keepFocus: keepFocus ?? null });
+      updateBar();
+      return null;
+    }
+    const m = await api("set_interactive", { on: true, keepFocus: keepFocus ?? null });
+    if (V) {
+      V.mode = m || (V.userOn ? V.userOn : null);
+      V.suspended = false;
+    }
+    updateBar();
+    return V ? V.mode : m;
+  }
+
   async function setMode(next, opts = {}) {
     if (next === mode && !opts.force) return;
     clearTimeout(modeTimer);
@@ -231,17 +248,12 @@
     if (next !== "expanded" || tab !== "threads") hideEmbed();
     if (next === "expanded" && prev !== "expanded") {
       freshOpen = true; // lần mở mới → Học từ mới đổi sang 2–3 từ khác
-      api("set_interactive", { on: true }).then((m) => {
-        const V = window.VNKey;
-        if (V) { V.mode = m || (V.userOn ? V.userOn : null); V.suspended = false; }
-        updateBar();
-      });
+      await syncImeInteractive(true); // chuyển bàn phím hệ thống sang ABC & bật VNKey trước khi focus ô nhập
       renderView();
     } else if (next === "expanded") {
       renderView();
     } else if (prev === "expanded") {
-      api("set_interactive", { on: false });
-      if (window.VNKey) window.VNKey.mode = null;
+      syncImeInteractive(false);
     }
     if (next === "peek") {
       renderPeek();
@@ -777,7 +789,12 @@
   });
   on("ime-warn", () => toast("Không chuyển được sang bàn phím ABC — hãy bật thêm bàn phím ABC trong Cài đặt hệ thống › Bàn phím › Nguồn nhập để Asi tự gõ tiếng Việt"));
   on("window-blur", () => {
-    if (mode !== "expanded" || pinned) return;
+    if (mode !== "expanded") return;
+    if (pinned) {
+      // Đang ghim mở popup mà bấm sang app khác → trả lại bộ gõ hệ thống cho app kia
+      syncImeInteractive(false, true);
+      return;
+    }
     setTimeout(() => { if (!hovering && !document.hasFocus() && !voice.active) setMode("collapsed"); }, 350);
   });
 
@@ -875,21 +892,32 @@
     island.addEventListener("pointerup", endDrag);
     island.addEventListener("pointercancel", endDrag);
   }
-  $("#bar").addEventListener("click", (e) => {
+  $("#bar").addEventListener("click", async (e) => {
     if (justDragged) return;
     const act = e.target.closest("[data-act]")?.dataset.act;
     if (act === "reset-pos") { e.stopPropagation(); resetPosition(); return; }
     if (act === "pin") { pinned = !pinned; toast(pinned ? "Đã ghim mở popup — không tự đóng khi bấm ra ngoài" : "Đã bỏ ghim mở popup"); updateBar(); return; }
     if (act === "vmic") { e.stopPropagation(); voiceCommand(); return; }
     if (act === "ime") {
+      e.stopPropagation();
       const V = window.VNKey;
-      const pref = (settingsCache.viet_engine === "vni") ? "vni" : "telex";
-      V.mode = V.mode ? null : pref;
-      V.userOn = V.mode;
-      V.suspended = false;
-      api("threads_embed_ime", { ime: V.mode });
-      toast(V.mode ? `Bộ gõ của Asi: ${V.mode === "vni" ? "VNI" : "Telex"} — hãy để bàn phím macOS ở ABC` : "Đã tắt bộ gõ của Asi");
-      updateBar();
+      const cur = V && V.mode ? V.mode : null;
+      let nextEngine;
+      if (e.altKey) {
+        nextEngine = cur === "vni" ? "telex" : "vni";
+      } else if (cur) {
+        V.lastPref = cur;
+        nextEngine = "off";
+      } else {
+        nextEngine = (V && V.lastPref) || (settingsCache.viet_engine === "vni" ? "vni" : "telex");
+      }
+      settingsCache.viet_engine = nextEngine;
+      if (V) V.userOn = nextEngine === "off" ? null : nextEngine;
+      await api("save_settings", { settings: settingsCache });
+      const activeMode = await syncImeInteractive(true);
+      api("threads_embed_ime", { ime: activeMode });
+      toast(activeMode ? `⌨️ Bộ gõ tiếng Việt: ${activeMode === "vni" ? "VNI" : "Telex"} (Giữ ⌥ bấm để đổi Telex/VNI)` : "⌨️ Đã chuyển sang gõ tiếng Anh (EN)");
+      if (tab === "settings" && mode === "expanded") viewSettings();
       return;
     }
     if (act === "close") { setMode("collapsed"); return; }
@@ -909,18 +937,25 @@
   // Chỉ thu gọn khi người dùng thật sự rời đi (chuột ở ngoài tai thỏ) — tránh bị đóng khi
   // bộ gõ tiếng Việt / bảng chọn emoji / đổi ngôn ngữ bàn phím làm cửa sổ mất focus thoáng qua
   window.addEventListener("blur", () => {
-    if (mode !== "expanded" || pinned) return;
+    if (mode !== "expanded") return;
+    if (pinned) {
+      syncImeInteractive(false, true);
+      return;
+    }
     modeTimer = setTimeout(() => {
       if (!document.hasFocus() && !hovering && !voice.active) setMode("collapsed");
     }, 450);
   });
   window.addEventListener("focus", () => {
     clearTimeout(modeTimer);
-    if (mode === "expanded" && (tab === "settings" || tab === "all")) {
-      setTimeout(() => {
-        if (tab === "settings") viewSettings();
-        else if (tab === "all") viewHome();
-      }, 150);
+    if (mode === "expanded") {
+      syncImeInteractive(true, false);
+      if (tab === "settings" || tab === "all") {
+        setTimeout(() => {
+          if (tab === "settings") viewSettings();
+          else if (tab === "all") viewHome();
+        }, 150);
+      }
     }
   });
   on("toggle", () => (mode === "expanded" ? setMode("collapsed") : setMode("expanded")));
@@ -1221,26 +1256,26 @@
     setMode("expanded", { force: true });
   });
 
-  // ───────── Các tab ─────────
+  // ───────── Các tab (bảng màu chuẩn iOS App Icon) ─────────
   const TABS = [
-    ["home", "Asi", I.mic, "#ffffff"],
-    ["tasks", "Việc", I.tasks, "#32d74b"],
-    ["notes", "Ghi chú", I.note, "#ffd60a"],
+    ["home", "Asi", I.mic, "#0a84ff"],
+    ["tasks", "Việc", I.tasks, "#30d158"],
+    ["notes", "Ghi chú", I.note, "#ff9f0a"],
     ["clips", "Clipboard", I.clip, "#5ac8fa"],
-    ["journal", "Nhật ký", I.book, "#ff9fd0"],
-    ["words", "Từ mới", I.words, "#ffb86b"],
-    ["threads", "Threads", I.at, "#f5f5f7"],
-    ["files", "File", I.file, "#4fb3ff"],
+    ["journal", "Nhật ký", I.book, "#ff375f"],
+    ["words", "Từ mới", I.words, "#ff9500"],
+    ["threads", "Threads", I.at, "#5e5ce6"],
+    ["files", "File", I.file, "#007aff"],
     ["clean", "Dọn máy", I.broom, "#ff9f0a"],
-    ["health", "Sức khoẻ", I.heart, "#ff6b81"],
-    ["settings", "Cài đặt", I.gear, "#bf8cff"],
+    ["health", "Sức khoẻ", I.heart, "#ff2d55"],
+    ["settings", "Cài đặt", I.gear, "#8e8e93"],
   ];
   function visibleTabs() {
     const vis = settingsCache.visible_tabs && settingsCache.visible_tabs.length ? settingsCache.visible_tabs : ["home", "tasks", "notes", "clips", "journal", "words", "threads"];
     const list = TABS.filter(([id]) => id === "home" || vis.includes(id));
     // tab đang mở mà bị ẩn vẫn hiện tạm để không "mất" chỗ đang đứng
     if (!list.some(([id]) => id === tab) && tab !== "all" && tab !== "settings") { const cur = TABS.find(([id]) => id === tab); if (cur) list.push(cur); }
-    list.push(["all", "Tất cả", I.grid, "#ffffff"]);
+    list.push(["all", "Tất cả", I.grid, "#64d2ff"]);
     if (!list.some(([id]) => id === "settings")) list.push(TABS.find(([id]) => id === "settings"));
     return list;
   }
@@ -2179,6 +2214,27 @@
     }
   });
   $("#view").addEventListener("click", async (e) => {
+    const ve = e.target.closest("[data-vengine]");
+    if (ve && tab === "settings") {
+      const val = ve.dataset.vengine;
+      const st = await api("get_settings");
+      st.viet_engine = val;
+      await api("save_settings", { settings: st });
+      settingsCache = st;
+      if (window.VNKey) window.VNKey.userOn = (val === "telex" || val === "vni") ? val : null;
+      const activeMode = await syncImeInteractive(true);
+      api("threads_embed_ime", { ime: activeMode });
+      ve.parentElement.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === ve));
+      const badge = $("#imeActiveBadge");
+      if (badge) {
+        badge.className = `chip ${activeMode ? "blue" : ""}`;
+        badge.textContent = activeMode ? `Đang bật: ${activeMode === "vni" ? "VNI" : "Telex"}` : "Đang tắt (EN)";
+      }
+      const inp = $("#imeTestInput");
+      if (inp) inp.focus();
+      toast(activeMode ? `⌨️ Đã bật bộ gõ ${activeMode === "vni" ? "VNI" : "Telex"}` : "⌨️ Đã tắt bộ gõ của Asi");
+      return;
+    }
     const vc = e.target.closest("[data-vcount]");
     if (vc && tab === "settings") {
       const st = await api("get_settings");
@@ -2375,9 +2431,26 @@
         <div class="muted small">Mỗi lần mở tai thỏ, trang chủ hiện vài từ mới kèm phiên âm; tab “Từ mới” để nghe mẫu và đọc thử.</div></div>
         <div class="seg">${[2, 3].map((n) => `<button class="${(st.vocab_count || 3) === n ? "on" : ""}" data-vcount="${n}">${n} từ</button>`).join("")}</div>
         <label class="row small" style="margin-left:8px"><input type="checkbox" data-k2="vocab_enabled" ${st.vocab_enabled !== false ? "checked" : ""}/> Bật</label></div></div>`;
-    const imeCard = ime ? `<div class="card" style="margin-bottom:10px"><div class="row"><div class="grow"><b>⌨️ Bộ gõ đang dùng trên máy</b>
-        <div class="muted small">${esc(ime.current || "không rõ")} · ${ime.recognized ? `Asi nhận ra bộ gõ tiếng Việt (${ime.recognized === "vni" ? "VNI" : "Telex"}) → tự gõ dấu giúp bạn` : "Asi chưa nhận ra bộ gõ này — chọn “Luôn Telex” hoặc “Luôn VNI”"}</div></div>
-        <select class="input" data-k="viet_engine"><option value="auto" ${st.viet_engine === "auto" ? "selected" : ""}>Tự động</option><option value="telex" ${st.viet_engine === "telex" ? "selected" : ""}>Luôn Telex</option><option value="vni" ${st.viet_engine === "vni" ? "selected" : ""}>Luôn VNI</option><option value="off" ${st.viet_engine === "off" ? "selected" : ""}>Tắt</option></select></div></div>` : "";
+    const V = window.VNKey;
+    const curMode = V && V.mode ? V.mode : null;
+    const imeCard = `<div class="card" style="margin-bottom:10px">
+      <div class="row">
+        <div class="grow">
+          <b>⌨️ Bộ gõ tiếng Việt thông minh (Telex / VNI)</b>
+          <div class="muted small">${ime && ime.current ? `Bàn phím hệ thống: ${esc(ime.current.split(".").pop())} · ` : ""}Tự chuyển macOS sang ABC khi mở bảng và trả lại bộ gõ cũ khi đóng để không bao giờ bị nuốt chữ.</div>
+        </div>
+        <span class="chip ${curMode ? "blue" : ""}" id="imeActiveBadge">${curMode ? `Đang bật: ${curMode === "vni" ? "VNI" : "Telex"}` : "Đang tắt (EN)"}</span>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <span class="small muted grow">Chế độ gõ trong Mini-Asi</span>
+        <div class="seg">
+          ${[["auto", "Tự động"], ["telex", "Luôn Telex"], ["vni", "Luôn VNI"], ["off", "Tắt (EN)"]].map(([v, lbl]) => `<button class="${(st.viet_engine || "auto") === v ? "on" : ""}" data-vengine="${v}">${lbl}</button>`).join("")}
+        </div>
+      </div>
+      <div style="margin-top:8px">
+        <input class="input" id="imeTestInput" placeholder="Gõ thử tiếng Việt tại đây: xin chaof Vietj Nam, dduwocj, thuwong, nguwoif…" style="height:34px;font-size:12.5px" />
+      </div>
+    </div>`;
     $("#view").innerHTML = updCard + permCard + dispCard + idleCard + ttsCard + vocabCard + imeCard + featCard + backupCard + `<div style="height:10px"></div>
       <div class="card ${lic.pro ? "" : "upsell"}" style="margin:0 0 10px">
         ${lic.pro
@@ -2417,12 +2490,6 @@
       </div>
       <div class="sec">${I.mic} Giọng nói & nhật ký</div>
       <div class="card">
-        <div class="setting"><div class="grow"><b>Bộ gõ tiếng Việt của Asi</b><span>Tự gõ dấu trong tai thỏ — tự bật khi máy đang dùng bộ gõ tiếng Việt</span></div>
-          <select class="input" data-k="viet_engine">
-            <option value="auto" ${st.viet_engine === "auto" ? "selected" : ""}>Tự động</option>
-            <option value="telex" ${st.viet_engine === "telex" ? "selected" : ""}>Luôn Telex</option>
-            <option value="vni" ${st.viet_engine === "vni" ? "selected" : ""}>Luôn VNI</option>
-            <option value="off" ${st.viet_engine === "off" ? "selected" : ""}>Tắt (dùng bộ gõ macOS)</option></select></div>
         <div class="setting"><div class="grow"><b>Ngôn ngữ giọng nói</b><span>Dùng khi ghi chú, thêm việc, viết nhật ký bằng giọng nói</span></div>
           <select class="input" data-k="voice_lang"><option value="vi-VN" ${st.voice_lang === "vi-VN" ? "selected" : ""}>Tiếng Việt</option>
           <option value="en-US" ${st.voice_lang === "en-US" ? "selected" : ""}>English (US)</option><option value="en-GB" ${st.voice_lang === "en-GB" ? "selected" : ""}>English (UK)</option></select></div>
