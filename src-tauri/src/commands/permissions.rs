@@ -33,10 +33,10 @@ pub(crate) fn perm_list(app: &AppHandle) -> Vec<PermItem> {
         _ => "granted",
     };
     let auto_state = if let Some(st) = app.try_state::<Arc<AppState>>() {
-        let g = st.sync.lock().unwrap();
-        if g.last_run > 0 && g.last_error.is_none() {
+        let s = st.store.lock().unwrap();
+        if s.sync.last_run > 0 && s.sync.last_error.is_none() {
             "granted"
-        } else if g.last_error.as_deref().unwrap_or("").contains("Chưa cho phép") {
+        } else if s.sync.last_error.as_deref().unwrap_or("").contains("Chưa cho phép") {
             "denied"
         } else {
             "manual"
@@ -117,13 +117,13 @@ pub(crate) async fn request_permissions(app: AppHandle, which: String) -> Vec<Pe
             let r1 = apple::reminders_pull("Mini-Asi");
             let r2 = apple::notes_pull("Mini-Asi");
             if let Some(st) = app.try_state::<Arc<AppState>>() {
-                let mut g = st.sync.lock().unwrap();
-                g.last_run = now_ms();
-                g.last_error = match (r1, r2) {
+                let mut s = st.store.lock().unwrap();
+                s.sync.last_run = now_ms();
+                s.sync.last_error = match (r1, r2) {
                     (Err(e), _) | (_, Err(e)) => Some(e),
                     _ => None,
                 };
-                let _ = g.save();
+                let _ = s.save_sync();
             }
         }
         if want("accessibility") && notch_native::perm::accessibility() != notch_native::perm::State::Granted {
