@@ -136,8 +136,28 @@ pub fn run() {
                     }
                 });
             }
-            let w = if geo.has_notch { geo.notch_width + 152.0 } else { 220.0 };
-            place(&win, &geo, w, geo.notch_height + 10.0);
+            let (init_w, init_h) = {
+                let s = st.store.lock().unwrap();
+                let disp = s.settings.display_mode.as_str();
+                if disp == "bubble" {
+                    (58.0 + 36.0, 58.0 + 20.0)
+                } else {
+                    let wing = match s.settings.wing_size.as_str() {
+                        "hidden" => 0.0,
+                        "xs" => 28.0,
+                        "s" => 56.0,
+                        "m" => 88.0,
+                        "l" => 128.0,
+                        "custom" => s.settings.notch_w.clamp(0.0, 180.0),
+                        _ => if s.settings.notch_w > 0.0 { s.settings.notch_w.clamp(0.0, 180.0) } else { 56.0 },
+                    };
+                    let on_notch = disp == "notch" && geo.has_notch;
+                    let base_w = if on_notch { geo.notch_width + wing * 2.0 } else { (130.0 + wing * 1.4).max(90.0) };
+                    let bar_h = if s.settings.notch_h >= 20.0 { s.settings.notch_h.clamp(20.0, 54.0) } else if on_notch { geo.notch_height } else { 32.0 };
+                    (base_w + 36.0, bar_h + 20.0)
+                }
+            };
+            place(&win, &geo, init_w, init_h);
             apply_level(app.handle(), normal_level(app.handle()));
             let _ = win.show();
 

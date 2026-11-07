@@ -37,8 +37,10 @@ pub(crate) fn file_info(paths: Vec<String>) -> Vec<FileInfo> {
 #[tauri::command]
 pub(crate) async fn pick_files(app: AppHandle) -> Vec<String> {
     use tauri_plugin_dialog::DialogExt;
-    tauri::async_runtime::spawn_blocking(move || {
-        app.dialog()
+    apply_level(&app, 0);
+    let a2 = app.clone();
+    let res = tauri::async_runtime::spawn_blocking(move || {
+        a2.dialog()
             .file()
             .blocking_pick_files()
             .unwrap_or_default()
@@ -48,7 +50,9 @@ pub(crate) async fn pick_files(app: AppHandle) -> Vec<String> {
             .collect()
     })
     .await
-    .unwrap_or_default()
+    .unwrap_or_default();
+    apply_level(&app, normal_level(&app));
+    res
 }
 
 pub(crate) async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
@@ -113,6 +117,11 @@ pub(crate) fn cursor_side(app: AppHandle) -> String {
 use std::sync::atomic::{AtomicU8, Ordering};
 
 static LAST_MIC_VOL: AtomicU8 = AtomicU8::new(80);
+static MEDIA_CACHE: OnceLock<Mutex<(i64, MediaQuickStatus)>> = OnceLock::new();
+
+fn media_cache() -> &'static Mutex<(i64, MediaQuickStatus)> {
+    MEDIA_CACHE.get_or_init(|| Mutex::new((0, MediaQuickStatus::default())))
+}
 
 #[derive(Debug, Clone, Serialize, serde::Deserialize, Default)]
 #[serde(default)]
@@ -163,7 +172,15 @@ JSON.stringify({
 });
 "#;
 
-pub(crate) fn query_media_status_sync() -> MediaQuickStatus {
+pub(crate) fn query_media_status_sync(force: bool) -> MediaQuickStatus {
+    let now = now_ms();
+    if !force {
+        if let Ok(g) = media_cache().lock() {
+            if g.0 > 0 && now - g.0 < 2500 {
+                return g.1.clone();
+            }
+        }
+    }
     let cam_granted = notch_native::perm::camera() == notch_native::perm::State::Granted;
     #[cfg(target_os = "macos")]
     {
@@ -174,22 +191,29 @@ pub(crate) fn query_media_status_sync() -> MediaQuickStatus {
                         LAST_MIC_VOL.store(s.mic_volume, Ordering::Relaxed);
                     }
                     s.cam_granted = cam_granted;
+                    if let Ok(mut g) = media_cache().lock() {
+                        *g = (now_ms(), s.clone());
+                    }
                     return s;
                 }
             }
         }
     }
-    MediaQuickStatus {
+    let fallback = MediaQuickStatus {
         output_volume: 60,
         mic_volume: LAST_MIC_VOL.load(Ordering::Relaxed),
         cam_granted,
         ..Default::default()
+    };
+    if let Ok(mut g) = media_cache().lock() {
+        *g = (now_ms(), fallback.clone());
     }
+    fallback
 }
 
 #[tauri::command]
 pub(crate) async fn media_status() -> MediaQuickStatus {
-    tauri::async_runtime::spawn_blocking(query_media_status_sync).await.unwrap_or_default()
+    tauri::async_runtime::spawn_blocking(|| query_media_status_sync(false)).await.unwrap_or_default()
 }
 
 /// Điều khiển nhạc/media: "play" | "next" | "prev" | "mute_out" | "vol_up" | "vol_down"
@@ -230,7 +254,7 @@ pub(crate) async fn media_control(app: AppHandle, action: String) -> MediaQuickS
     }
     tauri::async_runtime::spawn_blocking(|| {
         std::thread::sleep(Duration::from_millis(90));
-        query_media_status_sync()
+        query_media_status_sync(true)
     })
     .await
     .unwrap_or_default()
@@ -240,7 +264,7 @@ pub(crate) async fn media_control(app: AppHandle, action: String) -> MediaQuickS
 #[tauri::command]
 pub(crate) async fn toggle_mic_mute() -> MediaQuickStatus {
     tauri::async_runtime::spawn_blocking(|| {
-        let mut cur = query_media_status_sync();
+        let mut cur = query_media_status_sync(false);
         #[cfg(target_os = "macos")]
         {
             if cur.mic_muted || cur.mic_volume == 0 {
@@ -264,6 +288,9 @@ pub(crate) async fn toggle_mic_mute() -> MediaQuickStatus {
             let _ = std::process::Command::new("pactl").args(["set-source-mute", "@DEFAULT_SOURCE@", "toggle"]).status();
             cur.mic_muted = !cur.mic_muted;
             cur.mic_volume = if cur.mic_muted { 0 } else { 80 };
+        }
+        if let Ok(mut g) = media_cache().lock() {
+            *g = (now_ms(), cur.clone());
         }
         cur
     })

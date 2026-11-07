@@ -54,8 +54,10 @@ pub(crate) fn place(win: &WebviewWindow, geo: &Geometry, w: f64, h: f64) {
     let d = win.app_handle().try_state::<Arc<AppState>>().map(|st| disp_of(&st)).unwrap_or(Disp { mode: "notch".into(), bx: 0.0, by: 0.0 });
     let (sx, sy, sw, sh) = (geo.screen_x, geo.screen_y, geo.screen_width, geo.screen_height.max(400.0));
     let (x, y) = if d.bx > 0.0 || d.by > 0.0 {
-        // Người dùng đã kéo & ghim ở vị trí tuỳ chọn trên màn hình (áp dụng cho cả tai thỏ, viên thuốc, bong bóng & popup)
-        (d.bx.clamp(sx, (sx + sw - w).max(sx)), d.by.clamp(sy, (sy + sh - h).max(sy)))
+        // Người dùng đã kéo & ghim ở vị trí tuỳ chọn trên màn hình:
+        // Với tai thỏ / viên thuốc, `d.bx` là tâm ngang để khi mở peek/expanded luôn bung cân đối 2 bên.
+        let raw_x = if d.mode == "bubble" { d.bx } else { d.bx - w / 2.0 };
+        (raw_x.clamp(sx, (sx + sw - w).max(sx)), d.by.clamp(sy, (sy + sh - h).max(sy)))
     } else {
         match d.mode.as_str() {
             "bubble" => {
@@ -122,9 +124,11 @@ pub(crate) fn move_bubble(win: WebviewWindow, st: S, x: f64, y: f64, save: bool)
     }
     let _ = win.set_position(LogicalPosition::new(x, y));
     if save {
+        let sf = win.scale_factor().unwrap_or(1.0);
+        let cur_w = win.inner_size().map(|sz| sz.width as f64 / sf).unwrap_or(300.0);
         let mut s = st.store.lock().unwrap();
-        s.settings.bubble_x = x;
-        s.settings.bubble_y = y;
+        s.settings.bubble_x = if s.settings.display_mode == "bubble" { x } else { x + cur_w / 2.0 };
+        s.settings.bubble_y = y.max(0.0);
         let _ = s.save_settings();
     }
 }

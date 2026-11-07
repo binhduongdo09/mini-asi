@@ -170,7 +170,7 @@ button { cursor: pointer; border: 0; background: none; }
 }
 
 /* Ló ra khi rê chuột (Peek): Trung tâm điều khiển kiểu iOS (Control Center) */
-.peek { display: flex; flex-direction: column; justify-content: space-between; gap: 8px; padding: 4px 14px 12px; }
+.peek { display: flex; flex-direction: column; justify-content: flex-start; gap: 7px; padding: 4px 14px 12px; overflow: hidden; }
 .peek-head { display: flex; align-items: center; gap: 6px; }
 .peek-top { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; cursor: pointer; padding: 3px 6px; border-radius: 10px; transition: background 0.15s; }
 .peek-top:hover { background: rgba(255, 255, 255, 0.05); }
@@ -328,15 +328,6 @@ body.icons-sm .ios-meta span { display: none; }
 
 /* ───────── Bảng điều khiển ───────── */
 .panel { display: flex; flex-direction: column; gap: 10px; padding: 6px 16px 14px; }
-.tabs { display: flex; gap: 4px; padding: 3px; background: var(--card); border-radius: 12px; flex: none; }
-.tab {
-  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 30px; border-radius: 9px;
-  color: var(--muted); font-weight: 550; font-size: 12px; transition: 0.18s; position: relative;
-}
-.tab:hover { color: #fff; }
-.tab.active { background: var(--card2); color: #fff; box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset; }
-.tab.active svg { color: var(--tc, #fff); }
-.tab .dot { position: absolute; top: 4px; right: 8px; width: 6px; height: 6px; border-radius: 3px; background: var(--red); }
 .view { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; position: relative; animation: fadein 0.25s var(--ease); }
 @keyframes fadein { from { opacity: 0; transform: translateY(4px); } }
 
@@ -522,23 +513,23 @@ body.mock::after {
 
 /* ───────── Thanh Tab & Nút Tính năng kiểu iOS Icon (Hỗ trợ Icon To / Icon Nhỏ) ───────── */
 .tabs {
-  display: flex; gap: 5px; padding: 5px; background: rgba(20, 20, 24, 0.92);
+  display: flex; gap: 4px; padding: 4px; background: rgba(20, 20, 24, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 16px; flex: none;
-  justify-content: space-between; overflow-x: auto;
+  justify-content: space-between; overflow: hidden;
 }
 .tab {
-  flex: 1; min-width: 48px; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 3px; height: 52px; padding: 4px 4px; border-radius: 13px;
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; height: 50px; padding: 3px 2px; border-radius: 12px;
   color: var(--muted); font-weight: 600; font-size: 10.5px; transition: 0.2s var(--spring); position: relative;
 }
 .tab-ic {
-  width: 28px; height: 28px; border-radius: 9px; display: grid; place-items: center;
+  width: 26px; height: 26px; border-radius: 8.5px; display: grid; place-items: center;
   background: color-mix(in srgb, var(--tc, #4fb3ff) 22%, #242429);
   color: var(--tc, #fff);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.22);
   transition: 0.2s var(--spring);
 }
-.tab-ic svg { width: 15px; height: 15px; }
+.tab-ic svg { width: 14.5px; height: 14.5px; }
 .tab .lbl { display: block; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .tab:hover { color: #fff; background: rgba(255, 255, 255, 0.05); }
 .tab:hover .tab-ic { transform: translateY(-1px) scale(1.06); }
@@ -551,17 +542,17 @@ body.mock::after {
   box-shadow: 0 3px 10px color-mix(in srgb, var(--tc, #4fb3ff) 50%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.45);
   transform: scale(1.06);
 }
-.tab .dot { position: absolute; top: 4px; right: 6px; width: 7px; height: 7px; border-radius: 4px; background: var(--red); box-shadow: 0 0 0 1.5px #141416; }
+.tab .dot { position: absolute; top: 4px; right: 5px; width: 6.5px; height: 6.5px; border-radius: 4px; background: var(--red); box-shadow: 0 0 0 1.5px #141416; }
 
 /* Chế độ Icon Nhỏ (body.icons-sm) cho thanh Tab */
 body.icons-sm .tabs { padding: 3px; gap: 3px; border-radius: 13px; }
 body.icons-sm .tab {
-  flex: none; flex-direction: row; height: 32px; min-width: 0; padding: 0 8px; gap: 6px; border-radius: 10px; font-size: 11.5px;
+  flex: 1 1 0; flex-direction: row; height: 32px; min-width: 0; padding: 0 6px; gap: 5px; border-radius: 10px; font-size: 11.5px;
 }
-body.icons-sm .tab-ic { width: 21px; height: 21px; border-radius: 6.5px; }
-body.icons-sm .tab-ic svg { width: 12.5px; height: 12.5px; }
+body.icons-sm .tab-ic { width: 20px; height: 20px; border-radius: 6px; flex: none; }
+body.icons-sm .tab-ic svg { width: 12px; height: 12px; }
 body.icons-sm .tab .lbl { display: none; }
-body.icons-sm .tab.active { flex: 1; }
+body.icons-sm .tab.active { flex: 1.8 1 0; }
 body.icons-sm .tab.active .lbl { display: inline; }
 
 /* ───────── Mic & giọng nói ───────── */
@@ -721,15 +712,28 @@ body.icons-sm .tile-val { font-size: 15px; }
 #island.mode-collapsed.notch-hidden::after {
   opacity: 0 !important;
 }
+/* Trên màn không có tai thỏ vật lý / chế độ Viên thuốc / vị trí ghim tuỳ chọn: giữ thanh chỉ báo mỏng 6px kiểu iOS để luôn biết chỗ rê chuột */
+#island.virtual.mode-collapsed.notch-hidden,
+body.disp-pill #island.mode-collapsed.notch-hidden,
+body.floating-pos #island.mode-collapsed.notch-hidden {
+  opacity: 0.55 !important;
+  height: 6px !important;
+  border-radius: 99px !important;
+}
+#island.virtual.mode-collapsed.notch-hidden .bar,
+body.disp-pill #island.mode-collapsed.notch-hidden .bar,
+body.floating-pos #island.mode-collapsed.notch-hidden .bar {
+  opacity: 0;
+}
 .notch-edge {
-  position: absolute; top: 0; bottom: 0; width: 10px; z-index: 25; display: none; touch-action: none;
+  position: absolute; top: 0; bottom: 0; width: 12px; z-index: 25; display: none; touch-action: none;
 }
 .mode-collapsed .notch-edge, .mode-peek .notch-edge { display: block; }
-.notch-edge.l { left: -4px; cursor: ew-resize; }
-.notch-edge.r { right: -4px; cursor: ew-resize; }
+.notch-edge.l { left: -5px; cursor: ew-resize; }
+.notch-edge.r { right: -5px; cursor: ew-resize; }
 .notch-edge:hover::after {
-  content: ""; position: absolute; top: 6px; bottom: 6px; left: 3px; width: 3px; border-radius: 2px;
-  background: rgba(79, 179, 255, 0.65);
+  content: ""; position: absolute; top: 6px; bottom: 6px; left: 4px; width: 3.5px; border-radius: 2px;
+  background: rgba(79, 179, 255, 0.8);
 }
 .perm-banner { margin-bottom: 10px; background: linear-gradient(120deg, rgba(79, 179, 255, 0.16), rgba(191, 140, 255, 0.12)); }
 

@@ -202,11 +202,15 @@ pub(crate) fn hover_loop(app: AppHandle) {
         }
         let Some(win) = app.get_webview_window("notch") else { continue };
         let (Ok(c), Ok(p), Ok(sz)) = (app.cursor_position(), win.outer_position(), win.outer_size()) else { continue };
-        let x0 = p.x as f64;
-        let y0 = p.y as f64 - 2.0;
-        let x1 = (p.x + sz.width as i32) as f64;
-        let y1 = (p.y + sz.height as i32) as f64;
-        let now_in = c.x >= x0 && c.x <= x1 && c.y >= y0 && c.y <= y1;
+        let sf = win.scale_factor().unwrap_or(1.0);
+        // Tránh vùng đệm bóng đổ trong suốt (MARGIN_X=18, MARGIN_B=20) khi xét điểm vào để không bị nhấp nháy
+        let pad_x = if inside { 2.0 * sf } else { 16.0 * sf };
+        let pad_b = if inside { 2.0 * sf } else { 16.0 * sf };
+        let x0 = p.x as f64 + pad_x;
+        let y0 = p.y as f64 - 3.0 * sf;
+        let x1 = (p.x + sz.width as i32) as f64 - pad_x;
+        let y1 = (p.y + sz.height as i32) as f64 - pad_b;
+        let now_in = c.x >= x0 && c.x <= x1.max(x0 + 20.0) && c.y >= y0 && c.y <= y1.max(y0 + 12.0);
         if now_in != inside {
             inside = now_in;
             let _ = app.emit("hover", inside);

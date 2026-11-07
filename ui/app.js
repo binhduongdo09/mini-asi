@@ -126,16 +126,32 @@
   }
   applyIconSize(early.icon_size);
 
+  const WING_PRESETS = { hidden: 0, xs: 28, s: 56, m: 88, l: 128 };
   function currentWingPx(st = settingsCache) {
     const ws = st.wing_size || "s";
     if (ws === "hidden") return 0;
-    if (ws === "custom") return Math.max(0, Math.min(220, Math.round(Number(st.notch_w) || 0)));
-    return { hidden: 0, xs: 28, s: 76, m: 112, l: 150 }[ws] ?? 76;
+    if (ws === "custom") return Math.max(0, Math.min(180, Math.round(Number(st.notch_w) || 0)));
+    if (ws in WING_PRESETS) return WING_PRESETS[ws];
+    return typeof st.notch_w === "number" && st.notch_w > 0 ? Math.max(0, Math.min(180, Math.round(st.notch_w))) : 56;
   }
+
+  const MARGIN_X = 18, MARGIN_B = 20;
+  const MAX_W = Math.max(600, Math.round(geo.screen_width - 60));
+  const MAX_H = Math.max(420, Math.round((geo.screen_height || 900) - 40));
+  const clampW = (w) => Math.round(Math.min(Math.max(w, Math.max(BASE_W + 40, 460)), MAX_W));
+  const clampH = (h) => Math.round(Math.min(Math.max(h, 360), MAX_H));
+  let peekCam = { active: false, stream: null };
+  let showPeekSizer = false;
+  let mode = "collapsed";
+  let pinned = false;
+  let hovering = false;
+  let modeTimer = null;
+  let dropBefore = null;
+  let suppressHoverUntil = 0;
 
   const SIZES = {
     collapsed: [BASE_W, BAR],
-    peek: [500, BAR + 150],
+    peek: [520, BAR + 176],
     alert: [460, BAR + 120],
     drop: [500, BAR + 132],
     expanded: [700, 490],
@@ -143,7 +159,24 @@
     reply: [500, BAR + 250],
   };
 
-  function applyNotchGeometry(st = settingsCache) {
+  // Nhúng Threads vào bảng: đang thử nghiệm (macOS) — mặc định dùng cửa sổ Threads riêng
+  const EMBED_OK = geo.platform === "macos" || new URLSearchParams(location.search).has("embed");
+  const threadsInline = () => EMBED_OK && DISP !== "bubble" && tab === "threads" && (settingsCache.threads_embed_beta || new URLSearchParams(location.search).has("embed")) && !window.__thApi;
+
+  // Kích thước bảng: theo tab, có thể kéo giãn & được nhớ lại
+  function sizeOf(m) {
+    if (m === "peek") {
+      const baseH = SIZES.peek[1] + (showPeekSizer ? 44 : 0) + (peekCam.active ? 138 : 0);
+      return [SIZES.peek[0], baseH];
+    }
+    if (m !== "expanded") return SIZES[m];
+    if (threadsInline()) {
+      return [clampW(settingsCache.threads_w || Math.max(BASE_W + 120, 470)), clampH(settingsCache.threads_h || Math.min(MAX_H, 860))];
+    }
+    return [clampW(settingsCache.panel_w || SIZES.expanded[0]), clampH(settingsCache.panel_h || SIZES.expanded[1])];
+  }
+
+  function applyNotchGeometry(st = settingsCache, resizeNow = false) {
     WING = currentWingPx(st);
     const defaultBar = Math.round(ON_NOTCH ? geo.notch_height : DISP === "notch" ? 30 : 34);
     const customH = Math.round(Number(st.notch_h) || 0);
@@ -159,52 +192,31 @@
     root.style.setProperty("--gap-w", (ON_NOTCH ? Math.round(geo.notch_width) : 0) + "px");
     const smIcons = (st.icon_size || "large") === "small";
     SIZES.collapsed = DISP === "bubble" ? [58, 58] : [BASE_W, BAR];
-    SIZES.peek = [Math.max(BASE_W + 120, smIcons ? 480 : 520), BAR + (smIcons ? 108 : 152)];
+    SIZES.peek = [Math.max(BASE_W + 110, smIcons ? 490 : 532), BAR + (smIcons ? 132 : 176)];
     SIZES.alert = [Math.max(BASE_W + 80, 460), BAR + 120];
     SIZES.drop = [Math.max(BASE_W + 130, 500), BAR + 132];
     SIZES.expanded = [Math.max(BASE_W + 120, 700), 490];
     SIZES.listen = [Math.max(BASE_W + 80, 440), BAR + 84];
     SIZES.reply = [Math.max(BASE_W + 140, 500), BAR + 250];
-  }
-  applyNotchGeometry(early);
-
-  const MARGIN_X = 18, MARGIN_B = 20;
-  const MAX_W = Math.max(600, Math.round(geo.screen_width - 60));
-  const MAX_H = Math.max(420, Math.round((geo.screen_height || 900) - 40));
-  const clampW = (w) => Math.round(Math.min(Math.max(w, Math.max(BASE_W + 40, 460)), MAX_W));
-  const clampH = (h) => Math.round(Math.min(Math.max(h, 360), MAX_H));
-  let peekCam = { active: false, stream: null };
-  let showPeekSizer = false;
-  // Nhúng Threads vào bảng: hiện hỗ trợ macOS (Windows/Linux mở cửa sổ riêng)
-  // Nhúng Threads vào bảng: đang thử nghiệm (macOS) — mặc định dùng cửa sổ Threads riêng
-  const EMBED_OK = geo.platform === "macos" || new URLSearchParams(location.search).has("embed");
-  const threadsInline = () => EMBED_OK && DISP !== "bubble" && tab === "threads" && (settingsCache.threads_embed_beta || new URLSearchParams(location.search).has("embed")) && !window.__thApi;
-  // Kích thước bảng: theo tab, có thể kéo giãn & được nhớ lại
-  function sizeOf(m) {
-    if (m === "peek") {
-      const baseH = SIZES.peek[1] + (showPeekSizer ? 40 : 0) + (peekCam.active ? 136 : 0);
-      return [SIZES.peek[0], baseH];
+    const [cw, ch] = sizeOf(mode);
+    root.style.setProperty("--w", cw + "px");
+    root.style.setProperty("--h", ch + "px");
+    if (resizeNow) {
+      api("set_frame", { width: cw + MARGIN_X * 2, height: ch + MARGIN_B });
     }
-    if (m !== "expanded") return SIZES[m];
-    if (threadsInline()) {
-      return [clampW(settingsCache.threads_w || Math.max(BASE_W + 120, 470)), clampH(settingsCache.threads_h || Math.min(MAX_H, 860))];
-    }
-    return [clampW(settingsCache.panel_w || SIZES.expanded[0]), clampH(settingsCache.panel_h || SIZES.expanded[1])];
   }
-
-  let mode = "collapsed";
-  let pinned = false;
-  let hovering = false;
-  let modeTimer = null;
-  let dropBefore = null;
+  applyNotchGeometry(early, true);
 
   let freshOpen = true;
   async function setMode(next, opts = {}) {
     if (next === mode && !opts.force) return;
     clearTimeout(modeTimer);
+    if (next === "collapsed" && mode !== "collapsed") {
+      suppressHoverUntil = Date.now() + 500;
+    }
     const [w, h] = sizeOf(next);
     const [cw, ch] = sizeOf(mode === next ? "collapsed" : mode);
-    const growing = w * h >= cw * ch;
+    const growing = w >= cw || h >= ch;
     const frame = () => api("set_frame", { width: w + MARGIN_X * 2, height: h + MARGIN_B });
     if (growing) await frame(); // nở cửa sổ trước rồi mới chạy hoạt cảnh
     island.className = island.className.replace(/mode-\w+/, "mode-" + next);
@@ -483,14 +495,15 @@
     if (rng) {
       rng.addEventListener("input", (e) => {
         const val = Number(e.target.value);
-        settingsCache.wing_size = val === 0 ? "hidden" : "custom";
+        settingsCache.wing_size = val <= 2 ? "hidden" : "custom";
         settingsCache.notch_w = val;
         const lbl = $("#peekWingVal");
-        if (lbl) lbl.textContent = val === 0 ? "Ẩn kín" : val + " px";
-        applyNotchGeometry(settingsCache);
+        if (lbl) lbl.textContent = val <= 2 ? "Ẩn kín" : val + " px";
+        applyNotchGeometry(settingsCache, false);
         updateBar();
       });
       rng.addEventListener("change", async () => {
+        applyNotchGeometry(settingsCache, true);
         await api("save_settings", { settings: settingsCache });
         toast(currentWingPx() === 0 ? "Đã ẩn hoàn toàn sau tai thỏ — rê chuột lên mép trên để mở" : "Đã lưu kích thước tai thỏ");
       });
@@ -499,6 +512,16 @@
       const v = $("#peekCamVideo");
       if (v && v.srcObject !== peekCam.stream) v.srcObject = peekCam.stream;
     }
+    // Tự động đo chiều cao thực tế của nội dung Peek để không bao giờ bị cắt mất nút ở đáy
+    requestAnimationFrame(() => {
+      if (mode !== "peek") return;
+      const neededH = Math.max(sizeOf("peek")[1], BAR + pk.scrollHeight + 6);
+      const [pw] = sizeOf("peek");
+      if (Math.abs(neededH - parseFloat(root.style.getPropertyValue("--h") || "0")) > 2) {
+        root.style.setProperty("--h", neededH + "px");
+        api("set_frame", { width: pw + MARGIN_X * 2, height: neededH + MARGIN_B });
+      }
+    });
   }
 
   async function refreshMediaQuick() {
@@ -615,7 +638,7 @@
     if (act === "wing-preset") {
       settingsCache.wing_size = "hidden";
       settingsCache.notch_w = 0;
-      applyNotchGeometry(settingsCache);
+      applyNotchGeometry(settingsCache, true);
       await api("save_settings", { settings: settingsCache });
       renderPeek();
       updateBar();
@@ -623,6 +646,7 @@
       return;
     }
     if (act === "airdrop") {
+      suppressHoverUntil = Date.now() + 2000;
       const paths = await api("pick_files");
       if (!paths || !paths.length) return;
       try {
@@ -658,6 +682,8 @@
         const startWing = currentWingPx();
         notchDrag = { ne, x: e.screenX, side: ne.classList.contains("l") ? -1 : 1, startWing, lastWing: startWing };
         island.classList.add("resizing");
+        const [, ch] = sizeOf(mode);
+        api("set_frame", { width: Math.max(600, (geo.notch_width || 185) + 380) + MARGIN_X * 2, height: ch + MARGIN_B });
         return;
       }
       const g = e.target.closest(".grip, .grip-corner");
@@ -676,9 +702,12 @@
         const nw = Math.max(0, Math.min(180, Math.round(notchDrag.startWing + delta)));
         notchDrag.lastWing = nw;
         settingsCache.notch_w = nw;
-        settingsCache.wing_size = nw <= 2 ? "hidden" : nw <= 34 ? "xs" : nw <= 60 ? "s" : nw <= 95 ? "m" : "l";
+        settingsCache.wing_size = nw <= 2 ? "hidden" : "custom";
         cancelAnimationFrame(raf);
-        raf = requestAnimationFrame(() => applyNotchGeometry());
+        raf = requestAnimationFrame(() => {
+          applyNotchGeometry(settingsCache, false);
+          updateBar();
+        });
         return;
       }
       if (!drag) return;
@@ -698,8 +727,9 @@
         notchDrag = null;
         island.classList.remove("resizing");
         settingsCache.notch_w = nw;
-        settingsCache.wing_size = nw <= 2 ? "hidden" : nw <= 34 ? "xs" : nw <= 60 ? "s" : nw <= 95 ? "m" : "l";
-        applyNotchGeometry();
+        settingsCache.wing_size = nw <= 2 ? "hidden" : "custom";
+        applyNotchGeometry(settingsCache, true);
+        updateBar();
         await api("save_settings", { settings: settingsCache });
         toast(nw <= 2 ? "Đã ẩn hoàn toàn sau tai thỏ — rê chuột lên mép trên để mở lại" : `Độ rộng cánh tai thỏ: ${nw} px`);
         return;
@@ -721,9 +751,10 @@
     island.addEventListener("pointercancel", end);
     island.addEventListener("dblclick", (e) => {
       if (e.target.closest(".notch-edge")) {
-        settingsCache.notch_w = currentWingPx() <= 2 ? 52 : 0;
+        settingsCache.notch_w = currentWingPx() <= 2 ? 56 : 0;
         settingsCache.wing_size = settingsCache.notch_w === 0 ? "hidden" : "s";
-        applyNotchGeometry();
+        applyNotchGeometry(settingsCache, true);
+        updateBar();
         api("save_settings", { settings: settingsCache });
         toast(settingsCache.notch_w === 0 ? "Đã ẩn hoàn toàn sau tai thỏ" : "Đã khôi phục kích thước tai thỏ");
         return;
@@ -743,14 +774,24 @@
   });
 
   // ───────── Tương tác hòn đảo ─────────
-  on("hover", (inside) => {
+  function scheduleHoverSync(inside) {
     hovering = inside;
-    if (inside && mode === "collapsed" && DISP !== "bubble") modeTimer = setTimeout(() => hovering && setMode("peek"), 140);
-    if (!inside && mode === "peek") modeTimer = setTimeout(() => !hovering && setMode("collapsed"), peekCam.active ? 1600 : 380);
-  });
+    clearTimeout(modeTimer);
+    if (island.classList.contains("resizing") || island.classList.contains("dragging")) return;
+    if (inside && mode === "collapsed" && DISP !== "bubble" && Date.now() >= suppressHoverUntil) {
+      modeTimer = setTimeout(() => {
+        if (hovering && mode === "collapsed" && Date.now() >= suppressHoverUntil) setMode("peek");
+      }, 130);
+    } else if (!inside && mode === "peek") {
+      modeTimer = setTimeout(() => {
+        if (!hovering && mode === "peek") setMode("collapsed");
+      }, peekCam.active ? 1600 : 360);
+    }
+  }
+  on("hover", (inside) => scheduleHoverSync(inside));
   island.addEventListener("transitionend", (e) => { if (e.target === island && e.propertyName === "width") { const rw = $("#rightWing"); rw.dataset.keys = ""; delete rw.dataset.retry; updateBar(); } });
-  island.addEventListener("mouseenter", () => { hovering = true; if (mode === "collapsed" && DISP !== "bubble") modeTimer = setTimeout(() => hovering && setMode("peek"), 140); });
-  island.addEventListener("mouseleave", () => { hovering = false; if (mode === "peek") modeTimer = setTimeout(() => !hovering && setMode("collapsed"), peekCam.active ? 1600 : 380); });
+  island.addEventListener("mouseenter", () => { if (document.body.classList.contains("mock")) scheduleHoverSync(true); else hovering = true; });
+  island.addEventListener("mouseleave", () => { if (document.body.classList.contains("mock")) scheduleHoverSync(false); });
   // Kéo & ghim vị trí bất kỳ trên màn hình (áp dụng cho cả Tai thỏ, Viên thuốc, Bong bóng và bảng Popup mở rộng)
   let justDragged = false;
   async function resetPosition() {
@@ -792,7 +833,7 @@
       if (d && d.moved && d.last) {
         const [nx, ny] = d.last;
         api("move_bubble", { x: nx, y: ny, save: true });
-        settingsCache.bubble_x = nx;
+        settingsCache.bubble_x = DISP === "bubble" ? nx : Math.round(nx + (sizeOf(mode)[0] + MARGIN_X * 2) / 2);
         settingsCache.bubble_y = ny;
         document.body.classList.add("floating-pos");
         updateBar();
@@ -2123,13 +2164,12 @@
     const w = e.target.closest("[data-wing]");
     if (w && tab === "settings") {
       const preset = w.dataset.wing;
-      const map = { hidden: 0, xs: 28, s: 52, m: 78, l: 112 };
       const st = await api("get_settings");
       st.wing_size = preset;
-      st.notch_w = map[preset] ?? 52;
+      st.notch_w = WING_PRESETS[preset] ?? 56;
       await api("save_settings", { settings: st });
       settingsCache = st;
-      applyNotchGeometry();
+      applyNotchGeometry(settingsCache, false);
       viewSettings();
       toast(preset === "hidden" ? "Đã ẩn hoàn toàn sau tai thỏ — rê chuột lên mép trên để mở" : `Đã đặt cỡ tai thỏ: ${st.notch_w} px`);
     }
@@ -2138,21 +2178,22 @@
     if (e.target.id === "notchWRange") {
       const nw = Number(e.target.value);
       settingsCache.notch_w = nw;
-      settingsCache.wing_size = nw <= 2 ? "hidden" : nw <= 34 ? "xs" : nw <= 60 ? "s" : nw <= 95 ? "m" : "l";
+      settingsCache.wing_size = nw <= 2 ? "hidden" : "custom";
       const lbl = $("#notchWVal");
       if (lbl) lbl.textContent = nw <= 2 ? "0 px (Ẩn hoàn toàn sau tai thỏ)" : `+${nw} px mỗi bên`;
-      applyNotchGeometry();
+      applyNotchGeometry(settingsCache, false);
     }
     if (e.target.id === "notchHRange") {
       const nh = Number(e.target.value);
       settingsCache.notch_h = nh;
       const lbl = $("#notchHVal");
       if (lbl) lbl.textContent = `${nh} px`;
-      applyNotchGeometry();
+      applyNotchGeometry(settingsCache, false);
     }
   });
   $("#view").addEventListener("change", async (e) => {
     if (e.target.id === "notchWRange" || e.target.id === "notchHRange") {
+      applyNotchGeometry(settingsCache, true);
       await api("save_settings", { settings: settingsCache });
       return;
     }
