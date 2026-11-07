@@ -64,7 +64,7 @@ pub(crate) fn fetch_threads(st: &AppState) -> Result<Vec<(String, String)>, Stri
     }
     let token = threads_token(st).unwrap_or(token);
     let profile = threads::me(&token)?;
-    let (overview, mut posts, mentions) = std::thread::scope(|s| {
+    let (overview, posts, mentions) = std::thread::scope(|s| {
         let h_ov = s.spawn(|| threads::overview(&token).ok());
         let h_posts = s.spawn(|| threads::posts(&token, 12));
         let h_men = s.spawn(|| threads::mentions(&token).unwrap_or_default());

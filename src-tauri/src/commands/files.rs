@@ -110,9 +110,11 @@ pub(crate) fn cursor_side(app: AppHandle) -> String {
 
 // ───────────────────────── Điều khiển nhanh trên tai thỏ (Media · Mic · Camera) ─────────────────────────
 
-static LAST_MIC_VOL: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(80);
+use std::sync::atomic::{AtomicU8, Ordering};
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+static LAST_MIC_VOL: AtomicU8 = AtomicU8::new(80);
+
+#[derive(Debug, Clone, Serialize, serde::Deserialize, Default)]
 #[serde(default)]
 pub(crate) struct MediaQuickStatus {
     pub(crate) title: String,
