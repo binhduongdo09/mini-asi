@@ -1437,7 +1437,7 @@
     }
   });
 
-  // ───────── Các tab (bảng màu chuẩn iOS App Icon) ─────────
+  // ───────── Các tab (chuẩn Apple Segmented Control) ─────────
   const TABS = [
     ["all", "Widget", I.grid, "#64d2ff"],
     ["home", "Asi AI", I.mic, "#0a84ff"],
@@ -1450,39 +1450,36 @@
     ["files", "File", I.file, "#007aff"],
     ["clean", "Dọn máy", I.broom, "#ff9f0a"],
     ["health", "Sức khoẻ", I.heart, "#ff2d55"],
-    ["settings", "Cài đặt ↗", I.gear, "#8e8e93"],
   ];
   function visibleTabs() {
-    if (IS_SETTINGS_WIN) {
-      return [
-        ["sec-disp", "Giao diện & Tai thỏ", I.sparkle, "#0a84ff"],
-        ["sec-ai", "Apple Intelligence & Giọng", I.mic, "#bf5af2"],
-        ["sec-ime", "Bộ gõ Tiếng Việt", I.note, "#30d158"],
-        ["sec-perm", "Quyền hệ thống", I.check, "#ff9f0a"],
-        ["sec-sync", "Sao lưu & Đồng bộ", I.sync, "#5ac8fa"],
-      ];
-    }
+    if (IS_SETTINGS_WIN) return [];
     const vis = settingsCache.visible_tabs && settingsCache.visible_tabs.length ? settingsCache.visible_tabs : ["home", "tasks", "notes", "clips", "journal", "words", "threads"];
     const list = [TABS[0]]; // "all" (Bảng Widget) luôn đứng đầu
     for (const item of TABS.slice(1)) {
       const [id] = item;
       if (id === "home" || vis.includes(id)) list.push(item);
     }
-    if (!list.some(([id]) => id === tab) && tab !== "all" && tab !== "settings") {
+    if (!list.some(([id]) => id === tab) && tab !== "all") {
       const cur = TABS.find(([id]) => id === tab);
       if (cur) list.push(cur);
     }
-    if (!list.some(([id]) => id === "settings")) list.push(TABS.find(([id]) => id === "settings"));
     return list;
   }
   function hasTabDot(id) {
     return !!(
       (id === "tasks" && status && status.lateness.overdue) ||
-      (id === "threads" && status && status.threads_unread) ||
-      (id === "settings" && status && status.update_version)
+      (id === "threads" && status && status.threads_unread)
     );
   }
   function renderTabs() {
+    const setBtn = $("#openSettingsBtn");
+    if (setBtn) {
+      setBtn.classList.toggle("has-dot", !!(status && status.update_version));
+      if (!setBtn.dataset.bound) {
+        setBtn.dataset.bound = "1";
+        setBtn.addEventListener("click", () => openSettingsWindow());
+      }
+    }
     const tabsEl = $("#tabs");
     if (!tabsEl) return;
     const list = visibleTabs();
@@ -1788,26 +1785,23 @@
     const aiAvail = appleAiState && appleAiState.available;
     $("#view").innerHTML = `<div class="chat-home">
       ${updateBannerHtml()}
-      <div class="c-hero">
-        <div class="big-face" id="bigFace"><span class="eye l"></span><span class="eye r"></span></div>
-        <div class="grow">
-          <div class="row" style="gap:8px;flex-wrap:wrap">
-            <div class="c-greet">${greet()}</div>
-            <div class="ai-pill ${aiAvail ? "ready" : "fallback"}" id="appleAiBadge" title="${esc(appleAiState.detail || "")}">
-              <span class="ai-spark"></span><b>${aiAvail ? "Apple Intelligence" : "NLP Nội bộ"}</b>
-            </div>
+      <div class="chat-header-bar">
+        <div class="chat-header-left">
+          <div class="chat-mini-mascot" id="bigFace"><span class="eye l"></span><span class="eye r"></span></div>
+          <div class="chat-header-title">${greet()}</div>
+          <div class="ai-pill ${aiAvail ? "ready" : "fallback"}" id="appleAiBadge" title="${esc(appleAiState.detail || "")}">
+            <span class="ai-spark"></span><b>${aiAvail ? "Apple Intelligence" : "NLP Nội bộ"}</b>
           </div>
-          <div class="muted small">Trợ lý on-device trên chip Apple Silicon</div>
-          <div class="c-quick">${quick}</div>
         </div>
+        <div class="chat-header-quick">${quick}</div>
       </div>
       <div id="vocabStrip"></div>
       <div class="c-log" id="chatLog"></div>
       <div class="c-chips" id="chatChips">${SUGGEST.map(([, t]) => `<button class="c-chip" data-say="${esc(t)}">${esc(t)}</button>`).join("")}</div>
-      <div class="c-input">
-        <button class="mic big" id="chatMic" title="Nói với Asi">${I.mic}<span class="bars"><i></i><i></i><i></i><i></i></span></button>
-        <input class="input" id="chatInput" placeholder="Hỏi Asi & Apple Intelligence…" />
-        <button class="btn primary" id="chatSend">${I.send}</button>
+      <div class="chat-input-pill">
+        <button class="chat-pill-mic" id="chatMic" title="Nói với Asi">${I.mic}<span class="bars"><i></i><i></i><i></i><i></i></span></button>
+        <input class="chat-pill-field" id="chatInput" placeholder="Hỏi Asi & Apple Intelligence…" />
+        <button class="chat-pill-send" id="chatSend" title="Gửi">${I.send}</button>
       </div></div>`;
     const inp = $("#chatInput");
     const send = () => { const v = inp.value; inp.value = ""; askAsi(v, false); };
@@ -2165,26 +2159,29 @@
     const mediaHtml = imgSrc
       ? `<img src="${esc(imgSrc)}" alt="${esc(w.name)}" class="w-art-img" />`
       : widgetArtSvg(w.id, w.artMeta);
-    return `<div class="sq-widget" data-widget-id="${w.id}" data-go="${w.go}" style="--tc:${w.color}">
-      <div class="sq-media">
+    return `<div class="sq-widget" data-widget-id="${w.id}" data-go="${w.go}" style="--wc:${w.color}">
+      <div class="sq-media-bg">
         ${mediaHtml}
-        <div class="sq-media-overlay">
-          <span class="sq-badge ${w.badgeCls || ""}">${esc(w.badge)}</span>
-          <div class="sq-tools" title="Tuỳ chỉnh">
-            <button class="sq-tool-btn" data-wact="img" data-wid="${w.id}" title="Đổi ảnh">Ảnh</button>
-            ${customImg ? `<button class="sq-tool-btn" data-wact="reset-img" data-wid="${w.id}" title="Khôi phục mặc định">${I.refresh}</button>` : ""}
-            <button class="sq-tool-btn danger" data-wact="remove" data-wid="${w.id}" title="Gỡ khỏi bảng">${I.trash}</button>
-          </div>
-        </div>
       </div>
-      <div class="sq-body">
-        <div class="sq-head">
-          <span class="sq-ic" style="background:${w.color}">${w.ic}</span>
-          <b class="sq-name">${esc(w.name)}</b>
+      <div class="sq-scrim"></div>
+      <button class="sq-remove-circle" data-wact="remove" data-wid="${w.id}" title="Gỡ khỏi bảng">⊖</button>
+      <div class="sq-tools" title="Tuỳ chỉnh">
+        <button class="sq-tool-btn" data-wact="img" data-wid="${w.id}" title="Đổi ảnh">Ảnh</button>
+        ${customImg ? `<button class="sq-tool-btn" data-wact="reset-img" data-wid="${w.id}" title="Khôi phục mặc định">${I.refresh}</button>` : ""}
+      </div>
+      <div class="sq-widget-overlay">
+        <div class="sq-top-row">
+          <div class="sq-app-badge">
+            <span class="sq-app-ic" style="background:${w.color}">${w.ic}</span>
+            <span class="sq-app-name">${esc(w.name)}</span>
+          </div>
+          <span class="sq-badge-pill ${w.badgeCls || ""}">${esc(w.badge)}</span>
         </div>
-        <div class="sq-title">${esc(w.title)}</div>
-        <div class="sq-sub">${esc(w.sub)}</div>
-        ${w.quickHtml || ""}
+        <div class="sq-bottom-col">
+          <div class="sq-stat-title">${esc(w.title)}</div>
+          <div class="sq-stat-sub">${esc(w.sub)}</div>
+          ${w.quickHtml ? `<div class="sq-widget-actions">${w.quickHtml}</div>` : ""}
+        </div>
       </div>
     </div>`;
   }
@@ -2201,7 +2198,7 @@
       <div class="wb-toolbar">
         <div class="grow">
           <b class="wb-heading">Widget</b>
-          <span class="muted small" style="margin-left:8px">Kéo thả để sắp xếp vị trí</span>
+          <span class="muted small" style="margin-left:8px">Kéo thả sắp xếp · Bấm Sửa để tuỳ biến</span>
         </div>
         <button class="btn sm ${showWidgetLib ? "primary" : "ghost"}" id="toggleWidgetLibBtn">
           ${showWidgetLib ? "Xong" : "Sửa"}
@@ -2211,7 +2208,7 @@
         <span class="muted small"> — cấp quyền trong Cài đặt</span></span>
         <button class="btn sm primary" data-go="perm">Cài đặt</button></div></div>` : ""}
       <div class="wb-layout ${showWidgetLib ? "with-lib" : ""}">
-        <div class="sq-grid" id="widgetBoard">
+        <div class="sq-grid ${showWidgetLib ? "jiggle-mode" : ""}" id="widgetBoard">
           ${activeWidgets.length
             ? activeWidgets.map(renderSquareWidgetCard).join("")
             : `<div class="wb-empty">Chưa có Widget nào trên bảng. Bấm Sửa để thêm.</div>`}
@@ -3243,6 +3240,27 @@
   });
 
   // ═════════ CÀI ĐẶT ═════════
+  // ═════════ CÀI ĐẶT (CHUẨN MACOS SYSTEM SETTINGS 2 CỘT) ═════════
+  let settingsActiveSection = (URL_PARAMS.get("sec") || "general").replace(/^sec-/, "");
+  const SETTINGS_SECTIONS = [
+    { id: "general", name: "Chung", desc: "Khởi động cùng máy, phím tắt & cập nhật", ic: I.sliders, color: "#8e8e93" },
+    { id: "notch", name: "Tai thỏ & Hiển thị", desc: "Kiểu hiển thị, kích thước & chế độ chờ", ic: I.sparkle, color: "#0a84ff" },
+    { id: "ai", name: "Apple Intelligence", desc: "Mô hình ngôn ngữ tự nhiên on-device", ic: I.apple, color: "#bf5af2" },
+    { id: "tts", name: "Giọng đọc AI", desc: "Mô hình VieNeu-TTS & NghiTTS", ic: I.mic, color: "#ff9f0a" },
+    { id: "ime", name: "Bộ gõ Tiếng Việt", desc: "Telex & VNI tự động chuyển bàn phím", ic: I.keyboard, color: "#30d158" },
+    { id: "perms", name: "Quyền riêng tư", desc: "Trợ năng, Micro, Ổ đĩa, Lịch, Lời nhắc", ic: I.shield, color: "#ff453a" },
+    { id: "clips", name: "Clipboard", desc: "Lịch sử chép, tự dán & phím tắt", ic: I.clip, color: "#5ac8fa" },
+    { id: "sync", name: "Sao lưu & Đồng bộ", desc: "Đám mây & Đồng bộ Reminders/Notes", ic: I.sync, color: "#007aff" },
+    { id: "pro", name: "Mini-Asi Pro", desc: "Bản quyền & Tính năng dọn sâu mở rộng", ic: I.lock, color: "#af52de" },
+  ];
+
+  on("settings-section", (sec) => {
+    if (sec) {
+      settingsActiveSection = sec.replace(/^sec-/, "");
+      if (IS_SETTINGS_WIN) viewSettings();
+    }
+  });
+
   async function viewSettings() {
     const st = await api("get_settings");
     const lic = await api("license_info");
@@ -3253,37 +3271,39 @@
     const perms = await api("permissions_status");
     const bk = await api("backup_info");
     if (!appleAiState) api("apple_ai_status").then((r) => { appleAiState = r; }).catch(() => {});
-    const permIcon = { granted: "✅", denied: "⛔", not_asked: "⚪", unknown: "⚪", manual: "🔸" };
-    const permCard = `<div class="card" id="permCard" data-sec="sec-perm" style="margin-bottom:10px">
-        <div class="row"><div class="grow"><b>Quyền ứng dụng</b><div class="muted small">Cấp các quyền cần thiết để Mini-Asi hoạt động đầy đủ tính năng</div></div>
+    const ago = (ms) => fmtAgo(ms);
+
+    const permCard = `<div class="card" id="permCard" style="margin-bottom:10px">
+        <div class="row" style="margin-bottom:10px"><div class="grow"><b>Quyền hệ thống macOS</b><div class="muted small">Cấp các quyền cần thiết để Mini-Asi hoạt động đầy đủ tính năng</div></div>
           <button class="btn primary sm" data-s="permall">Cấp tất cả</button></div>
         <div class="perm-list">${perms.map((p) => `<div class="perm-row">
           <div class="grow"><b>${p.name}</b> ${p.required ? "" : '<span class="chip">Tuỳ chọn</span>'} <span class="muted small">${p.why}</span></div>
           ${p.state === "granted" ? '<span class="chip green">Đã cấp</span>' : `<button class="btn sm ghost" data-s="perm" data-p="${p.id}">${p.state === "denied" && ["accessibility", "disk"].includes(p.id) ? "Mở cài đặt" : "Cấp quyền"}</button>`}</div>`).join("")}</div>
       </div>`;
-    const ago = (ms) => fmtAgo(ms);
-    const backupCard = `<div class="sec" id="sec-sync">Sao lưu & Đồng bộ đám mây</div>
-      <div class="card">
+
+    const backupCard = `<div class="card" style="margin-bottom:10px">
         <div class="setting"><div class="grow"><b>Thư mục đám mây</b><span>${bk.current ? esc(bk.current) : "Chưa chọn thư mục sao lưu"}</span></div>
           <select class="input" id="bkDir">${bk.dirs.map((d) => `<option value="${esc(d.path)}" ${bk.current === d.path ? "selected" : ""}>${esc(d.label)}</option>`).join("")}
             ${bk.chosen && !bk.dirs.some((d) => d.path === bk.chosen) ? `<option value="${esc(bk.chosen)}" selected>${esc(bk.chosen.split(/[\\/]/).pop())}</option>` : ""}
             <option value="__pick">Chọn thư mục khác…</option></select></div>
-        <div class="setting"><div class="grow"><b>Sao lưu</b><span>Lần cuối: ${ago(bk.last_backup)}</span></div>
+        <div class="setting"><div class="grow"><b>Sao lưu dữ liệu</b><span>Lần cuối: ${ago(bk.last_backup)}</span></div>
           <button class="btn sm" data-s="bknow" ${bk.current ? "" : "disabled"}>Sao lưu ngay</button>
           <button class="switch ${bk.auto_backup ? "on" : ""}" data-bk="auto_backup" title="Tự sao lưu mỗi ngày"></button></div>
         <div class="setting"><div class="grow"><b>Đồng bộ giữa các máy</b><span>${esc(bk.device_name)} · lần cuối ${ago(bk.last_device_sync)}</span></div>
           <button class="btn sm" data-s="devsync" ${bk.current ? "" : "disabled"}>Đồng bộ ngay</button>
           <button class="switch ${bk.device_sync ? "on" : ""}" data-bk="device_sync" title="Tự đồng bộ mỗi 15 phút"></button></div>
-        ${bk.snapshots.length ? `<div class="setting" style="display:block"><b>Khôi phục</b>
+        ${bk.snapshots.length ? `<div class="setting" style="display:block"><b>Khôi phục bản sao lưu</b>
           ${bk.snapshots.slice(0, 6).map((f) => `<div class="row small" style="margin-top:6px"><span class="grow">${esc(f.device || "")} · ${new Date(f.modified).toLocaleString("vi-VN")} · ${bytes(f.size)}</span>
             <button class="btn sm ghost" data-s="restore" data-p="${esc(f.path)}">Khôi phục</button></div>`).join("")}</div>` : ""}
       </div>`;
+
     const vis = st.visible_tabs && st.visible_tabs.length ? st.visible_tabs : ["home", "tasks", "notes", "clips", "journal", "words", "threads"];
     const featCard = `<details class="card feat-card" style="margin-bottom:10px"><summary><b>Quản lý thanh tính năng</b> <span class="muted small">— chọn tính năng hiện trên thanh chính</span></summary>
       <div class="feat-grid">${TABS.filter(([id]) => !["home", "settings"].includes(id)).map(([id, name, ic]) => `<label class="feat ${vis.includes(id) ? "on" : ""}">
         <input type="checkbox" data-feat="${id}" ${vis.includes(id) ? "checked" : ""}/>${ic}<span>${name}</span></label>`).join("")}</div>
       <div class="row" style="margin-top:8px"><label class="row small grow"><input type="checkbox" data-k2="threads_embed_beta" ${st.threads_embed_beta ? "checked" : ""}/> Thử nghiệm: Threads nhúng trong cửa sổ Asi</label></div>
     </details>`;
+
     const ime = await api("ime_info").catch(() => null);
     const tv = await api("tts_info").catch(() => null);
     await api("update_info").then((v) => { if (v) { updateVer = v.current_version || updateVer; updateState = v.status || v; } }).catch(() => {});
@@ -3294,12 +3314,13 @@
       <div class="row">
         <div class="grow">
           <b>Apple Intelligence (On-Device)</b>
-          <div class="muted small">${esc((appleAiState && appleAiState.detail) || "Chạy trực tiếp trên Apple Silicon — hỏi đáp, tóm tắt, viết nháp, dịch thuật")}</div>
+          <div class="muted small">${esc((appleAiState && appleAiState.detail) || "Chạy trực tiếp trên chip Apple Silicon — hỏi đáp, tóm tắt, viết nháp, dịch thuật")}</div>
         </div>
         <span class="chip ${aiAvail && st.apple_ai_enabled !== false ? "green" : ""}">${aiAvail ? (st.apple_ai_enabled !== false ? "Đang bật" : "Đang tắt") : "Chưa hỗ trợ"}</span>
         <label class="row small" style="margin-left:6px"><input type="checkbox" data-k2="apple_ai_enabled" ${st.apple_ai_enabled !== false ? "checked" : ""}/> Bật</label>
       </div>
     </div>`;
+
     const hasCustomPos = (st.bubble_x > 0 || st.bubble_y > 0);
     const isSmallIcon = st.icon_size === "small";
     const dispCard = `<div class="card" id="sec-disp" style="margin-bottom:10px"><b>Kiểu hiển thị & Vị trí</b>
@@ -3317,6 +3338,7 @@
         <button class="btn sm ${pinned ? "primary" : ""}" data-s="pin-toggle">${pinned ? "Đang ghim mở" : "Ghim mở"}</button>
         <button class="btn sm ghost" data-s="reset-pos" ${hasCustomPos ? "" : "disabled"}>Đặt lại vị trí</button>
       </div></div>`;
+
     const IDLE_OPTS = [["focus", "", "Đồng hồ tập trung"], ["overdue", "", "Số việc trễ"], ["event", "", "Lịch sắp tới"], ["next", "", "Việc sắp đến hạn"], ["time", "", "Giờ hiện tại"],
       ["tasks", "", "Số việc còn lại"], ["notes", "", "Số ghi chú"], ["clips", "", "Số mục clipboard"], ["disk", "", "Dung lượng trống"], ["mic", "", "Nút micro"]];
     const idl = idleItems();
@@ -3336,10 +3358,12 @@
         <b class="small" id="notchHVal" style="min-width:80px;text-align:right">${curH} px</b>
       </div>
       <div class="idle-grid" style="margin-top:10px">${IDLE_OPTS.map(([id, , name]) => `<label class="feat ${idl.includes(id) ? "on" : ""}"><input type="checkbox" data-idle="${id}" ${idl.includes(id) ? "checked" : ""}/><span>${name}</span></label>`).join("")}</div></div>`;
+
     const vocabCard = `<div class="card" style="margin-bottom:10px"><div class="row"><div class="grow"><b>Học từ mới tiếng Anh</b>
         <div class="muted small">Hiện từ vựng mới kèm phiên âm trên trang chính</div></div>
         <div class="seg">${[2, 3].map((n) => `<button class="${(st.vocab_count || 3) === n ? "on" : ""}" data-vcount="${n}">${n} từ</button>`).join("")}</div>
         <label class="row small" style="margin-left:8px"><input type="checkbox" data-k2="vocab_enabled" ${st.vocab_enabled !== false ? "checked" : ""}/> Bật</label></div></div>`;
+
     const V = window.VNKey;
     const curMode = V && V.mode ? V.mode : null;
     const imeCard = `<div class="card" id="sec-ime" style="margin-bottom:10px">
@@ -3360,70 +3384,135 @@
         <input class="input" id="imeTestInput" placeholder="Gõ thử tiếng Việt: xin chào Việt Nam, được, thương…" style="height:32px;font-size:12px" />
       </div>
     </div>`;
-    $("#view").innerHTML = updCard + permCard + dispCard + idleCard + aiCard + ttsCard + vocabCard + imeCard + featCard + backupCard + `<div style="height:10px"></div>
-      <div class="card ${lic.pro ? "" : "upsell"}" style="margin:0 0 10px">
-        ${lic.pro
-          ? `<div class="row"><div class="grow"><b>Mini-Asi Pro</b><div class="muted small">${esc(lic.email)}${lic.expires ? ` · hết hạn ${new Date(lic.expires * 1000).toLocaleDateString("vi-VN")}` : " · vĩnh viễn"}</div></div>
-             <button class="btn sm ghost" data-s="unlic">Gỡ khoá</button></div>`
-          : `<div class="grow"><b>Nâng cấp Mini-Asi Pro</b>
-             <div class="muted small" style="margin:2px 0 8px">Dọn sâu: file cài đặt, thư mục build, file lớn, sao lưu iPhone cũ.</div>
-             <div class="row"><input class="input" id="licKey" placeholder="Dán khoá bản quyền MASI1.…" style="height:32px" />
-             <button class="btn primary sm" data-s="lic">Kích hoạt</button></div>
-             <div class="small" id="licMsg" style="color:var(--red);margin-top:4px"></div></div>`}
-      </div>
-      <div class="card">
-        <div class="setting"><div class="grow"><b>Khởi động cùng máy</b><span>Mini-Asi luôn có mặt khi bạn mở máy</span></div>
-          <button class="switch ${st.launch_at_login ? "on" : ""}" data-k="launch_at_login"></button></div>
-        <div class="setting"><div class="grow"><b>Chế độ tập trung</b><span>Tắt màu đỏ báo trễ việc và nhắc nghỉ</span></div>
-          <button class="switch ${st.focus_mode ? "on" : ""}" data-k="focus_mode"></button></div>
-        <div class="setting"><div class="grow"><b>Chất lượng nén PDF mặc định</b><span>Cân bằng phù hợp gửi email</span></div>
-          <select class="input" data-k="pdf_quality">
-            <option value="screen" ${st.pdf_quality === "screen" ? "selected" : ""}>Nhỏ nhất</option>
-            <option value="ebook" ${st.pdf_quality === "ebook" ? "selected" : ""}>Cân bằng</option>
-            <option value="printer" ${st.pdf_quality === "printer" ? "selected" : ""}>Đẹp (in ấn)</option></select></div>
-        <div class="setting"><div class="grow"><b>Phím tắt mở nhanh</b><span>Mở/đóng tai thỏ từ bất kỳ đâu</span></div>
-          <span class="chip">${mac ? "⌘ ⇧ Space" : "Ctrl ⇧ Space"}</span></div>
-        <div class="setting"><div class="grow"><b>Màn hình</b><span>${geo.has_notch ? `Có tai thỏ (${Math.round(geo.notch_width)}×${Math.round(geo.notch_height)})` : "Không có tai thỏ — dùng tai thỏ ảo"}</span></div></div>
-      </div>
-      <div class="sec">Clipboard</div>
-      <div class="card">
-        <div class="setting"><div class="grow"><b>Lưu lịch sử clipboard</b><span>Chữ, ảnh, file — bỏ qua mật khẩu từ trình quản lý mật khẩu</span></div>
-          <button class="switch ${st.clip_enabled ? "on" : ""}" data-k="clip_enabled"></button></div>
-        <div class="setting"><div class="grow"><b>Số mục tối đa</b><span>Mục đã ghim luôn được giữ</span></div>
-          <input class="input num" type="number" min="20" max="2000" value="${st.clip_max}" data-k="clip_max" /></div>
-        <div class="setting"><div class="grow"><b>Chọn là dán luôn</b><span>${ax ? "Đã có quyền Trợ năng" : "Cần bật quyền Trợ năng cho Mini-Asi"}</span></div>
-          ${ax ? "" : `<button class="btn sm ghost" data-s="ax">Mở cài đặt</button>`}
-          <button class="switch ${st.clip_autopaste ? "on" : ""}" data-k="clip_autopaste"></button></div>
-        <div class="setting"><div class="grow"><b>Phím tắt mở clipboard</b><span>Mở thẳng danh sách đã chép</span></div>
-          <span class="chip">${esc(st.clip_shortcut.replace("Control", "⌃").replace("Shift", "⇧").replace("Alt", "⌥").replace(/\+/g, " "))}</span></div>
-      </div>
-      <div class="sec">Giọng nói & Nhật ký</div>
-      <div class="card">
-        <div class="setting"><div class="grow"><b>Ngôn ngữ giọng nói</b><span>Dùng khi ghi chú, thêm việc, viết nhật ký bằng giọng nói</span></div>
-          <select class="input" data-k="voice_lang"><option value="vi-VN" ${st.voice_lang === "vi-VN" ? "selected" : ""}>Tiếng Việt</option>
-          <option value="en-US" ${st.voice_lang === "en-US" ? "selected" : ""}>English (US)</option><option value="en-GB" ${st.voice_lang === "en-GB" ? "selected" : ""}>English (UK)</option></select></div>
-        <div class="setting"><div class="grow"><b>Asi hỏi chuyện nhật ký mỗi tối</b><span>Hỏi về ngày hôm nay và ghi lại giúp bạn</span></div>
-          <input class="input num" type="number" min="17" max="23" value="${st.journal_hour}" data-k="journal_hour" /><span class="muted small">giờ</span>
-          <button class="switch ${st.journal_enabled ? "on" : ""}" data-k="journal_enabled"></button></div>
-      </div>
-      ${mac ? `<div class="sec">Đồng bộ với ứng dụng Apple</div>
-      <div class="card">
-        <div class="setting"><div class="grow"><b>Việc ⇄ Lời nhắc (Reminders)</b><span>Hai chiều, trong danh sách “${esc(st.reminders_list)}”</span></div>
-          <input class="input" style="width:110px;height:28px" value="${esc(st.reminders_list)}" data-k="reminders_list" />
-          <button class="switch ${st.sync_reminders ? "on" : ""}" data-k="sync_reminders"></button></div>
-        <div class="setting"><div class="grow"><b>Ghi chú ⇄ Ghi chú (Notes)</b><span>Hai chiều, trong thư mục “${esc(st.notes_folder)}”</span></div>
-          <input class="input" style="width:110px;height:28px" value="${esc(st.notes_folder)}" data-k="notes_folder" />
-          <button class="switch ${st.sync_notes ? "on" : ""}" data-k="sync_notes"></button></div>
-        <div class="setting"><div class="grow"><b>Lịch (Calendar)</b><span>Hiện lịch họp hôm nay, nhắc trước giờ họp, thêm việc vào Lịch</span></div>
-          <input class="input num" type="number" min="1" max="60" value="${st.event_alert_minutes}" data-k="event_alert_minutes" /><span class="muted small">phút</span>
-          <button class="switch ${st.show_calendar ? "on" : ""}" data-k="show_calendar"></button></div>
-        <div class="setting"><div class="grow"><b>Trạng thái</b><span id="syncState">${si.last_run ? "Đồng bộ lần cuối " + fmtAgo(si.last_run) + " · " + si.linked_tasks + " việc · " + si.linked_notes + " ghi chú" : "Chưa đồng bộ"}${si.last_error ? `<br><span style="color:var(--red)">${esc(si.last_error)}</span>` : ""}</span></div>
-          <button class="btn sm" data-s="sync">${I.sync}Đồng bộ ngay</button></div>
-      </div>` : ""}
-      <div class="row" style="margin-top:12px"><span class="muted small grow">Mini-Asi 0.11.0 · Dữ liệu chỉ lưu trên máy bạn</span>
+
+    const licCard = `<div class="card ${lic.pro ? "" : "upsell"}" style="margin:0 0 10px">
+      ${lic.pro
+        ? `<div class="row"><div class="grow"><b>Mini-Asi Pro</b><div class="muted small">${esc(lic.email)}${lic.expires ? ` · hết hạn ${new Date(lic.expires * 1000).toLocaleDateString("vi-VN")}` : " · vĩnh viễn"}</div></div>
+           <button class="btn sm ghost" data-s="unlic">Gỡ khoá</button></div>`
+        : `<div class="grow"><b>Nâng cấp Mini-Asi Pro</b>
+           <div class="muted small" style="margin:2px 0 8px">Dọn sâu: file cài đặt, thư mục build, file lớn, sao lưu iPhone cũ.</div>
+           <div class="row"><input class="input" id="licKey" placeholder="Dán khoá bản quyền MASI1.…" style="height:32px" />
+           <button class="btn primary sm" data-s="lic">Kích hoạt</button></div>
+           <div class="small" id="licMsg" style="color:var(--red);margin-top:4px"></div></div>`}
+    </div>`;
+
+    const appleSyncCard = mac ? `<div class="card" style="margin-bottom:10px">
+      <div class="setting"><div class="grow"><b>Việc ⇄ Lời nhắc (Reminders)</b><span>Hai chiều, trong danh sách “${esc(st.reminders_list)}”</span></div>
+        <input class="input" style="width:110px;height:28px" value="${esc(st.reminders_list)}" data-k="reminders_list" />
+        <button class="switch ${st.sync_reminders ? "on" : ""}" data-k="sync_reminders"></button></div>
+      <div class="setting"><div class="grow"><b>Ghi chú ⇄ Ghi chú (Notes)</b><span>Hai chiều, trong thư mục “${esc(st.notes_folder)}”</span></div>
+        <input class="input" style="width:110px;height:28px" value="${esc(st.notes_folder)}" data-k="notes_folder" />
+        <button class="switch ${st.sync_notes ? "on" : ""}" data-k="sync_notes"></button></div>
+      <div class="setting"><div class="grow"><b>Lịch (Calendar)</b><span>Hiện lịch họp hôm nay, nhắc trước giờ họp, thêm việc vào Lịch</span></div>
+        <input class="input num" type="number" min="1" max="60" value="${st.event_alert_minutes}" data-k="event_alert_minutes" /><span class="muted small">phút</span>
+        <button class="switch ${st.show_calendar ? "on" : ""}" data-k="show_calendar"></button></div>
+      <div class="setting"><div class="grow"><b>Trạng thái kết nối</b><span id="syncState">${si.last_run ? "Đồng bộ lần cuối " + fmtAgo(si.last_run) + " · " + si.linked_tasks + " việc · " + si.linked_notes + " ghi chú" : "Chưa đồng bộ"}${si.last_error ? `<br><span style="color:var(--red)">${esc(si.last_error)}</span>` : ""}</span></div>
+        <button class="btn sm" data-s="sync">${I.sync}Đồng bộ ngay</button></div>
+    </div>` : "";
+
+    const clipsCard = `<div class="card">
+      <div class="setting"><div class="grow"><b>Lưu lịch sử clipboard</b><span>Chữ, ảnh, file — bỏ qua mật khẩu từ trình quản lý mật khẩu</span></div>
+        <button class="switch ${st.clip_enabled ? "on" : ""}" data-k="clip_enabled"></button></div>
+      <div class="setting"><div class="grow"><b>Số mục tối đa</b><span>Mục đã ghim luôn được giữ</span></div>
+        <input class="input num" type="number" min="20" max="2000" value="${st.clip_max}" data-k="clip_max" /></div>
+      <div class="setting"><div class="grow"><b>Chọn là dán luôn</b><span>${ax ? "Đã có quyền Trợ năng" : "Cần bật quyền Trợ năng cho Mini-Asi"}</span></div>
+        ${ax ? "" : `<button class="btn sm ghost" data-s="ax">Mở cài đặt</button>`}
+        <button class="switch ${st.clip_autopaste ? "on" : ""}" data-k="clip_autopaste"></button></div>
+      <div class="setting"><div class="grow"><b>Phím tắt mở clipboard</b><span>Mở thẳng danh sách đã chép</span></div>
+        <span class="chip">${esc(st.clip_shortcut.replace("Control", "⌃").replace("Shift", "⇧").replace("Alt", "⌥").replace(/\+/g, " "))}</span></div>
+    </div>`;
+
+    const generalCard = `<div class="card">
+      <div class="setting"><div class="grow"><b>Khởi động cùng máy</b><span>Mini-Asi luôn có mặt khi bạn mở máy</span></div>
+        <button class="switch ${st.launch_at_login ? "on" : ""}" data-k="launch_at_login"></button></div>
+      <div class="setting"><div class="grow"><b>Chế độ tập trung</b><span>Tắt màu đỏ báo trễ việc và nhắc nghỉ</span></div>
+        <button class="switch ${st.focus_mode ? "on" : ""}" data-k="focus_mode"></button></div>
+      <div class="setting"><div class="grow"><b>Chất lượng nén PDF mặc định</b><span>Cân bằng phù hợp gửi email</span></div>
+        <select class="input" data-k="pdf_quality">
+          <option value="screen" ${st.pdf_quality === "screen" ? "selected" : ""}>Nhỏ nhất</option>
+          <option value="ebook" ${st.pdf_quality === "ebook" ? "selected" : ""}>Cân bằng</option>
+          <option value="printer" ${st.pdf_quality === "printer" ? "selected" : ""}>Đẹp (in ấn)</option></select></div>
+      <div class="setting"><div class="grow"><b>Phím tắt mở nhanh</b><span>Mở/đóng tai thỏ từ bất kỳ đâu</span></div>
+        <span class="chip">${mac ? "⌘ ⇧ Space" : "Ctrl ⇧ Space"}</span></div>
+      <div class="setting"><div class="grow"><b>Màn hình</b><span>${geo.has_notch ? `Có tai thỏ (${Math.round(geo.notch_width)}×${Math.round(geo.notch_height)})` : "Không có tai thỏ — dùng tai thỏ ảo"}</span></div></div>
+    </div>`;
+
+    const voiceLangCard = `<div class="card" style="margin-bottom:10px">
+      <div class="setting"><div class="grow"><b>Ngôn ngữ giọng nói</b><span>Dùng khi ghi chú, thêm việc, viết nhật ký bằng giọng nói</span></div>
+        <select class="input" data-k="voice_lang"><option value="vi-VN" ${st.voice_lang === "vi-VN" ? "selected" : ""}>Tiếng Việt</option>
+        <option value="en-US" ${st.voice_lang === "en-US" ? "selected" : ""}>English (US)</option><option value="en-GB" ${st.voice_lang === "en-GB" ? "selected" : ""}>English (UK)</option></select></div>
+      <div class="setting"><div class="grow"><b>Asi hỏi chuyện nhật ký mỗi tối</b><span>Hỏi về ngày hôm nay và ghi lại giúp bạn</span></div>
+        <input class="input num" type="number" min="17" max="23" value="${st.journal_hour}" data-k="journal_hour" /><span class="muted small">giờ</span>
+        <button class="switch ${st.journal_enabled ? "on" : ""}" data-k="journal_enabled"></button></div>
+    </div>`;
+
+    // Nếu đang ở Cửa sổ Cài đặt riêng biệt → Hiển thị Layout 2 cột System Settings chuẩn macOS
+    if (IS_SETTINGS_WIN) {
+      function renderPane(sec) {
+        if (sec === "notch") {
+          return `<div class="settings-page-header"><h2 class="settings-page-title">Tai thỏ & Hiển thị</h2><p class="settings-page-subtitle">Kiểu dáng hiển thị, vị trí ghim và thông tin ở chế độ chờ</p></div>${dispCard}${idleCard}${featCard}`;
+        }
+        if (sec === "ai") {
+          return `<div class="settings-page-header"><h2 class="settings-page-title">Apple Intelligence</h2><p class="settings-page-subtitle">Mô hình on-device trên chip Apple Silicon hỗ trợ ngôn ngữ tự nhiên</p></div>${aiCard}${vocabCard}`;
+        }
+        if (sec === "tts") {
+          return `<div class="settings-page-header"><h2 class="settings-page-title">Giọng đọc AI & Ngôn ngữ</h2><p class="settings-page-subtitle">Quản lý mô hình đọc văn bản tiếng Việt VieNeu-TTS & NghiTTS</p></div>${voiceLangCard}${ttsCard}`;
+        }
+        if (sec === "ime") {
+          return `<div class="settings-page-header"><h2 class="settings-page-title">Bộ gõ Tiếng Việt</h2><p class="settings-page-subtitle">Bộ gõ Telex & VNI tích hợp sẵn, tự chuyển đổi bàn phím hệ thống</p></div>${imeCard}`;
+        }
+        if (sec === "perms") {
+          return `<div class="settings-page-header"><h2 class="settings-page-title">Quyền riêng tư & Hệ thống</h2><p class="settings-page-subtitle">Cấp các quyền cần thiết để ứng dụng hoạt động đầy đủ tính năng</p></div>${permCard}`;
+        }
+        if (sec === "clips") {
+          return `<div class="settings-page-header"><h2 class="settings-page-title">Clipboard</h2><p class="settings-page-subtitle">Lưu trữ lịch sử clipboard, phím tắt và tuỳ chọn dán tự động</p></div>${clipsCard}`;
+        }
+        if (sec === "sync") {
+          return `<div class="settings-page-header"><h2 class="settings-page-title">Sao lưu & Đồng bộ</h2><p class="settings-page-subtitle">Sao lưu đám mây và đồng bộ hai chiều với Reminders, Notes, Calendar của Apple</p></div>${backupCard}${appleSyncCard}`;
+        }
+        if (sec === "pro") {
+          return `<div class="settings-page-header"><h2 class="settings-page-title">Mini-Asi Pro</h2><p class="settings-page-subtitle">Kích hoạt bản quyền vĩnh viễn và mở khoá tính năng dọn sâu hệ thống</p></div>${licCard}`;
+        }
+        // "general" (mặc định)
+        return `<div class="settings-page-header"><h2 class="settings-page-title">Chung</h2><p class="settings-page-subtitle">Khởi động cùng máy, cập nhật ứng dụng và phím tắt mở nhanh</p></div>${updCard}${generalCard}`;
+      }
+
+      $("#view").innerHTML = `
+        <div class="settings-layout">
+          <aside class="settings-sidebar">
+            <div class="settings-sidebar-header">Cài đặt</div>
+            <nav class="settings-nav">
+              ${SETTINGS_SECTIONS.map((s) => `
+                <div class="settings-nav-item ${settingsActiveSection === s.id ? "active" : ""}" data-setsec="${s.id}">
+                  <span class="settings-nav-icon" style="background:${s.color}">${s.ic}</span>
+                  <span class="grow">${s.name}</span>
+                  ${s.id === "general" && updateState && updateState.release && updateState.release.has_update ? '<span class="dot" style="position:static;width:7px;height:7px"></span>' : ""}
+                </div>
+              `).join("")}
+            </nav>
+            <div class="settings-sidebar-footer">
+              <span class="muted small">Mini-Asi ${esc(updateVer)}</span>
+              <button class="btn sm ghost" data-s="quit">Thoát</button>
+            </div>
+          </aside>
+          <main class="settings-content" id="settingsContent">
+            ${renderPane(settingsActiveSection)}
+          </main>
+        </div>`;
+      return;
+    }
+
+    // Fallback khi xem ở màn hình thu gọn
+    $("#view").innerHTML = updCard + permCard + dispCard + idleCard + aiCard + ttsCard + vocabCard + imeCard + featCard + backupCard + appleSyncCard + licCard + generalCard + clipsCard + voiceLangCard + `<div class="row" style="margin-top:12px"><span class="muted small grow">Mini-Asi ${esc(updateVer)} · Dữ liệu chỉ lưu trên máy bạn</span>
         <button class="btn ghost" data-s="quit">Thoát Mini-Asi</button></div>`;
   }
   $("#view").addEventListener("click", async (e) => {
+    const secBtn = e.target.closest("[data-setsec]");
+    if (secBtn) {
+      settingsActiveSection = secBtn.dataset.setsec;
+      viewSettings();
+      return;
+    }
     if (tab !== "settings") return;
     const b = e.target.closest("[data-s]");
     if (!b) return;
