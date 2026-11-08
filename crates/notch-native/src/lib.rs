@@ -150,6 +150,14 @@ mod imp {
             .map(|s| s.frame().size.height)
             .unwrap_or(900.0);
         let bottom_y = primary_h - top_y - h;
+        let cur = win.frame();
+        if (cur.origin.x - x).abs() < 0.5
+            && (cur.origin.y - bottom_y).abs() < 0.5
+            && (cur.size.width - w).abs() < 0.5
+            && (cur.size.height - h).abs() < 0.5
+        {
+            return;
+        }
         let rect = objc2_foundation::NSRect::new(
             objc2_foundation::NSPoint::new(x, bottom_y),
             objc2_foundation::NSSize::new(w, h),

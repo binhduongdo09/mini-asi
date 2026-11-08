@@ -22,7 +22,9 @@ pub(crate) fn save_settings(app: AppHandle, st: S, settings: store::Settings) ->
     s.save_settings()?;
     let al = app.autolaunch();
     let _ = if s.settings.launch_at_login { al.enable() } else { al.disable() };
+    let snap = s.settings.clone();
     drop(s);
+    let _ = app.emit("settings-changed", &snap);
     push_status(&app);
     Ok(())
 }
@@ -50,21 +52,29 @@ pub(crate) fn license_info(st: S) -> LicenseInfo {
 }
 
 #[tauri::command]
-pub(crate) fn activate_license(st: S, key: String) -> LicenseInfo {
+pub(crate) fn activate_license(app: AppHandle, st: S, key: String) -> LicenseInfo {
     let info = license_info_of(Some(key.trim()));
     if info.pro {
         let mut s = st.store.lock().unwrap();
         s.settings.license_key = Some(key.trim().to_string());
         let _ = s.save_settings();
+        let snap = s.settings.clone();
+        drop(s);
+        let _ = app.emit("settings-changed", &snap);
+        push_status(&app);
     }
     info
 }
 
 #[tauri::command]
-pub(crate) fn deactivate_license(st: S) {
+pub(crate) fn deactivate_license(app: AppHandle, st: S) {
     let mut s = st.store.lock().unwrap();
     s.settings.license_key = None;
     let _ = s.save_settings();
+    let snap = s.settings.clone();
+    drop(s);
+    let _ = app.emit("settings-changed", &snap);
+    push_status(&app);
 }
 
 #[tauri::command]

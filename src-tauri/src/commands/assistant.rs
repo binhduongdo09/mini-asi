@@ -37,6 +37,74 @@ pub(crate) fn greet_word(en: bool) -> &'static str {
     }
 }
 
+/// Kiểm tra trạng thái Apple Intelligence (FoundationModels On-Device) trên máy
+#[tauri::command]
+pub(crate) async fn apple_ai_status(st: S<'_>) -> Result<assistant::AppleAiStatus, String> {
+    let dir = st.data_dir.clone();
+    blocking(move || Ok(assistant::check_apple_ai(&dir))).await
+}
+
+/// Tạo bản tóm tắt ngữ cảnh thực tế trên máy để Apple Intelligence trả lời sát với dữ liệu của người dùng
+pub(crate) fn build_ai_context(st: &AppState) -> String {
+    let now = now_ms();
+    let lnow = Local::now();
+    let (tasks_summary, notes_summary) = {
+        let s = st.store.lock().unwrap();
+        let open: Vec<String> = s
+            .tasks
+            .iter()
+            .filter(|t| t.done_at.is_none())
+            .take(8)
+            .map(|t| {
+                let state = match t.due {
+                    Some(d) if d < now => " [OVERDUE]",
+                    Some(_) => " [scheduled]",
+                    None => "",
+                };
+                format!("- {}{}", t.title, state)
+            })
+            .collect();
+        let notes: Vec<String> = s
+            .notes
+            .iter()
+            .filter(|n| !n.text.trim().is_empty())
+            .take(3)
+            .map(|n| {
+                let snippet: String = n.text.chars().take(120).collect();
+                format!("- {}", snippet.replace('\n', " "))
+            })
+            .collect();
+        (
+            if open.is_empty() { "None".to_string() } else { open.join("\n") },
+            if notes.is_empty() { "None".to_string() } else { notes.join("\n") },
+        )
+    };
+    let clip_snippet = st
+        .clips
+        .lock()
+        .ok()
+        .and_then(|c| c.items.first().cloned())
+        .map(|c| {
+            if c.text.trim().is_empty() {
+                "Image / File in clipboard".to_string()
+            } else {
+                c.text.chars().take(420).collect::<String>()
+            }
+        })
+        .unwrap_or_else(|| "Empty".to_string());
+    let disk_info = asi_clean::disk::status(&home_dir())
+        .map(|d| format!("{} free ({:.0}%)", fmt_gb(d.free_bytes), d.free_percent))
+        .unwrap_or_else(|| "Unknown".into());
+    format!(
+        "Current local time: {}\nDisk space: {}\nOpen tasks:\n{}\nRecent notes:\n{}\nLatest clipboard content:\n{}",
+        lnow.format("%Y-%m-%d %H:%M (%A)"),
+        disk_info,
+        tasks_summary,
+        notes_summary,
+        clip_snippet
+    )
+}
+
 pub(crate) fn reply_status(st: &AppState, en: bool) -> assistant::Reply {
     use assistant::{Card, Intent, Metric, Reply};
     let sys = assistant::sysinfo();
@@ -258,6 +326,29 @@ pub(crate) async fn asi_ask(app: AppHandle, st: S<'_>, text: String, offset: Opt
                     .act(if en { "Practice" } else { "Luyện phát âm" }, "open_tab", "words")
             }
             Intent::Unknown => {
+                let ai_on = st.store.lock().unwrap().settings.apple_ai_enabled;
+                if ai_on && !text.trim().is_empty() {
+                    let ctx = build_ai_context(st);
+                    if let Ok(ai_ans) = assistant::ask_apple_ai(&st.data_dir, &ctx, &text, en) {
+                        let mut r = Reply::new(Intent::Unknown, ai_ans.clone());
+                        // Chỉ đọc to câu đầu tiên nếu bật đọc giọng nói để không đọc quá dài
+                        let first_sent = ai_ans
+                            .split(['.', '!', '?', '\n'])
+                            .find(|s| !s.trim().is_empty())
+                            .unwrap_or(&ai_ans)
+                            .trim()
+                            .replace('*', "");
+                        r.speak = first_sent;
+                        r.mood = "happy".into();
+                        r = r
+                            .act(if en { "📋 Copy reply" } else { "📋 Chép câu trả lời" }, "copy_text", &ai_ans)
+                            .act(if en { "✎ Save to Notes" } else { "✎ Lưu vào Ghi chú" }, "add_note", &ai_ans);
+                        if rest.chars().count() <= 90 {
+                            r = r.act(if en { "➕ Add as task" } else { "➕ Thêm thành việc" }, "add_task", &rest);
+                        }
+                        return Ok(r);
+                    }
+                }
                 let mut r = assistant::help(en);
                 r.intent = Intent::Unknown;
                 r.mood = "idle".into();
@@ -318,6 +409,10 @@ pub(crate) async fn asi_action(app: AppHandle, st: S<'_>, cmd: String, arg: Stri
                 let d = st2.clips.lock().unwrap().data(id).ok_or("Mục này không còn")?;
                 notch_native::clip::write(&d)?;
                 Ok(Reply::new(Intent::LastClip, if en { "Copied — press ⌘V to paste." } else { "Đã chép — bấm ⌘V để dán." }))
+            }
+            "copy_text" => {
+                notch_native::clip::write(&notch_native::clip::ClipData::Text(arg.clone()))?;
+                Ok(Reply::new(Intent::LastClip, if en { "Copied reply to clipboard — press ⌘V to paste." } else { "Đã chép câu trả lời vào Clipboard — nhấn ⌘V để dán." }))
             }
             _ => Err("Lệnh không hỗ trợ".into()),
         }

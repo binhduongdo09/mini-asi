@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Quyền cho cửa sổ tai thỏ: chỉ gọi lệnh của app và nghe sự kiện",
-  "windows": ["notch"],
+  "description": "Quyền cho cửa sổ tai thỏ và cửa sổ cài đặt: chỉ gọi lệnh của app và nghe sự kiện",
+  "windows": ["notch", "settings"],
   "permissions": ["core:default"]
 }

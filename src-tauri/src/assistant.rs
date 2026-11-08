@@ -58,13 +58,23 @@ pub fn classify(input: &str) -> (Intent, String) {
             }
         }
     }
+    // Các câu yêu cầu suy luận, tóm tắt, dịch thuật, giải thích, viết lách → chuyển thẳng cho Apple Intelligence (Intent::Unknown)
+    if has_any(
+        &f,
+        &[
+            "tom tat ", "dich ", "viet ", "giai thich ", "goi y ", "phan tich ", "so sanh ", "tai sao ", "lam sao ",
+            "uu tien ", "ke hoach ", "summarize ", "translate ", "explain ", "write ", "why ", "brainstorm ", "prioritize ",
+        ],
+    ) {
+        return (Intent::Unknown, raw);
+    }
     let rules: &[(&[&str], Intent)] = &[
         (&["don dep", "don rac", "don may", "giai phong", "xoa rac", "clean", "free up", "junk"], Intent::Clean),
         (&["tre", "cham", "qua han", "tre han", "overdue", "late", "lo han", "chua xong"], Intent::Overdue),
         (&["pin ", "pin?", "battery", "sac pin"], Intent::Battery),
         (&["dung luong", "o dia", "o cung", "bo nho trong", "disk", "storage", "space"], Intent::Disk),
-        (&["tinh trang", "the nao", "co van de", "kiem tra may", "check may", "suc khoe may", "may on", "may cham", "may nong", "status", "how is my", "problem", "health check", "lag"], Intent::Status),
-        (&["hom nay co gi", "lich hom nay", "hom nay lam gi", "viec hom nay", "ke hoach", "today", "agenda", "schedule", "lich hop", "cuoc hop"], Intent::Today),
+        (&["tinh trang", "may minh the nao", "may the nao", "co van de", "kiem tra may", "check may", "suc khoe may", "may on", "may cham", "may nong", "status", "how is my", "problem", "health check", "lag"], Intent::Status),
+        (&["hom nay co gi", "lich hom nay", "hom nay lam gi", "viec hom nay", "today", "agenda", "schedule", "lich hop", "cuoc hop"], Intent::Today),
         (&["tap trung", "focus", "pomodoro"], Intent::Focus),
         (&["nghi ngoi", "nghi mat", "toi met", "minh met", "met qua", "break", "tired", "rest"], Intent::Break),
         (&["vua chep", "clipboard", "vua copy", "da chep"], Intent::LastClip),
@@ -225,6 +235,154 @@ pub fn help(en: bool) -> Reply {
     r.act(if en { "Check my Mac" } else { "Máy mình thế nào?" }, "ask", if en { "how is my mac" } else { "máy mình thế nào" })
         .act(if en { "Clean junk" } else { "Dọn rác giúp mình" }, "ask", "dọn rác")
         .act(if en { "Overdue tasks" } else { "Có việc nào trễ không?" }, "ask", "việc nào trễ")
+}
+
+// ───────────────────────── Apple Intelligence (FoundationModels On-Device) ─────────────────────────
+
+#[derive(Debug, Clone, Serialize)]
+pub struct AppleAiStatus {
+    pub available: bool,
+    pub engine: String,
+    pub detail: String,
+}
+
+#[cfg(target_os = "macos")]
+const APPLE_AI_SWIFT_SRC: &str = r#"import Foundation
+import FoundationModels
+
+@main
+struct AsiAppleAI {
+    static func main() async {
+        let args = CommandLine.arguments
+        if args.contains("--check") {
+            if SystemLanguageModel.default.isAvailable {
+                print("READY")
+            } else {
+                print("UNAVAILABLE:\(SystemLanguageModel.default.availability)")
+            }
+            return
+        }
+        let sysPrompt = ProcessInfo.processInfo.environment["ASI_SYSTEM"] ?? "You are Asi, a smart desktop assistant living in the MacBook notch."
+        let userPrompt = ProcessInfo.processInfo.environment["ASI_PROMPT"] ?? ""
+        guard !userPrompt.isEmpty else {
+            print("ERR:Câu hỏi trống")
+            return
+        }
+        guard SystemLanguageModel.default.isAvailable else {
+            print("ERR:Apple Intelligence chưa được bật trên máy Mac này.")
+            return
+        }
+        do {
+            let model = SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations)
+            let session = LanguageModelSession(model: model, instructions: sysPrompt)
+            let res = try await session.respond(to: userPrompt)
+            print(res.content)
+        } catch {
+            do {
+                let model2 = SystemLanguageModel(useCase: .general, guardrails: .permissiveContentTransformations)
+                let session2 = LanguageModelSession(model: model2, instructions: "Answer the user's request helpfully, concisely, and naturally in the same language as the user (Vietnamese or English).")
+                let res2 = try await session2.respond(to: userPrompt)
+                print(res2.content)
+            } catch {
+                print("ERR:\(error.localizedDescription)")
+            }
+        }
+    }
+}
+"#;
+
+/// Biên dịch (1 lần duy nhất) công cụ gọi `FoundationModels` của macOS 26+ vào thư mục dữ liệu ứng dụng.
+/// Trả về đường dẫn file thực thi nếu máy hỗ trợ Apple Intelligence.
+pub fn ensure_apple_ai_bin(data_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        if !std::path::Path::new("/usr/bin/swiftc").exists() {
+            return None;
+        }
+        let _ = std::fs::create_dir_all(data_dir);
+        let swift_path = data_dir.join("apple_ai_v1.swift");
+        let bin_path = data_dir.join("apple_ai_v1_bin");
+        let need_compile = !bin_path.exists()
+            || std::fs::read_to_string(&swift_path).ok().as_deref() != Some(APPLE_AI_SWIFT_SRC);
+        if need_compile {
+            let _ = std::fs::write(&swift_path, APPLE_AI_SWIFT_SRC);
+            let status = std::process::Command::new("/usr/bin/swiftc")
+                .args(["-parse-as-library", "-O"])
+                .arg(&swift_path)
+                .arg("-o")
+                .arg(&bin_path)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .ok()?;
+            if !status.success() {
+                return None;
+            }
+        }
+        if bin_path.exists() {
+            return Some(bin_path);
+        }
+        None
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = data_dir;
+        None
+    }
+}
+
+pub fn check_apple_ai(data_dir: &std::path::Path) -> AppleAiStatus {
+    if let Some(bin) = ensure_apple_ai_bin(data_dir) {
+        if let Ok(out) = std::process::Command::new(bin).arg("--check").output() {
+            let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if s == "READY" {
+                return AppleAiStatus {
+                    available: true,
+                    engine: "Apple Intelligence (FoundationModels)".into(),
+                    detail: "Sẵn sàng · Chạy trực tiếp trên chip Apple Silicon (100% riêng tư, offline)".into(),
+                };
+            }
+            return AppleAiStatus {
+                available: false,
+                engine: "Apple Intelligence".into(),
+                detail: format!("Chưa sẵn sàng trên hệ thống ({s}) — hãy bật Apple Intelligence trong Cài đặt hệ thống"),
+            };
+        }
+    }
+    AppleAiStatus {
+        available: false,
+        engine: "Bộ phân tích ngôn ngữ tự nhiên nội bộ".into(),
+        detail: "Yêu cầu macOS 26+ với Apple Intelligence đã bật".into(),
+    }
+}
+
+pub fn ask_apple_ai(data_dir: &std::path::Path, context: &str, prompt: &str, en: bool) -> Result<String, String> {
+    let bin = ensure_apple_ai_bin(data_dir).ok_or("Máy chưa hỗ trợ Apple Intelligence (FoundationModels)")?;
+    let lang_rule = if en {
+        "Always reply in English unless the user explicitly asks for Vietnamese."
+    } else {
+        "Always reply in natural, friendly Vietnamese (Tiếng Việt có dấu) unless the user asks to translate into another language."
+    };
+    let sys_prompt = format!(
+        "You are Asi, a smart, warm desktop AI assistant living in the MacBook notch (Mini-Asi app).\n\
+         {lang_rule}\n\
+         Keep your response concise, well-structured, and directly helpful (around 2-6 sentences or bullet points).\n\
+         Live context from the user's Mac right now (use this only when relevant to the user's question):\n\
+         {context}"
+    );
+    let out = std::process::Command::new(bin)
+        .env("ASI_SYSTEM", sys_prompt)
+        .env("ASI_PROMPT", prompt)
+        .output()
+        .map_err(|e| format!("Lỗi gọi Apple Intelligence: {e}"))?;
+    let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if text.is_empty() {
+        return Err("Apple Intelligence không trả về kết quả".into());
+    }
+    if let Some(err) = text.strip_prefix("ERR:") {
+        return Err(err.trim().to_string());
+    }
+    Ok(text)
 }
 
 #[cfg(test)]

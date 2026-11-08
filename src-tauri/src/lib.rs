@@ -57,6 +57,10 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
                     let _ = threads_web(h.clone(), st, None).await;
                 });
             }
+            "settings" => {
+                let st = app.state::<Arc<AppState>>();
+                let _ = open_settings_window(app.clone(), st, None);
+            }
             id => {
                 let _ = app.emit("open-tab", id.to_string());
             }
@@ -177,6 +181,13 @@ pub fn run() {
                 eprintln!("Không tạo được biểu tượng khay: {e}");
             }
 
+            {
+                let d_ai = data_dir.clone();
+                std::thread::spawn(move || {
+                    let _ = assistant::ensure_apple_ai_bin(&d_ai);
+                });
+            }
+
             let (h, s2) = (app.handle().clone(), st.clone());
             std::thread::spawn(move || clip_loop(h, s2));
             let (h, s2) = (app.handle().clone(), st.clone());
@@ -194,7 +205,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_geometry, set_frame, set_interactive, set_display, move_bubble, window_snap, vocab_batch, vocab_learned, vocab_check, vocab_play, vocab_play_mine, tts_info, tts_install, tts_uninstall, tts_use,
+            get_geometry, set_frame, set_interactive, set_display, move_bubble, window_snap, open_settings_window, vocab_batch, vocab_learned, vocab_check, vocab_play, vocab_play_mine, tts_info, tts_install, tts_uninstall, tts_use,
             parse_task, add_task, list_tasks, toggle_task, snooze_task, rename_task, delete_task, clear_done,
             list_notes, save_note, pin_note, delete_note,
             file_info, pick_files, file_zip, file_extract, file_compress_pdf, file_merge_pdf, reveal,
@@ -202,7 +213,7 @@ pub fn run() {
             clean_scan, clean_run, clean_history, open_disk_settings,
             health_break_done, health_snooze, focus_start, focus_stop,
             get_settings, save_settings, license_info, activate_license, deactivate_license, quit,
-            get_status, asi_ask, asi_action, asi_speak, asi_stop_speaking,
+            get_status, asi_ask, asi_action, asi_speak, asi_stop_speaking, apple_ai_status,
             clip_list, clip_copy, clip_merge, clip_copy_files, clip_copy_image, clip_pin, clip_delete, clip_clear, clip_image, clip_to_note, clip_to_task,
             accessibility_status, open_privacy,
             voice_start, voice_stop, voice_cancel,

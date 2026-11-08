@@ -134,6 +134,17 @@ pub struct Settings {
     pub auto_update_check: bool,
     /// Kho GitHub để kiểm tra cập nhật (mặc định: binhduongdo09/mini-asi)
     pub update_repo: String,
+    /// Danh sách các Widget hình vuông đang đặt trên Bảng Widget (theo thứ tự kéo thả)
+    pub active_widgets: Vec<String>,
+    /// Ảnh nền / minh hoạ tuỳ chọn cho từng Widget (id -> data URL hoặc đường dẫn)
+    pub widget_images: std::collections::HashMap<String, String>,
+    /// Bật tích hợp Apple Intelligence (FoundationModels on-device) cho phần Chat & Hỏi đáp
+    #[serde(default = "default_true")]
+    pub apple_ai_enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for Settings {
@@ -197,6 +208,12 @@ impl Default for Settings {
             idle_items: ["focus", "overdue", "event", "next", "tasks", "mic"].iter().map(|s| s.to_string()).collect(),
             auto_update_check: true,
             update_repo: crate::updater::DEFAULT_REPO.into(),
+            active_widgets: ["tasks", "notes", "clips", "media", "journal", "words", "clean", "health", "camera"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            widget_images: std::collections::HashMap::new(),
+            apple_ai_enabled: true,
         }
     }
 }

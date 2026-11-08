@@ -76,7 +76,7 @@ pub(crate) fn place(win: &WebviewWindow, geo: &Geometry, w: f64, h: f64) {
         if notch_native::is_main_thread() {
             unsafe { notch_native::set_window_frame_top_left(p as *mut std::ffi::c_void, x, y, w, h) };
         } else {
-            let _ = win.app_handle().run_on_main_thread(move || unsafe {
+            let _ = on_main(win.app_handle(), move || unsafe {
                 notch_native::set_window_frame_top_left(p as *mut std::ffi::c_void, x, y, w, h);
             });
         }
@@ -119,14 +119,16 @@ pub(crate) fn apply_level(app: &AppHandle, level: isize) {
 #[tauri::command]
 pub(crate) fn set_display(app: AppHandle, st: S, mode: String) -> Result<(), String> {
     let m = if ["notch", "pill", "bubble"].contains(&mode.as_str()) { mode } else { "notch".into() };
-    {
+    let snap = {
         let mut s = st.store.lock().unwrap();
         s.settings.display_mode = m;
         s.settings.bubble_x = 0.0;
         s.settings.bubble_y = 0.0;
         s.save_settings()?;
-    }
+        s.settings.clone()
+    };
     apply_level(&app, normal_level(&app));
+    let _ = app.emit("settings-changed", &snap);
     Ok(())
 }
 
@@ -396,4 +398,67 @@ pub(crate) async fn window_snap(app: AppHandle, action: String, pid: Option<i32>
     });
 
     Ok(msg.into())
+}
+
+/// Mở hoặc đưa cửa sổ Cài đặt riêng biệt ("settings") lên phía trước.
+/// Cửa sổ này là một cửa sổ macOS tiêu chuẩn (không nằm ở tầng tai thỏ 27) nên rất rộng rãi,
+/// không làm giật tai thỏ và không bao giờ che hộp thoại xin quyền của hệ thống.
+#[tauri::command]
+pub(crate) fn open_settings_window(app: AppHandle, st: S, section: Option<String>) -> Result<(), String> {
+    let bring_front = |app: &AppHandle, sec: Option<String>| {
+        let h = app.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(180));
+            let h2 = h.clone();
+            let _ = h.run_on_main_thread(move || {
+                notch_native::activate_app();
+                if let Some(w) = h2.get_webview_window("settings") {
+                    let _ = w.unminimize();
+                    let _ = w.show();
+                    let _ = w.set_focus();
+                }
+            });
+            if let Some(s) = sec {
+                std::thread::sleep(Duration::from_millis(120));
+                let _ = h.emit("settings-section", s);
+            }
+        });
+    };
+
+    if let Some(w) = app.get_webview_window("settings") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+        bring_front(&app, section);
+        return Ok(());
+    }
+
+    let geo = st.geo.lock().unwrap().clone();
+    let w = 860.0;
+    let h = 650.0;
+    let x = (geo.screen_x + (geo.screen_width - w) / 2.0).max(geo.screen_x + 20.0);
+    let y = (geo.screen_y + (geo.screen_height - h) / 2.0).max(geo.screen_y + 44.0);
+
+    let url = match &section {
+        Some(sec) if !sec.is_empty() => format!("index.html?window=settings&sec={sec}"),
+        _ => "index.html?window=settings".to_string(),
+    };
+
+    tauri::WebviewWindowBuilder::new(&app, "settings", tauri::WebviewUrl::App(url.into()))
+        .title("Cài đặt — Mini-Asi")
+        .inner_size(w, h)
+        .min_inner_size(680.0, 480.0)
+        .position(x, y)
+        .decorations(true)
+        .transparent(false)
+        .always_on_top(false)
+        .resizable(true)
+        .closable(true)
+        .minimizable(true)
+        .focused(true)
+        .build()
+        .map_err(|e| format!("Không mở được cửa sổ Cài đặt: {e}"))?;
+
+    bring_front(&app, section);
+    Ok(())
 }

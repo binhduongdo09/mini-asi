@@ -24,7 +24,7 @@
   const settings = { break_enabled: true, break_minutes: 50, water_enabled: true, water_minutes: 60, sleep_hour: 23, focus_mode: false, launch_at_login: true, license_key: null, pdf_quality: "ebook", shortcut: "CmdOrCtrl+Shift+Space",
     clip_enabled: true, clip_max: 200, clip_shortcut: "Control+Shift+V", clip_autopaste: false, sync_reminders: true, reminders_list: "Mini-Asi", sync_notes: true, notes_folder: "Mini-Asi",
     show_calendar: true, event_alert_minutes: 10, voice_lang: "vi-VN", journal_enabled: true, journal_hour: 21,
-    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", notch_w: 0, notch_h: 0, icon_size: q.get("icons") || "large", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", visible_tabs: ["home", "tasks", "notes", "clips", "journal", "words", "threads"], auto_update_check: true, update_repo: "binhduongdo09/mini-asi", voice_reply: false, tts_engine: "vieneu", tts_voice: "Hoài My" };
+    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", notch_w: 0, notch_h: 0, icon_size: q.get("icons") || "large", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", visible_tabs: ["home", "tasks", "notes", "clips", "journal", "words", "threads"], active_widgets: ["chat", "tasks", "notes", "clips", "words", "clean", "health", "media", "snap", "files", "journal", "threads"], widget_images: {}, apple_ai_enabled: true, auto_update_check: true, update_repo: "binhduongdo09/mini-asi", voice_reply: false, tts_engine: "vieneu", tts_voice: "Hoài My" };
   const today0 = new Date(); today0.setHours(0, 0, 0, 0);
   const at = (h, m = 0) => today0.getTime() + h * H + m * 60e3;
   const events = [
@@ -235,6 +235,8 @@
     backup_pick_dir: () => null, backup_set: () => null, backup_now: async () => { await wait(600); return ["/Users/binh/Library/CloudStorage/GoogleDrive-x/My Drive/Mini-Asi/backups/a.zip", 2.4e6]; },
     device_sync_now: async () => { await wait(600); return { devices: ["iMac văn phòng"], stats: { tasks: 3, notes: 1, journal: 0, clips: 5, removed: 0 } }; }, backup_restore: async () => { await wait(500); },
     window_snap: async ({ action }) => `Đã ghép cửa sổ (${action})`,
+    open_settings_window: async ({ section } = {}) => { window.open(`index.html?window=settings${section ? `&sec=${encodeURIComponent(section)}` : ""}`, "_blank", "width=860,height=650"); return null; },
+    apple_ai_status: async () => ({ available: true, engine: "Apple Intelligence (FoundationModels)", detail: "Sẵn sàng · Chạy trực tiếp trên chip Apple Silicon (Offline & Bảo mật)" }),
   };
   window.__TAURI__ = {
     core: { invoke: async (cmd, args) => { if (!(cmd in H_)) throw "mock: thiếu lệnh " + cmd; return H_[cmd](args || {}); } },

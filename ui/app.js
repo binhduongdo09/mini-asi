@@ -106,10 +106,15 @@
   const shortPath = (p) => String(p).replace(/^\/(Users|home)\/[^/]+/, "~");
 
   // ───────── Hình học: kích thước từng trạng thái ─────────
+  const URL_PARAMS = new URLSearchParams(location.search);
+  const IS_SETTINGS_WIN = URL_PARAMS.get("window") === "settings";
+  const INIT_SETTINGS_SEC = URL_PARAMS.get("section") || "";
+  if (IS_SETTINGS_WIN) document.body.classList.add("settings-win");
+
   const geo = await api("get_geometry");
   const early = await api("get_settings");
   // Kiểu hiển thị: tai thỏ · viên thuốc nổi · bong bóng tròn
-  const DISP = ["notch", "pill", "bubble"].includes(early.display_mode) ? early.display_mode : "notch";
+  let DISP = ["notch", "pill", "bubble"].includes(early.display_mode) ? early.display_mode : "notch";
   document.body.classList.add("disp-" + DISP);
   const ON_NOTCH = DISP === "notch" && geo.has_notch;
   let settingsCache = { ...early };
@@ -140,21 +145,23 @@
   const MAX_H = Math.max(420, Math.round((geo.screen_height || 900) - 40));
   const clampW = (w) => Math.round(Math.min(Math.max(w, Math.max(BASE_W + 40, 460)), MAX_W));
   const clampH = (h) => Math.round(Math.min(Math.max(h, 360), MAX_H));
-  let peekCam = { active: false, stream: null };
+  let peekCam = { active: false, stream: null, lastSnap: "" };
   let showPeekSizer = false;
-  let mode = "collapsed";
+  let mode = IS_SETTINGS_WIN ? "expanded" : "collapsed";
   let pinned = false;
   let hovering = false;
   let modeTimer = null;
   let dropBefore = null;
   let suppressHoverUntil = 0;
+  let lastFrameKey = "";
 
   const SIZES = {
     collapsed: [BASE_W, BAR],
-    peek: [520, BAR + 176],
+    peek: [520, BAR + 214],
     alert: [460, BAR + 120],
     drop: [500, BAR + 132],
-    expanded: [700, 490],
+    snap: [560, BAR + 122],
+    expanded: [740, 540],
     listen: [440, BAR + 84],
     reply: [500, BAR + 250],
   };
@@ -169,11 +176,21 @@
       const baseH = SIZES.peek[1] + (showPeekSizer ? 44 : 0) + (peekCam.active ? 138 : 0);
       return [SIZES.peek[0], baseH];
     }
-    if (m !== "expanded") return SIZES[m];
+    if (m !== "expanded") return SIZES[m] || SIZES.collapsed;
     if (threadsInline()) {
       return [clampW(settingsCache.threads_w || Math.max(BASE_W + 120, 470)), clampH(settingsCache.threads_h || Math.min(MAX_H, 860))];
     }
     return [clampW(settingsCache.panel_w || SIZES.expanded[0]), clampH(settingsCache.panel_h || SIZES.expanded[1])];
+  }
+
+  function sendFrameIfChanged(w, h, force = false) {
+    if (IS_SETTINGS_WIN) return Promise.resolve();
+    const rw = Math.round(w + MARGIN_X * 2);
+    const rh = Math.round(h + MARGIN_B);
+    const k = `${rw}x${rh}`;
+    if (!force && k === lastFrameKey) return Promise.resolve();
+    lastFrameKey = k;
+    return api("set_frame", { width: rw, height: rh });
   }
 
   function applyNotchGeometry(st = settingsCache, resizeNow = false) {
@@ -188,25 +205,26 @@
         : Math.max(90, Math.round(130 + WING * 1.4));
     const hiddenBehindNotch = DISP !== "bubble" && WING <= 2;
     island.classList.toggle("notch-hidden", hiddenBehindNotch);
-    root.style.setProperty("--bar-h", BAR + "px");
-    root.style.setProperty("--gap-w", (ON_NOTCH ? Math.round(geo.notch_width) : 0) + "px");
+    root.style.setProperty("--bar-h", (IS_SETTINGS_WIN ? 48 : BAR) + "px");
+    root.style.setProperty("--gap-w", (ON_NOTCH && !IS_SETTINGS_WIN ? Math.round(geo.notch_width) : 0) + "px");
     const smIcons = (st.icon_size || "large") === "small";
     SIZES.collapsed = DISP === "bubble" ? [58, 58] : [BASE_W, BAR];
-    SIZES.peek = [Math.max(BASE_W + 110, smIcons ? 490 : 532), BAR + (smIcons ? 162 : 208)];
+    SIZES.peek = [Math.max(BASE_W + 110, smIcons ? 490 : 532), BAR + (smIcons ? 174 : 218)];
     SIZES.alert = [Math.max(BASE_W + 80, 460), BAR + 120];
     SIZES.drop = [Math.max(BASE_W + 130, 500), BAR + 132];
     SIZES.snap = [Math.max(BASE_W + 250, 560), BAR + 122];
-    SIZES.expanded = [Math.max(BASE_W + 120, 700), 490];
+    SIZES.expanded = [Math.max(BASE_W + 150, 740), 540];
     SIZES.listen = [Math.max(BASE_W + 80, 440), BAR + 84];
     SIZES.reply = [Math.max(BASE_W + 140, 500), BAR + 250];
+    if (IS_SETTINGS_WIN) return;
     const [cw, ch] = sizeOf(mode);
     root.style.setProperty("--w", cw + "px");
     root.style.setProperty("--h", ch + "px");
     if (resizeNow) {
-      api("set_frame", { width: cw + MARGIN_X * 2, height: ch + MARGIN_B });
+      sendFrameIfChanged(cw, ch, true);
     }
   }
-  applyNotchGeometry(early, true);
+  applyNotchGeometry(early, !IS_SETTINGS_WIN);
 
   let freshOpen = true;
   let frameTimer = null;
@@ -214,7 +232,7 @@
     const V = window.VNKey;
     if (!on) {
       if (V) { V.mode = null; V.suspended = false; }
-      await api("set_interactive", { on: false, keepFocus: keepFocus ?? null });
+      if (!IS_SETTINGS_WIN) await api("set_interactive", { on: false, keepFocus: keepFocus ?? null });
       updateBar();
       return null;
     }
@@ -227,7 +245,30 @@
     return V ? V.mode : m;
   }
 
+  async function openSettingsWindow(section = null) {
+    if (IS_SETTINGS_WIN) {
+      tab = "settings";
+      await viewSettings();
+      if (section) scrollToSettingsSection(section);
+      return;
+    }
+    try {
+      await api("open_settings_window", { section: section || null });
+      if (mode !== "collapsed") setMode("collapsed");
+    } catch (err) {
+      toast(String(err));
+    }
+  }
+
   async function setMode(next, opts = {}) {
+    if (IS_SETTINGS_WIN) {
+      mode = "expanded";
+      tab = "settings";
+      island.className = island.className.replace(/mode-\w+/, "mode-expanded");
+      updateBar();
+      await viewSettings();
+      return;
+    }
     if (next === mode && !opts.force) return;
     clearTimeout(modeTimer);
     clearTimeout(frameTimer);
@@ -237,8 +278,8 @@
     const [w, h] = sizeOf(next);
     const [cw, ch] = sizeOf(mode === next ? "collapsed" : mode);
     const growing = w >= cw || h >= ch;
-    const frame = () => api("set_frame", { width: w + MARGIN_X * 2, height: h + MARGIN_B });
-    if (growing) await frame(); // nở cửa sổ trước rồi mới chạy hoạt cảnh
+    const frame = () => sendFrameIfChanged(w, h, !!opts.force);
+    if (growing) await frame(); // nở cửa sổ đồng bộ trên main thread trước rồi mới chạy hoạt cảnh
     island.className = island.className.replace(/mode-\w+/, "mode-" + next);
     root.style.setProperty("--w", w + "px");
     root.style.setProperty("--h", h + "px");
@@ -266,7 +307,7 @@
   // ───────── Trạng thái tổng ─────────
   let status = null;
   let tasks = [];
-  let tab = "home";
+  let tab = IS_SETTINGS_WIN ? "settings" : "all";
   let moodOverride = null;
   let moodTimer = null;
 
@@ -340,25 +381,40 @@
   function updateBar() {
     const s = status;
     const rw = $("#rightWing");
-    $("#barTitle").textContent = mode === "expanded" ? "Mini-Asi" : "";
+    const titleText = IS_SETTINGS_WIN ? "⚙️ Cài đặt Mini-Asi" : mode === "expanded" ? "Mini-Asi" : "";
+    const btEl = $("#barTitle");
+    if (btEl.textContent !== titleText) btEl.textContent = titleText;
     if (mode === "expanded") {
       const V = window.VNKey;
       const ime = V && V.mode ? `${V.mode === "vni" ? "VNI" : "Telex"}` : "EN";
-      const hasCustomPos = (settingsCache.bubble_x > 0 || settingsCache.bubble_y > 0);
+      const hasCustomPos = !IS_SETTINGS_WIN && (settingsCache.bubble_x > 0 || settingsCache.bubble_y > 0);
+      const expKey = `exp:${IS_SETTINGS_WIN ? "win" : "notch"}:${V && V.mode ? V.mode : "en"}:${hasCustomPos ? 1 : 0}:${pinned ? 1 : 0}`;
+      if (rw.dataset.keys === expKey) return;
+      rw.dataset.keys = expKey;
+      if (IS_SETTINGS_WIN) {
+        rw.innerHTML = `<button class="ime-pill ${V && V.mode ? "on" : ""}" data-act="ime" title="Bộ gõ tiếng Việt của Asi — bấm để bật/tắt">${V && V.mode ? "VI · " : ""}${ime}</button>
+          <span class="chip green">Cửa sổ độc lập</span>`;
+        return;
+      }
       rw.innerHTML = `<button class="ime-pill ${V && V.mode ? "on" : ""}" data-act="ime" title="Bộ gõ tiếng Việt của Asi — bấm để bật/tắt">${V && V.mode ? "VI · " : ""}${ime}</button>
         ${hasCustomPos ? `<button class="icon-btn on" data-act="reset-pos" title="Đang ghim vị trí tuỳ chọn — bấm để đặt về vị trí mặc định">📍</button>` : ""}
         <button class="icon-btn ${pinned ? "on" : ""}" data-act="pin" title="Ghim mở popup (không tự đóng khi bấm ra ngoài)">${I.pin}</button>
         <button class="icon-btn" data-act="close" title="Thu gọn (Esc)">${I.x}</button>`;
-      rw.dataset.keys = "";
       return;
     }
     const items = idleItems();
     const showMic = items.includes("mic");
     const micHtml = showMic ? `<button class="wing-mic ${mode === "listen" ? "rec" : ""}" data-act="vmic" title="Ra lệnh cho Asi bằng giọng nói">${I.mic}</button>` : "";
-    if (!s) { rw.innerHTML = micHtml; rw.dataset.keys = ""; return; }
+    if (!s) {
+      if (rw.dataset.keys !== "nos") { rw.innerHTML = micHtml; rw.dataset.keys = "nos"; }
+      return;
+    }
     if (DISP === "bubble" && mode === "collapsed") {
-      rw.innerHTML = s.lateness.overdue && !s.focus_mode ? `<span class="b-dot">${s.lateness.overdue}</span>` : "";
-      rw.dataset.keys = "";
+      const bKey = `bub:${s.lateness.overdue && !s.focus_mode ? s.lateness.overdue : 0}`;
+      if (rw.dataset.keys !== bKey) {
+        rw.innerHTML = s.lateness.overdue && !s.focus_mode ? `<span class="b-dot">${s.lateness.overdue}</span>` : "";
+        rw.dataset.keys = bKey;
+      }
       return;
     }
     // [khoá, màu, biểu tượng, chữ] theo thứ tự ưu tiên; chỉ hiện những thứ bạn chọn trong Cài đặt › Chế độ chờ
@@ -378,7 +434,7 @@
     if (want("disk") && s.disk) b.push(["disk", s.disk.level !== "ok" ? "amber" : "ghost", I.disk, shortBytes(s.disk.free_bytes)]);
     const keys = b.map((x) => x[0]).join(",") + (showMic ? "|mic" + (mode === "listen" ? "R" : "") : "");
     if (rw.dataset.keys === keys) {
-      // cùng các mục như trước → chỉ đổi chữ, không vẽ lại (không nhấp nháy, không “pop”)
+      // cùng các mục như trước → chỉ đổi chữ tại chỗ, không bao giờ vẽ lại DOM (không nhấp nháy)
       for (const [k, , , t] of b) { const el = rw.querySelector(`[data-k="${k}"] .bt`); if (el && el.textContent !== t) el.textContent = t; }
       return;
     }
@@ -387,11 +443,7 @@
     // Không đủ chỗ (cánh phải cạnh tai thỏ hẹp) → bỏ bớt mục ít ưu tiên ở cuối
     const shown = [...rw.querySelectorAll(".badge")];
     const overflow = () => rw.firstElementChild && rw.firstElementChild.getBoundingClientRect().left < rw.getBoundingClientRect().left - 0.5;
-    let dropped = 0;
-    while (shown.length > 1 && overflow()) { shown.pop().remove(); dropped++; }
-    // đang chạy hiệu ứng đổi cỡ thì đo lại sau khi xong (tránh bỏ nhầm mục vì lúc đó còn hẹp)
-    if (dropped && !rw.dataset.retry) { rw.dataset.retry = "1"; setTimeout(() => { rw.dataset.keys = ""; updateBar(); }, 650); }
-    else if (!dropped) delete rw.dataset.retry;
+    while (shown.length > 1 && overflow()) { shown.pop().remove(); }
   }
   function shortBytes(n) {
     if (!n && n !== 0) return "";
@@ -489,22 +541,34 @@
     if (!s) return;
     const pk = $("#peek");
     const smIcons = (settingsCache.icon_size || "large") === "small";
-    // Nếu đang mở gương Camera trực tiếp, chỉ cập nhật phần chữ & thanh nút để không làm giật luồng video
+    const layoutKey = `${smIcons ? 1 : 0}:${showPeekSizer ? 1 : 0}:${peekCam.active ? 1 : 0}`;
     const topEl = pk.querySelector(".peek-top");
     const barEl = pk.querySelector(".peek-bar");
-    if (peekCam.active && topEl && barEl && !showPeekSizer) {
-      topEl.innerHTML = peekTopHtml(s);
-      barEl.innerHTML = peekBarHtml();
+    if (pk.dataset.layoutKey === layoutKey && topEl && barEl) {
+      // Chỉ cập nhật tại chỗ khi nội dung thật sự thay đổi → tuyệt đối không nhấp nháy
+      const nextTop = peekTopHtml(s);
+      if (topEl.dataset.lastHtml !== nextTop) {
+        topEl.dataset.lastHtml = nextTop;
+        topEl.innerHTML = nextTop;
+      }
+      const nextBar = peekBarHtml();
+      if (barEl.dataset.lastHtml !== nextBar) {
+        barEl.dataset.lastHtml = nextBar;
+        barEl.innerHTML = nextBar;
+      }
       return;
     }
+    pk.dataset.layoutKey = layoutKey;
+    const initTop = peekTopHtml(s);
+    const initBar = peekBarHtml();
     pk.innerHTML = `<div class="peek-head">
-        <div class="peek-top" title="Bấm để mở bảng điều khiển">${peekTopHtml(s)}</div>
+        <div class="peek-top" title="Bấm để mở bảng điều khiển">${initTop}</div>
         <div class="peek-tools">
           <button class="peek-pill-btn" data-peek="toggle-sizer" title="Chỉnh kích thước tai thỏ hoặc ẩn hoàn toàn sau tai thỏ">↔ ${currentWingPx() === 0 ? "Đang ẩn" : "Cỡ tai thỏ"}</button>
           <button class="peek-pill-btn" data-peek="icon-size" title="Đổi giữa Icon iOS To (có hình + chữ) và Icon Nhỏ">${smIcons ? "⊞ Icon To" : "⊟ Icon Nhỏ"}</button>
         </div>
       </div>
-      <div class="peek-bar">${peekBarHtml()}</div>
+      <div class="peek-bar">${initBar}</div>
       ${peekSizerHtml()}
       ${peekCam.active ? `<div class="peek-cam-wrap" id="peekCamWrap">
         <video id="peekCamVideo" autoplay playsinline muted></video>
@@ -516,6 +580,10 @@
           </div>
         </div>
       </div>` : ""}`;
+    const newTop = pk.querySelector(".peek-top");
+    const newBar = pk.querySelector(".peek-bar");
+    if (newTop) newTop.dataset.lastHtml = initTop;
+    if (newBar) newBar.dataset.lastHtml = initBar;
     const rng = $("#peekWingRange");
     if (rng) {
       rng.addEventListener("input", (e) => {
@@ -537,16 +605,6 @@
       const v = $("#peekCamVideo");
       if (v && v.srcObject !== peekCam.stream) v.srcObject = peekCam.stream;
     }
-    // Tự động đo chiều cao thực tế của nội dung Peek để không bao giờ bị cắt mất nút ở đáy
-    requestAnimationFrame(() => {
-      if (mode !== "peek") return;
-      const neededH = Math.max(sizeOf("peek")[1], BAR + pk.scrollHeight + 6);
-      const [pw] = sizeOf("peek");
-      if (Math.abs(neededH - parseFloat(root.style.getPropertyValue("--h") || "0")) > 2) {
-        root.style.setProperty("--h", neededH + "px");
-        api("set_frame", { width: pw + MARGIN_X * 2, height: neededH + MARGIN_B });
-      }
-    });
   }
 
   async function refreshMediaQuick() {
@@ -555,7 +613,13 @@
       if (m) {
         mediaQuick = m;
         const barEl = $("#peek .peek-bar");
-        if (barEl && mode === "peek") barEl.innerHTML = peekBarHtml();
+        if (barEl && mode === "peek") {
+          const nextBar = peekBarHtml();
+          if (barEl.dataset.lastHtml !== nextBar) {
+            barEl.dataset.lastHtml = nextBar;
+            barEl.innerHTML = nextBar;
+          }
+        }
       }
     } catch (_) {}
   }
@@ -628,9 +692,13 @@
       ctx.translate(cv.width, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(v, 0, 0);
-      await api("clip_copy_image", { dataUrl: cv.toDataURL("image/png") });
+      const dataUrl = cv.toDataURL("image/png");
+      peekCam.lastSnap = dataUrl;
+      settingsCache.widget_images = { ...(settingsCache.widget_images || {}), camera: dataUrl };
+      api("save_settings", { settings: settingsCache });
+      await api("clip_copy_image", { dataUrl });
       confetti(16);
-      toast("📸 Đã chụp vào Clipboard — nhấn ⌘V để dán!");
+      toast("📸 Đã chụp vào Clipboard & cập nhật lên Widget Camera!");
       return;
     }
     if (act === "focus") {
@@ -804,15 +872,16 @@
     });
   })();
   on("perm-prompt", (low) => {
+    if (IS_SETTINGS_WIN) return;
     if (low && mode !== "collapsed") setMode("collapsed");
     else if (!low) {
       const [w, h] = sizeOf(mode);
-      api("set_frame", { width: w + MARGIN_X * 2, height: h + MARGIN_B });
+      sendFrameIfChanged(w, h, true);
     }
   });
   on("ime-warn", () => toast("Không chuyển được sang bàn phím ABC — hãy bật thêm bàn phím ABC trong Cài đặt hệ thống › Bàn phím › Nguồn nhập để Asi tự gõ tiếng Việt"));
   on("window-blur", () => {
-    if (mode !== "expanded") return;
+    if (IS_SETTINGS_WIN || mode !== "expanded") return;
     if (pinned) {
       // Đang ghim mở popup mà bấm sang app khác → trả lại bộ gõ hệ thống cho app kia
       syncImeInteractive(false, true);
@@ -823,6 +892,7 @@
 
   // ───────── Tương tác hòn đảo ─────────
   function scheduleHoverSync(inside) {
+    if (IS_SETTINGS_WIN) return;
     hovering = inside;
     clearTimeout(modeTimer);
     if (island.classList.contains("resizing") || island.classList.contains("dragging")) return;
@@ -837,7 +907,6 @@
     }
   }
   on("hover", (inside) => scheduleHoverSync(inside));
-  island.addEventListener("transitionend", (e) => { if (e.target === island && e.propertyName === "width") { const rw = $("#rightWing"); rw.dataset.keys = ""; delete rw.dataset.retry; updateBar(); } });
   island.addEventListener("mouseenter", () => { if (document.body.classList.contains("mock")) scheduleHoverSync(true); else hovering = true; });
   island.addEventListener("mouseleave", () => { if (document.body.classList.contains("mock")) scheduleHoverSync(false); });
   // Kéo & ghim vị trí bất kỳ trên màn hình (áp dụng cho cả Tai thỏ, Viên thuốc, Bong bóng và bảng Popup mở rộng)
@@ -851,12 +920,12 @@
     if (tab === "settings" && mode === "expanded") viewSettings();
     toast("Đã đặt về vị trí mặc định trên màn hình");
   }
-  {
+  if (!IS_SETTINGS_WIN) {
     let d = null, raf = 0;
     island.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
-      // Bỏ qua khi bấm vào các nút chức năng, tay kéo giãn hoặc ô nhập liệu
-      if (e.target.closest("[data-act], .grip, .grip-corner, .notch-edge, button, input, select, textarea, a, label")) return;
+      // Bỏ qua khi bấm vào các nút chức năng, tay kéo giãn, thẻ widget hoặc ô nhập liệu
+      if (e.target.closest("[data-act], [data-widget-id], [data-lib-id], .grip, .grip-corner, .notch-edge, button, input, select, textarea, a, label")) return;
       // Khi đang mở bảng (expanded / alert / reply / listen): kéo ở thanh tiêu đề trên cùng (#bar) để di chuyển popup
       if (mode !== "collapsed" && mode !== "peek" && !e.target.closest("#bar")) return;
       const curW = sizeOf(mode)[0] + MARGIN_X * 2;
@@ -943,8 +1012,8 @@
       if (tab === "settings" && mode === "expanded") viewSettings();
       return;
     }
-    if (act === "close") { setMode("collapsed"); return; }
-    if (mode === "collapsed" || mode === "peek") setMode("expanded");
+    if (act === "close") { if (IS_SETTINGS_WIN) window.close(); else setMode("collapsed"); return; }
+    if (!IS_SETTINGS_WIN && (mode === "collapsed" || mode === "peek")) setMode("expanded");
   });
   $("#peek").addEventListener("click", async (e) => {
     const btn = e.target.closest("[data-peek]");
@@ -956,11 +1025,16 @@
     if (e.target.closest(".peek-cam-wrap") || e.target.closest(".peek-bar")) return;
     setMode("expanded");
   });
-  window.addEventListener("keydown", (e) => { if (e.key === "Escape" && !isComposing(e) && mode !== "collapsed") setMode("collapsed"); });
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !isComposing(e)) {
+      if (IS_SETTINGS_WIN) window.close();
+      else if (mode !== "collapsed") setMode("collapsed");
+    }
+  });
   // Chỉ thu gọn khi người dùng thật sự rời đi (chuột ở ngoài tai thỏ) — tránh bị đóng khi
   // bộ gõ tiếng Việt / bảng chọn emoji / đổi ngôn ngữ bàn phím làm cửa sổ mất focus thoáng qua
   window.addEventListener("blur", () => {
-    if (mode !== "expanded") return;
+    if (IS_SETTINGS_WIN || mode !== "expanded") return;
     if (pinned) {
       syncImeInteractive(false, true);
       return;
@@ -973,17 +1047,19 @@
     clearTimeout(modeTimer);
     if (mode === "expanded") {
       syncImeInteractive(true, false);
-      if (tab === "settings" || tab === "all") {
-        setTimeout(() => {
-          if (tab === "settings") viewSettings();
-          else if (tab === "all") viewHome();
-        }, 150);
-      }
     }
   });
-  on("toggle", () => (mode === "expanded" ? setMode("collapsed") : setMode("expanded")));
+  on("toggle", () => {
+    if (IS_SETTINGS_WIN) return;
+    mode === "expanded" ? setMode("collapsed") : setMode("expanded");
+  });
   on("open-tab", (id) => {
-    tab = { open: tab, clean: "clean", settings: "settings", clips: "clips", journal: "journal", threads: "threads" }[id] || tab;
+    if (IS_SETTINGS_WIN) return;
+    if (id === "settings") {
+      openSettingsWindow();
+      return;
+    }
+    tab = { open: tab, clean: "clean", clips: "clips", journal: "journal", threads: "threads", all: "all" }[id] || tab;
     setMode("expanded", { force: true });
   });
 
@@ -1373,7 +1449,8 @@
 
   // ───────── Các tab (bảng màu chuẩn iOS App Icon) ─────────
   const TABS = [
-    ["home", "Asi", I.mic, "#0a84ff"],
+    ["all", "Widget", I.grid, "#64d2ff"],
+    ["home", "Asi AI", I.mic, "#0a84ff"],
     ["tasks", "Việc", I.tasks, "#30d158"],
     ["notes", "Ghi chú", I.note, "#ff9f0a"],
     ["clips", "Clipboard", I.clip, "#5ac8fa"],
@@ -1383,30 +1460,88 @@
     ["files", "File", I.file, "#007aff"],
     ["clean", "Dọn máy", I.broom, "#ff9f0a"],
     ["health", "Sức khoẻ", I.heart, "#ff2d55"],
-    ["settings", "Cài đặt", I.gear, "#8e8e93"],
+    ["settings", "Cài đặt ↗", I.gear, "#8e8e93"],
   ];
   function visibleTabs() {
+    if (IS_SETTINGS_WIN) {
+      return [
+        ["sec-disp", "Giao diện & Tai thỏ", I.sparkle, "#0a84ff"],
+        ["sec-ai", "Apple Intelligence & Giọng", I.mic, "#bf5af2"],
+        ["sec-ime", "Bộ gõ Tiếng Việt", I.note, "#30d158"],
+        ["sec-perm", "Quyền hệ thống", I.check, "#ff9f0a"],
+        ["sec-sync", "Sao lưu & Đồng bộ", I.sync, "#5ac8fa"],
+      ];
+    }
     const vis = settingsCache.visible_tabs && settingsCache.visible_tabs.length ? settingsCache.visible_tabs : ["home", "tasks", "notes", "clips", "journal", "words", "threads"];
-    const list = TABS.filter(([id]) => id === "home" || vis.includes(id));
-    // tab đang mở mà bị ẩn vẫn hiện tạm để không "mất" chỗ đang đứng
-    if (!list.some(([id]) => id === tab) && tab !== "all" && tab !== "settings") { const cur = TABS.find(([id]) => id === tab); if (cur) list.push(cur); }
-    list.push(["all", "Tất cả", I.grid, "#64d2ff"]);
+    const list = [TABS[0]]; // "all" (Bảng Widget) luôn đứng đầu
+    for (const item of TABS.slice(1)) {
+      const [id] = item;
+      if (id === "home" || vis.includes(id)) list.push(item);
+    }
+    if (!list.some(([id]) => id === tab) && tab !== "all" && tab !== "settings") {
+      const cur = TABS.find(([id]) => id === tab);
+      if (cur) list.push(cur);
+    }
     if (!list.some(([id]) => id === "settings")) list.push(TABS.find(([id]) => id === "settings"));
     return list;
   }
+  function hasTabDot(id) {
+    return !!(
+      (id === "tasks" && status && status.lateness.overdue) ||
+      (id === "threads" && status && status.threads_unread) ||
+      (id === "settings" && status && status.update_version)
+    );
+  }
   function renderTabs() {
-    $("#tabs").innerHTML = visibleTabs().map(([id, name, ic, c]) =>
-      `<button class="tab ${tab === id ? "active" : ""}" data-tab="${id}" style="--tc:${c}" title="${name}"><span class="tab-ic">${ic}</span><span class="lbl">${name}</span>${(id === "tasks" && status && status.lateness.overdue) || (id === "threads" && status && status.threads_unread) || (id === "settings" && status && status.update_version) ? '<span class="dot"></span>' : ""}</button>`
+    const tabsEl = $("#tabs");
+    if (!tabsEl) return;
+    const list = visibleTabs();
+    const idsKey = list.map(([id]) => id).join(",");
+    if (tabsEl.dataset.idsKey === idsKey && tabsEl.children.length === list.length) {
+      // Cập nhật tại chỗ class .active và chấm báo .dot — tuyệt đối không xoá/vẽ lại DOM thanh tab
+      for (const btn of tabsEl.querySelectorAll(".tab")) {
+        const id = btn.dataset.tab;
+        btn.classList.toggle("active", tab === id);
+        const needDot = hasTabDot(id);
+        const dotEl = btn.querySelector(".dot");
+        if (needDot && !dotEl) {
+          const d = document.createElement("span");
+          d.className = "dot";
+          btn.appendChild(d);
+        } else if (!needDot && dotEl) {
+          dotEl.remove();
+        }
+      }
+      return;
+    }
+    tabsEl.dataset.idsKey = idsKey;
+    tabsEl.innerHTML = list.map(([id, name, ic, c]) =>
+      `<button class="tab ${tab === id ? "active" : ""}" data-tab="${id}" style="--tc:${c}" title="${name}"><span class="tab-ic">${ic}</span><span class="lbl">${name}</span>${hasTabDot(id) ? '<span class="dot"></span>' : ""}</button>`
     ).join("");
+  }
+  function scrollToSettingsSection(secId) {
+    const el = document.getElementById(secId);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   $("#tabs").addEventListener("click", (e) => {
     const t = e.target.closest("[data-tab]");
-    if (t) switchTab(t.dataset.tab);
+    if (!t) return;
+    const id = t.dataset.tab;
+    if (IS_SETTINGS_WIN && id.startsWith("sec-")) {
+      $$("#tabs .tab").forEach((b) => b.classList.toggle("active", b === t));
+      scrollToSettingsSection(id);
+      return;
+    }
+    switchTab(id);
   });
   function switchTab(t) {
+    if (t === "settings" && !IS_SETTINGS_WIN) {
+      openSettingsWindow();
+      return;
+    }
     const before = sizeOf("expanded").join("x");
     tab = t;
-    if (mode === "expanded" && sizeOf("expanded").join("x") !== before) setMode("expanded", { force: true });
+    if (!IS_SETTINGS_WIN && mode === "expanded" && sizeOf("expanded").join("x") !== before) setMode("expanded", { force: true });
     else renderView();
   }
   // Khung Threads nhúng: chỉ hiện ở tab Threads khi bảng đang mở
@@ -1423,22 +1558,50 @@
     return api("threads_embed", { show: true, x: r.left, y: r.top, w: r.width, h: r.height, ime: V && V.mode ? V.mode : null, url: url || null }).catch((err) => toast(String(err)));
   }
   function renderView() {
+    if (IS_SETTINGS_WIN) {
+      tab = "settings";
+      renderTabs();
+      viewSettings();
+      return;
+    }
     if (tab !== "threads") hideEmbed();
     renderTabs();
-    const v = $("#view");
-    v.style.animation = "none";
-    void v.offsetWidth;
-    v.style.animation = "";
     const views = { home: viewChat, all: viewHome, tasks: viewTasks, notes: viewNotes, files: viewFiles, clean: viewClean, health: viewHealth, settings: viewSettings, ...EXTRA_VIEWS };
-    (views[tab] || viewTasks)();
+    (views[tab] || viewHome)();
   }
 
-  // ═════════ ASI: CHAT & RA LỆNH BẰNG GIỌNG NÓI ═════════
+  // ═════════ ASI: CHAT & APPLE INTELLIGENCE (ON-DEVICE) ═════════
   const chat = []; // {who: "me"|"asi", text, reply?}
+  let appleAiState = { available: true, engine: "Apple Intelligence (FoundationModels)", detail: "Chạy trực tiếp trên chip Apple Silicon" };
+  api("apple_ai_status").then((st) => {
+    if (st) {
+      appleAiState = st;
+      const b = $("#appleAiBadge");
+      if (b) {
+        b.className = `ai-pill ${st.available ? "ready" : "fallback"}`;
+        b.innerHTML = `<span class="ai-spark"></span><b>${st.available ? "Apple Intelligence · Sẵn sàng" : "NLP Nội bộ"}</b><span>${esc(st.detail)}</span>`;
+      }
+    }
+  }).catch(() => {});
+
   const SUGGEST = [
-    ["🩺", "Máy mình thế nào?"], ["🧹", "Dọn rác giúp mình"], ["⏰", "Có việc nào trễ không?"],
-    ["📅", "Hôm nay có gì?"], ["🎯", "Tập trung 25 phút"], ["💾", "Còn bao nhiêu dung lượng?"],
+    ["✨", "Tóm tắt mục vừa copy"],
+    ["🧠", "Gợi ý ưu tiên việc hôm nay"],
+    ["🌐", "Dịch mục vừa copy sang tiếng Anh"],
+    ["✍️", "Viết nháp email xin nghỉ phép"],
+    ["🩺", "Máy mình thế nào?"],
+    ["🧹", "Dọn rác giúp mình"],
+    ["⏰", "Có việc nào trễ không?"],
+    ["🎯", "Tập trung 25 phút"],
   ];
+  function fmtChatMd(raw) {
+    const safe = esc(raw || "");
+    return safe
+      .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+      .replace(/^[•*-]\s+(.+)$/gm, '<div class="md-li">• $1</div>')
+      .replace(/^(\d+)\.\s+(.+)$/gm, '<div class="md-li"><b>$1.</b> $2</div>')
+      .replace(/\n/g, "<br>");
+  }
   function cardHtml(c) {
     if (c.kind === "metrics") return `<div class="a-metrics">${c.items.map((m) => `<div class="a-metric lv${m.level}">
         <span class="muted small">${esc(m.label)}</span><b>${esc(m.value)}</b>${m.ratio != null ? `<i style="--r:${Math.min(1, m.ratio)}"></i>` : ""}</div>`).join("")}</div>`;
@@ -1446,7 +1609,7 @@
         ${t.due ? `<span class="chip ${t.due < Date.now() ? "red" : ""}">${fmtDue(t.due)}</span>` : ""}
         <button class="btn sm ghost" data-ta="done">✓</button><button class="btn sm ghost" data-ta="s60">+1h</button><button class="btn sm ghost" data-ta="stm">Mai</button></div>`).join("")}</div>`;
     if (c.kind === "events") return `<div class="a-list">${c.items.map(([t, st, ad]) => `<div class="a-task"><span class="ev-dot"></span><span class="grow">${esc(t)}</span><span class="chip blue">${ad ? "Cả ngày" : hm(new Date(st))}</span></div>`).join("")}</div>`;
-    if (c.kind === "text") return `<div class="a-text">${esc(c.text).replace(/\n/g, "<br>")}</div>`;
+    if (c.kind === "text") return `<div class="a-text">${fmtChatMd(c.text)}</div>`;
     return "";
   }
   function replyHtml(r) {
@@ -1474,7 +1637,7 @@
     const last = chat[chat.length - 1];
     const me = [...chat].reverse().find((m) => m.who === "me");
     $("#replyL").innerHTML = `<div class="r-me">“${esc(me ? me.text : "")}”</div>
-      <div class="r-asi">${last.thinking ? '<span class="dots"><i></i><i></i><i></i></span>' : esc(last.text)}</div>
+      <div class="r-asi">${last.thinking ? '<span class="dots"><i></i><i></i><i></i></span>' : fmtChatMd(last.text)}</div>
       ${last.reply ? replyHtml(last.reply) : ""}
       <div class="r-foot"><button class="btn sm ghost" data-ac="more_voice">${I.mic}Nói tiếp</button><button class="btn sm ghost" data-ac="open_chat">Mở chat</button><button class="btn sm ghost" data-ac="close">Đóng</button></div>`;
     setMode("reply", { force: mode === "reply" });
@@ -1497,7 +1660,11 @@
   }
   async function runAction(cmd, arg, compact) {
     if (cmd === "ask") return askAsi(arg, compact);
-    if (cmd === "open_tab") { tab = arg; return setMode("expanded", { force: true }); }
+    if (cmd === "open_tab") {
+      if (arg === "settings") return openSettingsWindow();
+      tab = arg;
+      return setMode("expanded", { force: true });
+    }
     if (cmd === "open_chat") { tab = "home"; return setMode("expanded", { force: true }); }
     if (cmd === "more_voice") return voiceCommand();
     if (cmd === "close") { api("asi_stop_speaking"); return setMode("collapsed"); }
@@ -1529,7 +1696,7 @@
 
   // ───────── Tự cập nhật ứng dụng ─────────
   let updateState = null; // UpdateProgress: { phase, percent, downloaded_bytes, total_bytes, message, error, release }
-  let updateVer = "0.10.0";
+  let updateVer = "0.11.0";
   api("update_info").then((v) => { if (v) { updateVer = v.current_version || updateVer; updateState = v.status || v; } }).catch(() => {});
   function updateBannerHtml() {
     const u = updateState;
@@ -1628,18 +1795,28 @@
       s.disk ? `<span class="chip ${s.disk.level === "ok" ? "" : "amber"}">${I.disk}${Math.round(s.disk.free_percent)}% trống</span>` : "",
       s.next_event ? `<span class="chip blue">${I.cal}${esc(s.next_event.title)} · ${hm(new Date(s.next_event.start))}</span>` : "",
     ].join("") : "";
+    const aiAvail = appleAiState && appleAiState.available;
     $("#view").innerHTML = `<div class="chat-home">
       ${updateBannerHtml()}
       <div class="c-hero">
         <div class="big-face" id="bigFace"><span class="eye l"></span><span class="eye r"></span></div>
-        <div><div class="c-greet">${greet()} 👋</div><div class="muted small">Hỏi Asi bằng chữ hoặc bấm mic để nói</div><div class="c-quick">${quick}</div></div>
+        <div class="grow">
+          <div class="row" style="gap:8px;flex-wrap:wrap">
+            <div class="c-greet">${greet()} 👋</div>
+            <div class="ai-pill ${aiAvail ? "ready" : "fallback"}" id="appleAiBadge" title="${esc(appleAiState.detail || "")}">
+              <span class="ai-spark"></span><b>${aiAvail ? "Apple Intelligence · Sẵn sàng" : "NLP Nội bộ"}</b>
+            </div>
+          </div>
+          <div class="muted small">Hỏi đáp thông minh (tóm tắt clipboard, dịch thuật, viết nháp, lên kế hoạch) chạy trực tiếp trên Mac</div>
+          <div class="c-quick">${quick}</div>
+        </div>
       </div>
       <div id="vocabStrip"></div>
       <div class="c-log" id="chatLog"></div>
       <div class="c-chips" id="chatChips">${SUGGEST.map(([ic, t]) => `<button class="c-chip" data-say="${esc(t)}">${ic} ${esc(t)}</button>`).join("")}</div>
       <div class="c-input">
         <button class="mic big" id="chatMic" title="Nói với Asi">${I.mic}<span class="bars"><i></i><i></i><i></i><i></i></span></button>
-        <input class="input" id="chatInput" placeholder="Hỏi Asi… vd: máy mình thế nào, dọn rác, nhắc tôi 3h chiều gọi khách" />
+        <input class="input" id="chatInput" placeholder="Hỏi Asi & Apple Intelligence… vd: tóm tắt mục vừa copy, dịch sang tiếng Anh, viết email…" />
         <button class="btn primary" id="chatSend">${I.send}</button>
       </div></div>`;
     const inp = $("#chatInput");
@@ -1656,8 +1833,8 @@
     if (!log) return;
     log.innerHTML = chat.length ? chat.map((m) => m.who === "me"
       ? `<div class="bubble me">${esc(m.text)}</div>`
-      : `<div class="bubble asi">${m.thinking ? '<span class="dots"><i></i><i></i><i></i></span>' : esc(m.text)}${m.reply ? replyHtml(m.reply) : ""}</div>`).join("")
-      : `<div class="muted small" style="text-align:center;padding:10px">Thử bấm một gợi ý bên dưới 👇</div>`;
+      : `<div class="bubble asi">${m.thinking ? '<span class="dots"><i></i><i></i><i></i></span>' : fmtChatMd(m.text)}${m.reply ? replyHtml(m.reply) : ""}</div>`).join("")
+      : `<div class="muted small" style="text-align:center;padding:10px">Hỏi bất kỳ câu gì với <b> Apple Intelligence</b> hoặc chọn một gợi ý bên dưới 👇</div>`;
     log.scrollTop = log.scrollHeight;
   }
   $("#view").addEventListener("click", (e) => {
@@ -1670,61 +1847,679 @@
     if (b) runAction(b.dataset.ac, b.dataset.arg || "", false);
   });
 
-  // ═════════ TẤT CẢ TÍNH NĂNG (trang tổng hợp) ═════════
-  async function viewHome() { // trang "Tất cả"
-    const s = status || (await api("get_status"));
-    const [notesL, clipsL, perms] = await Promise.all([api("list_notes"), api("clip_list", { query: "", kind: "all" }), api("permissions_status")]);
+  // ═════════ BẢNG WIDGET HÌNH VUÔNG LỚN & THƯ VIỆN WIDGET KÉO THẢ ═════════
+  const DEFAULT_ACTIVE_WIDGETS = ["tasks", "notes", "clips", "media", "journal", "words", "clean", "health", "camera"];
+  let showWidgetLib = false;
+  let widgetDataCache = { notes: [], clips: [], perms: [], jv: null, clipImgUrl: "", vocabWord: null };
+
+  // Kho hình minh hoạ SVG kiểu Apple iOS Widget (hiển thị khi người dùng chưa chọn ảnh riêng)
+  function widgetArtSvg(id, meta = {}) {
+    switch (id) {
+      case "tasks":
+        return `<svg viewBox="0 0 240 120" class="w-art-svg"><defs><linearGradient id="wgTasks" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0f3822"/><stop offset="100%" stop-color="#1e824c"/></linearGradient></defs>
+          <rect width="240" height="120" fill="url(#wgTasks)"/>
+          <circle cx="195" cy="28" r="46" fill="rgba(48,209,88,0.18)"/>
+          <rect x="18" y="22" width="132" height="22" rx="7" fill="rgba(255,255,255,0.14)"/>
+          <circle cx="30" cy="33" r="5.5" fill="#30d158"/><rect x="42" y="30" width="88" height="6" rx="3" fill="rgba(255,255,255,0.85)"/>
+          <rect x="18" y="50" width="114" height="22" rx="7" fill="rgba(255,255,255,0.1)"/>
+          <circle cx="30" cy="61" r="5.5" stroke="#fff" stroke-width="2" fill="none"/><rect x="42" y="58" width="72" height="6" rx="3" fill="rgba(255,255,255,0.6)"/>
+          <rect x="18" y="78" width="96" height="20" rx="7" fill="rgba(255,255,255,0.07)"/>
+          <circle cx="188" cy="62" r="28" stroke="rgba(255,255,255,0.18)" stroke-width="6" fill="none"/>
+          <circle cx="188" cy="62" r="28" stroke="#30d158" stroke-width="6" stroke-dasharray="130 180" stroke-linecap="round" fill="none"/></svg>`;
+      case "notes":
+        return `<svg viewBox="0 0 240 120" class="w-art-svg"><defs><linearGradient id="wgNotes" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#4a2c00"/><stop offset="100%" stop-color="#c97a00"/></linearGradient></defs>
+          <rect width="240" height="120" fill="url(#wgNotes)"/>
+          <rect x="20" y="16" width="200" height="90" rx="12" fill="rgba(255,248,225,0.14)" stroke="rgba(255,214,10,0.3)"/>
+          <line x1="34" y1="40" x2="204" y2="40" stroke="rgba(255,255,255,0.18)" stroke-width="1.5"/>
+          <line x1="34" y1="62" x2="188" y2="62" stroke="rgba(255,255,255,0.18)" stroke-width="1.5"/>
+          <line x1="34" y1="84" x2="160" y2="84" stroke="rgba(255,255,255,0.18)" stroke-width="1.5"/>
+          <circle cx="194" cy="78" r="18" fill="#ffd60a"/><path d="M188 83l3-10 8-8 4 4-8 8-7 6z" fill="#1c1c1e"/></svg>`;
+      case "clips":
+        return `<svg viewBox="0 0 240 120" class="w-art-svg"><defs><linearGradient id="wgClips" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#082b49"/><stop offset="100%" stop-color="#0a84ff"/></linearGradient></defs>
+          <rect width="240" height="120" fill="url(#wgClips)"/>
+          <rect x="42" y="26" width="124" height="76" rx="10" fill="rgba(255,255,255,0.12)" transform="rotate(-4 104 64)"/>
+          <rect x="58" y="18" width="132" height="80" rx="11" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.35)"/>
+          <rect x="74" y="36" width="84" height="7" rx="3.5" fill="#fff"/>
+          <rect x="74" y="52" width="100" height="6" rx="3" fill="rgba(255,255,255,0.65)"/>
+          <rect x="74" y="66" width="68" height="6" rx="3" fill="rgba(255,255,255,0.45)"/></svg>`;
+      case "media":
+        return `<svg viewBox="0 0 240 120" class="w-art-svg"><defs><linearGradient id="wgMedia" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3b0d2c"/><stop offset="50%" stop-color="#7c1d54"/><stop offset="100%" stop-color="#ff2d55"/></linearGradient></defs>
+          <rect width="240" height="120" fill="url(#wgMedia)"/>
+          <circle cx="64" cy="60" r="36" fill="#141418" stroke="rgba(255,255,255,0.25)" stroke-width="2"/>
+          <circle cx="64" cy="60" r="24" stroke="rgba(255,255,255,0.12)" stroke-width="1.5" fill="none"/>
+          <circle cx="64" cy="60" r="10" fill="#ff375f"/>
+          <g fill="rgba(255,255,255,0.85)">
+            <rect x="124" y="48" width="6" height="26" rx="3"/><rect x="136" y="34" width="6" height="40" rx="3"/>
+            <rect x="148" y="42" width="6" height="32" rx="3"/><rect x="160" y="26" width="6" height="48" rx="3"/>
+            <rect x="172" y="40" width="6" height="34" rx="3"/><rect x="184" y="52" width="6" height="22" rx="3"/>
+            <rect x="196" y="36" width="6" height="38" rx="3"/>
+          </g></svg>`;
+      case "journal":
+        return `<svg viewBox="0 0 240 120" class="w-art-svg"><defs><linearGradient id="wgJour" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1e1136"/><stop offset="55%" stop-color="#6b2d5c"/><stop offset="100%" stop-color="#f08a5d"/></linearGradient></defs>
+          <rect width="240" height="120" fill="url(#wgJour)"/>
+          <circle cx="182" cy="36" r="18" fill="#ffd60a" opacity="0.9"/>
+          <circle cx="48" cy="24" r="1.5" fill="#fff"/><circle cx="92" cy="18" r="2" fill="#fff"/><circle cx="134" cy="28" r="1.5" fill="#fff"/>
+          <path d="M0 96 L55 56 L108 88 L162 48 L240 92 L240 120 L0 120 Z" fill="rgba(20,14,38,0.55)"/>
+          <path d="M0 104 L82 66 L146 96 L204 62 L240 86 L240 120 L0 120 Z" fill="rgba(12,10,24,0.82)"/></svg>`;
+      case "words":
+        return `<svg viewBox="0 0 240 120" class="w-art-svg"><defs><linearGradient id="wgWords" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3d1e05"/><stop offset="100%" stop-color="#ff9500"/></linearGradient></defs>
+          <rect width="240" height="120" fill="url(#wgWords)"/>
+          <rect x="18" y="16" width="204" height="88" rx="14" fill="rgba(0,0,0,0.28)" stroke="rgba(255,255,255,0.22)"/>
+          <text x="32" y="58" fill="#fff" font-size="23" font-weight="800" font-family="-apple-system,system-ui">${esc(meta.word || "Serendipity")}</text>
+          <text x="32" y="82" fill="#ffd60a" font-size="13" font-family="ui-monospace,Menlo,monospace">${esc(meta.ipa || "/ˌser.ənˈdɪp.ə.ti/")}</text></svg>`;
+      case "clean":
+        return `<svg viewBox="0 0 240 120" class="w-art-svg"><defs><linearGradient id="wgClean" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#1a2a3a"/><stop offset="100%" stop-color="#2980b9"/></linearGradient></defs>
+          <rect width="240" height="120" fill="url(#wgClean)"/>
+          <rect x="24" y="34" width="192" height="52" rx="12" fill="rgba(0,0,0,0.32)" stroke="rgba(255,255,255,0.2)"/>
+          <rect x="36" y="52" width="168" height="16" rx="8" fill="rgba(255,255,255,0.14)"/>
+          <rect x="36" y="52" width="${Math.max(24, Math.min(168, Math.round((meta.usedPct || 55) * 1.68)))}" height="16" rx="8" fill="#30d158"/>
+          <circle cx="192" cy="43" r="4" fill="#30d158"/></svg>`;
+      case "health":
+        return `<svg viewBox="0 0 240 120" class="w-art-svg"><defs><linearGradient id="wgHealth" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#3a0ca3"/><stop offset="100%" stop-color="#f72585"/></linearGradient></defs>
+          <rect width="240" height="120" fill="url(#wgHealth)"/>
+          <circle cx="120" cy="60" r="38" stroke="rgba(255,255,255,0.16)" stroke-width="8" fill="none"/>
+          <circle cx="120" cy="60" r="38" stroke="#4cc9f0" stroke-width="8" stroke-dasharray="170 240" stroke-linecap="round" fill="none"/>
+          <circle cx="120" cy="60" r="24" stroke="rgba(255,255,255,0.16)" stroke-width="6" fill="none"/>
+          <circle cx="120" cy="60" r="24" stroke="#30d158" stroke-width="6" stroke-dasharray="110 160" stroke-linecap="round" fill="none"/></svg>`;
+      case "camera":
+        return `<svg viewBox="0 0 240 120" class="w-art-svg"><defs><linearGradient id="wgCam" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#141e30"/><stop offset="100%" stop-color="#243b55"/></linearGradient></defs>
+          <rect width="240" height="120" fill="url(#wgCam)"/>
+          <circle cx="120" cy="60" r="34" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.3)" stroke-width="2.5"/>
+          <circle cx="120" cy="60" r="20" fill="#0a84ff" opacity="0.65"/>
+          <circle cx="127" cy="52" r="6" fill="rgba(255,255,255,0.75)"/>
+          <circle cx="176" cy="30" r="5" fill="#30d158"/></svg>`;
+      case "snap":
+        return `<svg viewBox="0 0 240 120" class="w-art-svg"><defs><linearGradient id="wgSnap" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#0f2027"/><stop offset="100%" stop-color="#2c5364"/></linearGradient></defs>
+          <rect width="240" height="120" fill="url(#wgSnap)"/>
+          <rect x="24" y="18" width="90" height="84" rx="10" fill="rgba(10,132,255,0.45)" stroke="#5ac8fa" stroke-width="2"/>
+          <rect x="126" y="18" width="90" height="84" rx="10" fill="rgba(48,209,88,0.42)" stroke="#30d158" stroke-width="2"/></svg>`;
+      case "files":
+        return `<svg viewBox="0 0 240 120" class="w-art-svg"><defs><linearGradient id="wgFiles" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#003973"/><stop offset="100%" stop-color="#007aff"/></linearGradient></defs>
+          <rect width="240" height="120" fill="url(#wgFiles)"/>
+          <circle cx="120" cy="72" r="46" stroke="rgba(255,255,255,0.22)" stroke-width="2" fill="none"/>
+          <circle cx="120" cy="72" r="30" stroke="rgba(255,255,255,0.38)" stroke-width="2" fill="none"/>
+          <circle cx="120" cy="72" r="14" fill="#fff"/></svg>`;
+      case "asi":
+        return `<svg viewBox="0 0 240 120" class="w-art-svg"><defs><linearGradient id="wgAsi" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#ff375f"/><stop offset="50%" stop-color="#bf5af2"/><stop offset="100%" stop-color="#0a84ff"/></linearGradient></defs>
+          <rect width="240" height="120" fill="url(#wgAsi)"/>
+          <rect x="78" y="28" width="84" height="64" rx="26" fill="#0b0b0f" stroke="rgba(255,255,255,0.4)" stroke-width="2"/>
+          <rect x="98" y="48" width="12" height="22" rx="6" fill="#fff"/><rect x="130" y="48" width="12" height="22" rx="6" fill="#fff"/></svg>`;
+      case "threads":
+        return `<svg viewBox="0 0 240 120" class="w-art-svg"><defs><linearGradient id="wgTh" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#161622"/><stop offset="100%" stop-color="#5e5ce6"/></linearGradient></defs>
+          <rect width="240" height="120" fill="url(#wgTh)"/>
+          <circle cx="120" cy="60" r="34" stroke="rgba(255,255,255,0.35)" stroke-width="3" fill="rgba(0,0,0,0.3)"/>
+          <text x="120" y="72" text-anchor="middle" fill="#fff" font-size="36" font-weight="800">@</text></svg>`;
+      default:
+        return `<svg viewBox="0 0 240 120" class="w-art-svg"><defs><linearGradient id="wgDef" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#2c2c2e"/><stop offset="100%" stop-color="#48484a"/></linearGradient></defs>
+          <rect width="240" height="120" fill="url(#wgDef)"/>
+          <circle cx="120" cy="60" r="28" stroke="rgba(255,255,255,0.35)" stroke-width="4" fill="none"/></svg>`;
+    }
+  }
+
+  function activeWidgetIds() {
+    const list = settingsCache.active_widgets;
+    return Array.isArray(list) && list.length ? list : [...DEFAULT_ACTIVE_WIDGETS];
+  }
+
+  function buildWidgetCatalog(s, d) {
+    const notesL = d.notes || [];
+    const clipsL = d.clips || [];
+    const jv = d.jv;
+    const wrote = jv && (jv.entry.answers.some((a) => a.a.trim()) || jv.entry.text.trim());
+    const latestClip = clipsL[0];
+    const m = mediaQuick || {};
+    const usedPct = s.disk ? Math.round(100 - s.disk.free_percent) : 50;
+    const vw = d.vocabWord || { w: "Resilient", ipa: "/rɪˈzɪl.i.ənt/", vi: "Kiên cường, bền bỉ" };
+
+    return [
+      {
+        id: "tasks",
+        name: "Việc cần làm",
+        ic: I.tasks,
+        color: "#30d158",
+        badge: s.lateness.overdue ? `${s.lateness.overdue} trễ` : `${s.open_count} việc`,
+        badgeCls: s.lateness.overdue ? "red" : "green",
+        title: s.next ? s.next.title : (s.open_count ? `Còn ${s.open_count} việc chưa hẹn giờ` : "Hôm nay đã xong hết việc ✨"),
+        sub: s.next ? `⏰ Hạn: ${fmtDue(s.next.due)}` : "Bấm để thêm việc bằng giọng nói hoặc chữ",
+        go: "tasks",
+        artMeta: {},
+      },
+      {
+        id: "notes",
+        name: "Ghi chú",
+        ic: I.note,
+        color: "#ff9f0a",
+        badge: `${notesL.length} mục`,
+        badgeCls: "amber",
+        title: notesL[0] ? notesL[0].text.split("\n")[0].slice(0, 48) : "Chưa có ghi chú nào",
+        sub: notesL[0] ? (notesL[0].text.split("\n").slice(1).join(" ").slice(0, 68) || `Cập nhật ${fmtAgo(notesL[0].updated_at)}`) : "Bấm để viết nhanh hoặc đọc vào mic",
+        go: "notes",
+        artMeta: {},
+      },
+      {
+        id: "clips",
+        name: "Clipboard",
+        ic: I.clip,
+        color: "#5ac8fa",
+        badge: `${clipsL.length} đã chép`,
+        badgeCls: "blue",
+        title: latestClip ? (latestClip.text ? latestClip.text.slice(0, 52) : "🖼 Hình ảnh / Tệp tin vừa chép") : "Clipboard đang trống",
+        sub: "Nhấn ⌃⇧V mở nhanh · Bấm để xem & dán lại",
+        go: "clips",
+        liveImg: d.clipImgUrl || "",
+        artMeta: {},
+      },
+      {
+        id: "media",
+        name: "Nhạc & Âm thanh",
+        ic: I.music,
+        color: "#ff2d55",
+        badge: m.playing ? "Đang phát" : "Tạm dừng",
+        badgeCls: m.playing ? "green" : "",
+        title: m.title || (m.app ? m.app : "Trình phát nhạc hệ thống"),
+        sub: m.artist ? `${m.artist} · Loa ${m.output_volume}%` : "Điều khiển nhạc & âm lượng ngay trên Widget",
+        go: "media-noop",
+        quickHtml: `<div class="sq-actions">
+          <button class="sq-btn" data-wcmd="media-prev" title="Bài trước">${I.prev}</button>
+          <button class="sq-btn primary" data-wcmd="media-play" title="Phát / Tạm dừng">${m.playing ? I.pause : I.play}</button>
+          <button class="sq-btn" data-wcmd="media-next" title="Bài tiếp">${I.next}</button>
+          <button class="sq-btn" data-wcmd="media-mute" title="Bật / Tắt tiếng loa">${m.output_muted ? I.volOff : I.vol}</button>
+        </div>`,
+        artMeta: {},
+      },
+      {
+        id: "journal",
+        name: "Nhật ký",
+        ic: I.book,
+        color: "#ff375f",
+        badge: jv && jv.streak ? `🔥 ${jv.streak} ngày` : (wrote ? "Đã viết" : "Hôm nay"),
+        badgeCls: wrote ? "green" : "",
+        title: wrote ? (jv.entry.text || jv.entry.answers.map((x) => x.a).filter(Boolean).join(" · ")).slice(0, 54) : "Hôm nay của bạn thế nào?",
+        sub: "Lưu giữ kỷ niệm kèm hình ảnh & cảm xúc mỗi ngày",
+        go: "journal",
+        artMeta: {},
+      },
+      {
+        id: "words",
+        name: "Từ mới EN",
+        ic: I.words,
+        color: "#ff9500",
+        badge: "Mỗi ngày",
+        badgeCls: "amber",
+        title: `${vw.w} — ${vw.vi}`,
+        sub: "Luyện nghe chuẩn & chấm điểm phát âm tiếng Anh",
+        go: "words",
+        quickHtml: `<div class="sq-actions">
+          <button class="sq-btn" data-wcmd="word-speak" data-word="${esc(vw.w)}">🔊 Nghe phát âm</button>
+          <button class="sq-btn primary" data-wcmd="open-words">Luyện đọc →</button>
+        </div>`,
+        artMeta: { word: vw.w, ipa: vw.ipa },
+      },
+      {
+        id: "camera",
+        name: "Gương & Khung Ảnh",
+        ic: I.cam,
+        color: "#30d158",
+        badge: "Camera / Ảnh",
+        badgeCls: "blue",
+        title: "Khung ảnh & Gương nhanh trên Tai thỏ",
+        sub: "Bấm 🖼 ở góc trên để lồng ảnh yêu thích hoặc mở Camera",
+        go: "camera-noop",
+        liveImg: peekCam.lastSnap || "",
+        quickHtml: `<div class="sq-actions">
+          <button class="sq-btn primary" data-wcmd="open-cam">📷 Mở gương Camera</button>
+          <button class="sq-btn" data-wact="img" data-wid="camera">🖼 Đổi ảnh</button>
+        </div>`,
+        artMeta: {},
+      },
+      {
+        id: "clean",
+        name: "Dọn máy & Ổ đĩa",
+        ic: I.broom,
+        color: "#ff9f0a",
+        badge: s.disk ? `${Math.round(s.disk.free_percent)}% trống` : "Ổ đĩa",
+        badgeCls: s.disk && s.disk.level !== "ok" ? "amber" : "green",
+        title: s.disk ? `Còn trống ${bytes(s.disk.free_bytes)} / ${bytes(s.disk.total_bytes)}` : "Quét rác & giải phóng bộ nhớ",
+        sub: "Xoá cache an toàn, dọn Xcode / Docker / trình duyệt",
+        go: "clean",
+        artMeta: { usedPct },
+      },
+      {
+        id: "health",
+        name: "Sức khoẻ & Tập trung",
+        ic: I.heart,
+        color: "#ff2d55",
+        badge: s.focus_until ? "Đang tập trung" : mins(s.session_minutes),
+        badgeCls: s.focus_until ? "blue" : "",
+        title: s.focus_until ? "Chế độ Pomodoro đang chạy" : `Đã dùng máy liên tục ${mins(s.session_minutes)}`,
+        sub: "Nhắc nghỉ mắt 20-20-20 & đồng hồ Tập trung Pomodoro",
+        go: "health",
+        quickHtml: `<div class="sq-actions">
+          <button class="sq-btn primary" data-wcmd="toggle-focus">${s.focus_until ? "⏹ Dừng Tập trung" : "🎯 Tập trung 25p"}</button>
+          <button class="sq-btn" data-wcmd="rest-eyes">👀 Nghỉ mắt</button>
+        </div>`,
+        artMeta: {},
+      },
+      {
+        id: "snap",
+        name: "Chia màn hình",
+        ic: I.grid,
+        color: "#0a84ff",
+        badge: "Window Snap",
+        badgeCls: "blue",
+        title: "Chia nhanh cửa sổ ứng dụng trên Mac",
+        sub: "Bấm nút bên dưới hoặc kéo thanh tiêu đề cửa sổ vào tai thỏ",
+        go: "snap-noop",
+        quickHtml: `<div class="sq-actions">
+          <button class="sq-btn" data-wcmd="snap" data-snap="left">◧ Trái</button>
+          <button class="sq-btn" data-wcmd="snap" data-snap="right">◨ Phải</button>
+          <button class="sq-btn primary" data-wcmd="snap" data-snap="split2">⊞ Đôi 2 app</button>
+          <button class="sq-btn" data-wcmd="snap" data-snap="max">⬜ Toàn màn</button>
+        </div>`,
+        artMeta: {},
+      },
+      {
+        id: "files",
+        name: "File & AirDrop",
+        ic: I.file,
+        color: "#007aff",
+        badge: "AirDrop · ZIP",
+        badgeCls: "blue",
+        title: "Nén ZIP, giải nén, nén PDF & gửi AirDrop",
+        sub: "Kéo thả file vào tai thỏ hoặc bấm để mở khay File",
+        go: "files",
+        artMeta: {},
+      },
+      {
+        id: "asi",
+        name: "Trợ lý Asi (Apple AI)",
+        ic: I.mic,
+        color: "#bf5af2",
+        badge: " Apple AI",
+        badgeCls: "blue",
+        title: "Hỏi đáp thông minh với Apple Intelligence",
+        sub: "Tóm tắt văn bản, dịch thuật, viết email & điều khiển máy bằng giọng nói",
+        go: "home",
+        artMeta: {},
+      },
+      {
+        id: "threads",
+        name: "Threads",
+        ic: I.at,
+        color: "#5e5ce6",
+        badge: s.threads_unread ? `${s.threads_unread} mới` : "@threads",
+        badgeCls: s.threads_unread ? "red" : "",
+        title: s.threads_unread ? `Có ${s.threads_unread} phản hồi chưa đọc` : "Lướt bảng tin & đăng bài Threads",
+        sub: "Theo dõi tương tác và trả lời bình luận nhanh",
+        go: "threads",
+        artMeta: {},
+      },
+      {
+        id: "settings",
+        name: "Cài đặt Mini-Asi",
+        ic: I.gear,
+        color: "#8e8e93",
+        badge: "Cửa sổ riêng ↗",
+        badgeCls: "",
+        title: "Mở Cài đặt trên cửa sổ độc lập",
+        sub: "Chỉnh cỡ tai thỏ, bộ gõ tiếng Việt, giọng đọc AI, quyền & sao lưu",
+        go: "settings",
+        artMeta: {},
+      },
+    ];
+  }
+
+  function renderSquareWidgetCard(w) {
+    const customImg = (settingsCache.widget_images || {})[w.id] || "";
+    const imgSrc = customImg || w.liveImg || "";
+    const mediaHtml = imgSrc
+      ? `<img src="${esc(imgSrc)}" alt="${esc(w.name)}" class="w-art-img" />`
+      : widgetArtSvg(w.id, w.artMeta);
+    return `<div class="sq-widget" data-widget-id="${w.id}" data-go="${w.go}" style="--tc:${w.color}">
+      <div class="sq-media">
+        ${mediaHtml}
+        <div class="sq-media-overlay">
+          <span class="sq-badge ${w.badgeCls || ""}">${esc(w.badge)}</span>
+          <div class="sq-tools" title="Kéo để đổi vị trí · Đổi ảnh · Cất vào thư viện">
+            <button class="sq-tool-btn" data-wact="img" data-wid="${w.id}" title="Chọn ảnh từ máy tính để hiển thị trên Widget này">🖼</button>
+            ${customImg ? `<button class="sq-tool-btn" data-wact="reset-img" data-wid="${w.id}" title="Khôi phục hình minh hoạ mặc định">↺</button>` : ""}
+            <button class="sq-tool-btn danger" data-wact="remove" data-wid="${w.id}" title="Cất Widget này vào Thư viện">−</button>
+          </div>
+        </div>
+      </div>
+      <div class="sq-body">
+        <div class="sq-head">
+          <span class="sq-ic" style="background:${w.color}">${w.ic}</span>
+          <b class="sq-name">${esc(w.name)}</b>
+        </div>
+        <div class="sq-title">${esc(w.title)}</div>
+        <div class="sq-sub">${esc(w.sub)}</div>
+        ${w.quickHtml || ""}
+      </div>
+    </div>`;
+  }
+
+  function renderWidgetBoardDom() {
+    const s = status || { lateness: { overdue: 0 }, open_count: 0, session_minutes: 0 };
+    const catalog = buildWidgetCatalog(s, widgetDataCache);
+    const activeIds = activeWidgetIds();
+    const activeWidgets = activeIds.map((id) => catalog.find((w) => w.id === id)).filter(Boolean);
+    const missingList = (widgetDataCache.perms || []).filter((p) => p.required && p.state !== "granted" && p.state !== "unknown");
+
+    $("#view").innerHTML = `
+      ${updateBannerHtml()}
+      <div class="wb-toolbar">
+        <div class="grow">
+          <b class="wb-heading">⊞ Bảng Widget của bạn</b>
+          <span class="muted small" style="margin-left:6px">Kéo thả để sắp xếp · Bấm 🖼 trên mỗi widget để đổi ảnh · Bấm vào widget để mở</span>
+        </div>
+        <button class="btn sm ${showWidgetLib ? "primary" : ""}" id="toggleWidgetLibBtn">
+          📚 ${showWidgetLib ? "Đóng Thư viện Widget" : "Thư viện Widget (+ Kéo thả)"}
+        </button>
+        <button class="btn sm ghost" data-wcmd="open-settings" title="Mở Cài đặt trên cửa sổ riêng">⚙️ Cài đặt ↗</button>
+      </div>
+      ${missingList.length ? `<div class="card perm-banner" style="margin-bottom:10px"><div class="row"><span class="grow"><b>🔐 Còn thiếu quyền: ${missingList.map((p) => p.name).join(", ")}</b>
+        <span class="muted small"> — mở cửa sổ Cài đặt để cấp quyền một lần</span></span>
+        <button class="btn sm primary" data-go="perm">Mở Cài đặt quyền ↗</button></div></div>` : ""}
+      <div class="wb-layout ${showWidgetLib ? "with-lib" : ""}">
+        <div class="sq-grid" id="widgetBoard">
+          ${activeWidgets.length
+            ? activeWidgets.map(renderSquareWidgetCard).join("")
+            : `<div class="wb-empty">Kéo thả các Widget từ <b>Thư viện Widget</b> bên phải vào đây để bắt đầu ✨</div>`}
+        </div>
+        ${showWidgetLib ? `<aside class="wb-lib" id="widgetLib">
+          <div class="wb-lib-head">
+            <b>📚 Thư viện Widget</b>
+            <span class="muted small">Giữ chuột kéo thả vào bảng bên trái (hoặc bấm ＋)</span>
+          </div>
+          <div class="wb-lib-list">
+            ${catalog.map((w) => {
+              const onBoard = activeIds.includes(w.id);
+              return `<div class="wb-lib-card ${onBoard ? "on-board" : ""}" data-lib-id="${w.id}" style="--tc:${w.color}">
+                <div class="wb-lib-art">${widgetArtSvg(w.id, w.artMeta)}</div>
+                <div class="wb-lib-info">
+                  <div class="row">
+                    <span class="sq-ic sm" style="background:${w.color}">${w.ic}</span>
+                    <b class="grow small">${esc(w.name)}</b>
+                    ${onBoard
+                      ? `<span class="chip green">Đang hiển thị</span>`
+                      : `<button class="btn sm primary" data-wact="add" data-wid="${w.id}">＋ Thêm</button>`}
+                  </div>
+                  <div class="muted small" style="margin-top:3px">${esc(w.sub)}</div>
+                </div>
+              </div>`;
+            }).join("")}
+          </div>
+        </aside>` : ""}
+      </div>
+      <input type="file" id="widgetImgPicker" accept="image/*" style="display:none" />`;
+
+    $("#toggleWidgetLibBtn")?.addEventListener("click", () => {
+      showWidgetLib = !showWidgetLib;
+      renderWidgetBoardDom();
+    });
+  }
+
+  async function viewHome() {
+    // Vẽ ngay từ bộ nhớ đệm để chuyển tab mượt tức thì (0ms nhấp nháy), sau đó nạp dữ liệu mới cập nhật lại
+    renderWidgetBoardDom();
+    const [s, notesL, clipsL, perms] = await Promise.all([
+      status ? Promise.resolve(status) : api("get_status"),
+      api("list_notes").catch(() => []),
+      api("clip_list", { query: "", kind: "all" }).catch(() => []),
+      api("permissions_status").catch(() => []),
+    ]);
+    status = s;
     const d = new Date();
     const today = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     let jv = null;
     try { jv = await api("journal_get", { date: today }); } catch (_) {}
-    const wrote = jv && (jv.entry.answers.some((a) => a.a.trim()) || jv.entry.text.trim());
-    const missingList = perms.filter((p) => p.required && p.state !== "granted" && p.state !== "unknown");
-    const missing = missingList.length;
-    const tile = (id, ic, name, value, sub, tc, cls = "") => `<button class="tile ${cls}" data-go="${id}" style="--tc:${tc}">
-        <span class="tile-ic">${ic}</span><span class="tile-name">${name}</span>
-        <b class="tile-val">${value}</b><span class="tile-sub">${sub}</span></button>`;
-    const isSmall = settingsCache.icon_size === "small";
-    $("#view").innerHTML = `
-      ${updateBannerHtml()}
-      <div class="row" style="margin-bottom:8px">
-        <span class="small muted grow">📱 Biểu tượng ứng dụng kiểu iOS</span>
-        <div class="seg">
-          <button class="${!isSmall ? "on" : ""}" data-icon-size="large">Icon To</button>
-          <button class="${isSmall ? "on" : ""}" data-icon-size="small">Icon Nhỏ</button>
-        </div>
-      </div>
-      ${missing ? `<div class="card perm-banner"><div class="row"><span class="grow"><b>🔐 Còn thiếu: ${missingList.map((p) => p.name).join(", ")}</b>
-        <span class="muted small"> — cấp một lần để mọi tính năng chạy trơn tru</span></span>
-        <button class="btn sm primary" data-go="perm">Cấp tất cả quyền</button></div></div>` : ""}
-      <div class="tiles">
-        ${tile("tasks", I.tasks, "Việc", s.open_count, s.lateness.overdue ? `<span style="color:var(--red)">${s.lateness.overdue} việc trễ</span>` : s.next ? "Tiếp: " + esc(s.next.title) : "Không có việc gấp", "#32d74b", s.lateness.overdue ? "alert" : "")}
-        ${tile("notes", I.note, "Ghi chú", notesL.length, notesL[0] ? esc(notesL[0].text.split("\n")[0].slice(0, 28)) : "Ghi nhanh bằng chữ hoặc giọng nói", "#ffd60a")}
-        ${tile("clips", I.clip, "Clipboard", clipsL.length, "Đã chép · ⌃⇧V mở nhanh", "#5ac8fa")}
-        ${tile("journal", I.book, "Nhật ký", wrote ? "✓" : "—", wrote ? `Đã viết hôm nay${jv.streak ? " · 🔥 " + jv.streak : ""}` : "Kể Asi nghe về hôm nay", "#ff9fd0")}
-        ${tile("words", I.words, "Từ mới", "EN", "Học từ vựng & luyện phát âm", "#ffb86b")}
-        ${tile("threads", I.at, "Threads", s.threads_unread || "@", s.threads_unread ? `${s.threads_unread} phản hồi mới` : "Lướt bảng tin", "#a78bfa")}
-        ${tile("files", I.file, "File", "ZIP", "Nén · giải nén · PDF · AirDrop", "#0a84ff")}
-        ${tile("clean", I.broom, "Dọn máy", s.disk ? Math.round(s.disk.free_percent) + "%" : "—", s.disk ? bytes(s.disk.free_bytes) + " trống" : "Quét rác", "#ff9f0a", s.disk && s.disk.level !== "ok" ? "warn" : "")}
-        ${tile("health", I.heart, "Sức khoẻ", mins(s.session_minutes), "đang dùng máy liên tục", "#ff375f")}
-        ${tile("settings", I.gear, "Cài đặt", "⚙", "Quyền · giọng đọc · kích thước tai thỏ", "#8e8e93")}
-      </div>`;
+    let clipImgUrl = "";
+    if (clipsL[0] && clipsL[0].kind === "image") {
+      try { clipImgUrl = await api("clip_image", { id: clipsL[0].id }); } catch (_) {}
+    }
+    widgetDataCache = { notes: notesL, clips: clipsL, perms, jv, clipImgUrl, vocabWord: widgetDataCache.vocabWord };
+    if (tab === "all" && !IS_SETTINGS_WIN && !widgetDragging) {
+      renderWidgetBoardDom();
+    }
   }
+
+  // Đổi ảnh tuỳ chọn cho bất kỳ Widget nào
+  let pickingImgForWidget = null;
+  document.addEventListener("change", (e) => {
+    if (e.target.id !== "widgetImgPicker" || !pickingImgForWidget) return;
+    const file = e.target.files && e.target.files[0];
+    const wid = pickingImgForWidget;
+    pickingImgForWidget = null;
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = async () => {
+        const cv = document.createElement("canvas");
+        const maxW = 480, maxH = 300;
+        const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+        cv.width = Math.max(1, Math.round(img.width * scale));
+        cv.height = Math.max(1, Math.round(img.height * scale));
+        cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+        const dataUrl = cv.toDataURL("image/jpeg", 0.86);
+        settingsCache.widget_images = { ...(settingsCache.widget_images || {}), [wid]: dataUrl };
+        await api("save_settings", { settings: settingsCache });
+        renderWidgetBoardDom();
+        toast("🖼 Đã cập nhật ảnh cho Widget!");
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // Kéo thả mượt mà (Pointer Drag & Drop) giữa Thư viện Widget và Bảng Widget
+  let widgetDragging = null;
+  (function setupWidgetDragAndDrop() {
+    const viewEl = $("#view");
+    viewEl.addEventListener("pointerdown", (e) => {
+      if (tab !== "all" || e.button !== 0) return;
+      if (e.target.closest("button, input, select, a, .sq-actions, .sq-tools")) return;
+      const boardCard = e.target.closest(".sq-widget[data-widget-id]");
+      const libCard = e.target.closest(".wb-lib-card[data-lib-id]");
+      const srcEl = boardCard || libCard;
+      if (!srcEl) return;
+      const wid = boardCard ? boardCard.dataset.widgetId : libCard.dataset.libId;
+      const fromLib = !!libCard;
+      const rect = srcEl.getBoundingClientRect();
+      widgetDragging = {
+        wid,
+        fromLib,
+        srcEl,
+        sx: e.clientX,
+        sy: e.clientY,
+        ox: e.clientX - rect.left,
+        oy: e.clientY - rect.top,
+        w: Math.min(rect.width, 210),
+        h: Math.min(rect.height, 210),
+        moved: false,
+        ghost: null,
+        targetId: null,
+        insertAfter: false,
+        overLib: false,
+      };
+    });
+
+    window.addEventListener("pointermove", (e) => {
+      if (!widgetDragging) return;
+      const dx = e.clientX - widgetDragging.sx;
+      const dy = e.clientY - widgetDragging.sy;
+      if (!widgetDragging.moved && Math.hypot(dx, dy) < 7) return;
+      if (!widgetDragging.moved) {
+        widgetDragging.moved = true;
+        widgetDragging.srcEl.classList.add("dragging-src");
+        const g = widgetDragging.srcEl.cloneNode(true);
+        g.className = "sq-drag-ghost";
+        g.style.width = widgetDragging.w + "px";
+        g.style.height = widgetDragging.h + "px";
+        document.body.appendChild(g);
+        widgetDragging.ghost = g;
+      }
+      const g = widgetDragging.ghost;
+      if (g) {
+        g.style.transform = `translate3d(${e.clientX - widgetDragging.ox}px, ${e.clientY - widgetDragging.oy}px, 0) scale(1.03)`;
+      }
+      // Xét điểm rơi trên Bảng Widget hoặc Thư viện
+      $$("#widgetBoard .sq-widget").forEach((c) => c.classList.remove("drop-before", "drop-after"));
+      const libEl = $("#widgetLib");
+      if (libEl) {
+        const lr = libEl.getBoundingClientRect();
+        widgetDragging.overLib = e.clientX >= lr.left && e.clientX <= lr.right && e.clientY >= lr.top && e.clientY <= lr.bottom;
+        libEl.classList.toggle("drop-remove", !widgetDragging.fromLib && widgetDragging.overLib);
+      }
+      if (g) g.style.display = "none";
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      if (g) g.style.display = "";
+      const hitCard = under && under.closest ? under.closest("#widgetBoard .sq-widget[data-widget-id]") : null;
+      if (hitCard && hitCard.dataset.widgetId !== widgetDragging.wid) {
+        const r = hitCard.getBoundingClientRect();
+        const after = e.clientX > r.left + r.width / 2;
+        hitCard.classList.add(after ? "drop-after" : "drop-before");
+        widgetDragging.targetId = hitCard.dataset.widgetId;
+        widgetDragging.insertAfter = after;
+      } else {
+        widgetDragging.targetId = null;
+      }
+    });
+
+    const finishWidgetDrag = async (e) => {
+      if (!widgetDragging) return;
+      const st = widgetDragging;
+      widgetDragging = null;
+      if (st.ghost) st.ghost.remove();
+      st.srcEl.classList.remove("dragging-src");
+      $$("#widgetBoard .sq-widget").forEach((c) => c.classList.remove("drop-before", "drop-after"));
+      $("#widgetLib")?.classList.remove("drop-remove");
+      if (!st.moved) return;
+
+      let list = [...activeWidgetIds()];
+      if (!st.fromLib && st.overLib) {
+        // Kéo từ Bảng Widget thả ngược vào Thư viện → cất Widget
+        list = list.filter((id) => id !== st.wid);
+        settingsCache.active_widgets = list;
+        await api("save_settings", { settings: settingsCache });
+        renderWidgetBoardDom();
+        toast("Đã cất Widget vào Thư viện");
+        return;
+      }
+      const boardEl = $("#widgetBoard");
+      const br = boardEl ? boardEl.getBoundingClientRect() : null;
+      const inBoard = br && e && e.clientX >= br.left - 20 && e.clientX <= br.right + 20 && e.clientY >= br.top - 20 && e.clientY <= br.bottom + 40;
+      if (!inBoard && st.fromLib) return;
+
+      list = list.filter((id) => id !== st.wid);
+      if (st.targetId && list.includes(st.targetId)) {
+        const idx = list.indexOf(st.targetId);
+        list.splice(st.insertAfter ? idx + 1 : idx, 0, st.wid);
+      } else {
+        list.push(st.wid);
+      }
+      settingsCache.active_widgets = list;
+      await api("save_settings", { settings: settingsCache });
+      renderWidgetBoardDom();
+      if (st.fromLib) toast("✨ Đã thêm Widget vào bảng!");
+    };
+    window.addEventListener("pointerup", finishWidgetDrag);
+    window.addEventListener("pointercancel", finishWidgetDrag);
+  })();
+
   $("#view").addEventListener("click", async (e) => {
     const icBtn = e.target.closest("[data-icon-size]");
     if (icBtn) {
       settingsCache.icon_size = icBtn.dataset.iconSize;
       applyIconSize();
       await api("save_settings", { settings: settingsCache });
-      if (tab === "all") viewHome();
+      if (tab === "all") renderWidgetBoardDom();
       else if (tab === "settings") viewSettings();
       return;
     }
+    const wact = e.target.closest("[data-wact]");
+    if (wact) {
+      e.stopPropagation();
+      const act = wact.dataset.wact;
+      const wid = wact.dataset.wid;
+      if (act === "img") {
+        pickingImgForWidget = wid;
+        const inp = $("#widgetImgPicker");
+        if (inp) { inp.value = ""; inp.click(); }
+        return;
+      }
+      if (act === "reset-img") {
+        if (settingsCache.widget_images) delete settingsCache.widget_images[wid];
+        await api("save_settings", { settings: settingsCache });
+        renderWidgetBoardDom();
+        toast("Đã khôi phục hình minh hoạ mặc định");
+        return;
+      }
+      if (act === "remove") {
+        settingsCache.active_widgets = activeWidgetIds().filter((x) => x !== wid);
+        await api("save_settings", { settings: settingsCache });
+        renderWidgetBoardDom();
+        toast("Đã cất Widget vào Thư viện (bấm “Thư viện Widget” để kéo ra lại)");
+        return;
+      }
+      if (act === "add") {
+        const cur = activeWidgetIds();
+        if (!cur.includes(wid)) {
+          settingsCache.active_widgets = [...cur, wid];
+          await api("save_settings", { settings: settingsCache });
+          renderWidgetBoardDom();
+          toast("✨ Đã thêm Widget vào bảng!");
+        }
+        return;
+      }
+    }
+    const wcmd = e.target.closest("[data-wcmd]");
+    if (wcmd) {
+      e.stopPropagation();
+      const cmd = wcmd.dataset.wcmd;
+      if (cmd === "open-settings") { openSettingsWindow(); return; }
+      if (cmd === "open-cam") { await togglePeekCam(); return; }
+      if (cmd === "open-words") { switchTab("words"); return; }
+      if (cmd === "word-speak") { api("vocab_play", { word: wcmd.dataset.word || "Resilient" }); return; }
+      if (cmd.startsWith("media-")) {
+        const mAct = cmd === "media-mute" ? "mute_out" : cmd.slice(6);
+        mediaQuick = await api("media_control", { action: mAct });
+        renderWidgetBoardDom();
+        return;
+      }
+      if (cmd === "toggle-focus") {
+        if (status && status.focus_until) await api("focus_stop");
+        else await api("focus_start", { minutes: 25 });
+        status = await api("get_status");
+        renderWidgetBoardDom();
+        updateBar();
+        return;
+      }
+      if (cmd === "rest-eyes") {
+        setMode("collapsed");
+        setTimeout(() => showAlert({ kind: "break", minutes: status ? status.session_minutes : 20 }), 350);
+        return;
+      }
+      if (cmd === "snap") {
+        try {
+          const msg = await api("window_snap", { action: wcmd.dataset.snap, pid: null, prevPid: null });
+          toast("🪟 " + msg);
+          setMode("collapsed");
+        } catch (err) {
+          toast("⚠ " + String(err));
+        }
+        return;
+      }
+    }
     const g = e.target.closest("[data-go]");
     if (!g || (tab !== "all" && g.dataset.go !== "perm")) return;
-    if (g.dataset.go === "perm") { tab = "settings"; renderView(); setTimeout(() => $("#permCard") && $("#permCard").scrollIntoView({ block: "start" }), 200); return; }
-    tab = g.dataset.go;
-    renderView();
+    if (widgetDragging && widgetDragging.moved) return;
+    const targetGo = g.dataset.go;
+    if (!targetGo || targetGo.endsWith("-noop")) return;
+    if (targetGo === "perm") { openSettingsWindow("permCard"); return; }
+    if (targetGo === "settings") { openSettingsWindow(); return; }
+    switchTab(targetGo);
   });
 
   // ═════════ VIỆC ═════════
@@ -2169,7 +2964,7 @@
     if (a === "none") cleanSel = { rules: new Set(), paths: new Set() };
     if (a === "ask") confirmClean = true;
     if (a === "cancel") confirmClean = false;
-    if (a === "pro") { tab = "settings"; renderView(); return; }
+    if (a === "pro") { openSettingsWindow(); return; }
     if (a === "fda") { api("open_disk_settings"); return; }
     if (a === "again") { cleanResult = null; scan = null; }
     if (a === "go") {
@@ -2467,8 +3262,9 @@
     settingsCache = st;
     const perms = await api("permissions_status");
     const bk = await api("backup_info");
+    if (!appleAiState) api("apple_ai_status").then((r) => { appleAiState = r; }).catch(() => {});
     const permIcon = { granted: "✅", denied: "⛔", not_asked: "⚪", unknown: "⚪", manual: "🔸" };
-    const permCard = `<div class="card" id="permCard" style="margin-bottom:10px">
+    const permCard = `<div class="card" id="permCard" data-sec="sec-perm" style="margin-bottom:10px">
         <div class="row"><div class="grow"><b>🔐 Quyền cho Mini-Asi</b><div class="muted small">Bấm một lần, macOS sẽ lần lượt hỏi từng quyền — chọn “Cho phép”.</div></div>
           <button class="btn primary" data-s="permall">Cấp tất cả quyền</button></div>
         <div class="perm-list">${perms.map((p) => `<div class="perm-row"><span>${permIcon[p.state] || "⚪"}</span>
@@ -2476,7 +3272,7 @@
           ${p.state === "granted" ? '<span class="chip green">Đã cấp</span>' : `<button class="btn sm ghost" data-s="perm" data-p="${p.id}">${p.state === "denied" && ["accessibility", "disk"].includes(p.id) ? "Mở cài đặt" : "Cấp quyền"}</button>`}</div>`).join("")}</div>
       </div>`;
     const ago = (ms) => fmtAgo(ms);
-    const backupCard = `<div class="sec">☁️ Sao lưu & đồng bộ nhiều máy</div>
+    const backupCard = `<div class="sec" id="sec-sync">☁️ Sao lưu & đồng bộ nhiều máy</div>
       <div class="card">
         <div class="setting"><div class="grow"><b>Thư mục đám mây</b><span>${bk.current ? esc(bk.current) : "Chưa tìm thấy Google Drive — cài “Google Drive cho máy tính” hoặc chọn thư mục"}</span></div>
           <select class="input" id="bkDir">${bk.dirs.map((d) => `<option value="${esc(d.path)}" ${bk.current === d.path ? "selected" : ""}>${esc(d.label)}</option>`).join("")}
@@ -2504,9 +3300,20 @@
     await api("update_info").then((v) => { if (v) { updateVer = v.current_version || updateVer; updateState = v.status || v; } }).catch(() => {});
     const ttsCard = tv ? voiceCard(tv) : "";
     const updCard = updateCardHtml(st);
+    const aiAvail = appleAiState ? appleAiState.available : true;
+    const aiCard = `<div class="card" id="sec-ai" style="margin-bottom:10px">
+      <div class="row">
+        <div class="grow">
+          <b> Apple Intelligence (FoundationModels On-Device)</b>
+          <div class="muted small">${esc((appleAiState && appleAiState.detail) || "Trí tuệ nhân tạo chạy trực tiếp trên chip Apple Silicon — hỏi đáp thông minh, tóm tắt, dịch thuật, viết nháp kèm ngữ cảnh công việc & ghi chú của bạn.")}</div>
+        </div>
+        <span class="chip ${aiAvail && st.apple_ai_enabled !== false ? "green" : ""}">${aiAvail ? (st.apple_ai_enabled !== false ? "Đang bật · On-Device" : "Đang tắt") : "Chưa hỗ trợ"}</span>
+        <label class="row small" style="margin-left:6px"><input type="checkbox" data-k2="apple_ai_enabled" ${st.apple_ai_enabled !== false ? "checked" : ""}/> Bật</label>
+      </div>
+    </div>`;
     const hasCustomPos = (st.bubble_x > 0 || st.bubble_y > 0);
     const isSmallIcon = st.icon_size === "small";
-    const dispCard = `<div class="card" style="margin-bottom:10px"><b>🪄 Kiểu hiển thị, Cỡ Icon iOS & Vị trí ghim</b>
+    const dispCard = `<div class="card" id="sec-disp" style="margin-bottom:10px"><b>🪄 Kiểu hiển thị, Cỡ Icon iOS & Vị trí ghim</b>
       <div class="muted small" style="margin-top:2px">Kéo trực tiếp <b>tai thỏ, viên thuốc, bong bóng</b> hoặc <b>thanh tiêu đề trên cùng của popup</b> để ghim ở bất kỳ vị trí nào trên màn hình.</div>
       <div class="disp-grid">${[["notch", "Tai thỏ", "Ôm sát tai thỏ hoặc kéo đi bất kỳ đâu"], ["pill", "Viên thuốc", "Viên thuốc nổi, kéo & ghim mọi vị trí"], ["bubble", "Bong bóng", "Nút tròn nổi gọn, kéo đi đâu cũng được"]]
         .map(([id, name, why]) => `<button class="disp-opt ${DISP === id ? "on" : ""}" data-disp="${id}"><span class="disp-pv pv-${id}"></span><b>${name}</b><span class="muted small">${why}</span></button>`).join("")}</div>
@@ -2548,7 +3355,7 @@
         <label class="row small" style="margin-left:8px"><input type="checkbox" data-k2="vocab_enabled" ${st.vocab_enabled !== false ? "checked" : ""}/> Bật</label></div></div>`;
     const V = window.VNKey;
     const curMode = V && V.mode ? V.mode : null;
-    const imeCard = `<div class="card" style="margin-bottom:10px">
+    const imeCard = `<div class="card" id="sec-ime" style="margin-bottom:10px">
       <div class="row">
         <div class="grow">
           <b>⌨️ Bộ gõ tiếng Việt thông minh (Telex / VNI)</b>
@@ -2566,7 +3373,7 @@
         <input class="input" id="imeTestInput" placeholder="Gõ thử tiếng Việt tại đây: xin chaof Vietj Nam, dduwocj, thuwong, nguwoif…" style="height:34px;font-size:12.5px" />
       </div>
     </div>`;
-    $("#view").innerHTML = updCard + permCard + dispCard + idleCard + ttsCard + vocabCard + imeCard + featCard + backupCard + `<div style="height:10px"></div>
+    $("#view").innerHTML = updCard + permCard + dispCard + idleCard + aiCard + ttsCard + vocabCard + imeCard + featCard + backupCard + `<div style="height:10px"></div>
       <div class="card ${lic.pro ? "" : "upsell"}" style="margin:0 0 10px">
         ${lic.pro
           ? `<div class="row">${I.sparkle}<div class="grow"><b>Mini-Asi Pro</b><div class="muted small">${esc(lic.email)}${lic.expires ? ` · hết hạn ${new Date(lic.expires * 1000).toLocaleDateString("vi-VN")}` : " · vĩnh viễn"}</div></div>
@@ -2682,10 +3489,27 @@
     if (a === "quit") api("quit");
   });
 
-  // ───────── Vòng cập nhật ─────────
+  // ───────── Vòng cập nhật & đồng bộ giữa cửa sổ Tai thỏ và cửa sổ Cài đặt riêng ─────────
+  on("settings-changed", (newSt) => {
+    if (!newSt) return;
+    settingsCache = newSt;
+    applyIconSize(settingsCache);
+    if (!IS_SETTINGS_WIN) {
+      applyNotchGeometry(settingsCache, mode === "collapsed");
+      applyColor();
+      applyMood();
+      updateBar();
+      if (mode === "expanded") renderTabs();
+    }
+  });
+  on("settings-section", (sec) => {
+    if (sec) setTimeout(() => scrollToSettingsSection(sec), 80);
+  });
+
   function onStatus(s) {
     const prevLevel = status ? status.lateness.level : 0;
     status = s;
+    if (IS_SETTINGS_WIN) return;
     applyColor();
     applyMood();
     updateBar();
@@ -2695,13 +3519,19 @@
     if (s.lateness.level === 0 && prevLevel > 0) { flashMood("happy", 2500); confetti(14); }
   }
   on("status", onStatus);
-  setInterval(() => { if (status && mode !== "expanded" && (status.focus_until || idleItems().includes("time"))) updateBar(); }, 1000);
-  setInterval(() => { if (mode === "expanded" && tab === "tasks" && !typing()) drawTaskList(); }, 30000);
+  setInterval(() => { if (!IS_SETTINGS_WIN && status && mode !== "expanded" && (status.focus_until || idleItems().includes("time"))) updateBar(); }, 1000);
+  setInterval(() => { if (!IS_SETTINGS_WIN && mode === "expanded" && tab === "tasks" && !typing()) drawTaskList(); }, 30000);
 
   await refreshTasks();
   onStatus(await api("get_status"));
-  await setMode("collapsed", { force: true });
-  flashMood("happy", 1800); // chào khi khởi động
+  if (IS_SETTINGS_WIN) {
+    tab = "settings";
+    await setMode("expanded", { force: true });
+    if (INIT_SETTINGS_SEC) setTimeout(() => scrollToSettingsSection(INIT_SETTINGS_SEC), 120);
+  } else {
+    await setMode("collapsed", { force: true });
+    flashMood("happy", 1800); // chào khi khởi động
+  }
 
   // Cho phép extra.js (Clipboard, Nhật ký) dùng chung tiện ích
   window.ASI = {
