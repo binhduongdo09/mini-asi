@@ -44,7 +44,7 @@
       const auto = A.settings.clip_autopaste;
       $("#mergeBox").innerHTML = csel.size >= 2 ? `<button class="btn sm blue" data-cl="merge">${I.copy}Gộp ${csel.size} mục</button>` : "";
       if (!list.length) {
-        box.innerHTML = `<div class="empty"><div class="big">📋</div>${cq || ckind !== "all" ? "Không tìm thấy mục nào" : "Chưa có gì. Hãy chép (⌘C) chữ, ảnh hay file bất kỳ — Asi sẽ nhớ giúp bạn."}
+        box.innerHTML = `<div class="empty"><div class="big">${I.clip}</div>${cq || ckind !== "all" ? "Không tìm thấy mục nào" : "Chưa có gì. Hãy chép (⌘C) chữ, ảnh hay file bất kỳ — Asi sẽ nhớ giúp bạn."}
           <div class="small" style="margin-top:6px">Bấm một mục để chép lại · bấm đúp để dán luôn · ghim để giữ mãi</div></div>`;
         return;
       }
@@ -62,7 +62,7 @@
           ].filter(Boolean).join(" · ");
           return `<div class="clip ${c.pinned ? "pinned" : ""}" data-id="${c.id}">
             ${c.kind === "text" ? `<button class="box ${csel.has(c.id) ? "on" : ""}" data-cl="sel" title="Chọn để gộp">${I.check}</button>` : `<span class="cl-ic">${c.kind === "image" ? I.image : I.folder}</span>`}
-            <div class="cl-body" data-cl="${auto ? "paste" : "copy"}" title="${auto ? "Bấm để dán" : "Bấm để chép · bấm đúp để dán"}">${body}<div class="muted small">${c.pinned ? "📌 " : ""}${meta}</div></div>
+            <div class="cl-body" data-cl="${auto ? "paste" : "copy"}" title="${auto ? "Bấm để dán" : "Bấm để chép · bấm đúp để dán"}">${body}<div class="muted small">${c.pinned ? `${I.pin} ` : ""}${meta}</div></div>
             <div class="acts">
               <button class="icon-btn" data-cl="copy" title="Chép">${I.copy}</button>
               <button class="icon-btn" data-cl="paste" title="Dán vào app đang dùng">${I.paste}</button>
@@ -171,7 +171,7 @@
       const nextIdx = qs.findIndex((q) => !e.answers.some((x) => x.q === q));
       const done = nextIdx === -1;
 
-      let chat = `<div class="bubble asi">${isToday ? "Chào bạn 👋 Mình trò chuyện chút về hôm nay nhé — chỉ 3 câu thôi." : `Nhật ký ngày ${pad(d.getDate())}/${pad(d.getMonth() + 1)}`}
+      let chat = `<div class="bubble asi">${isToday ? "Chào bạn, mình trò chuyện chút về hôm nay nhé — chỉ 3 câu thôi." : `Nhật ký ngày ${pad(d.getDate())}/${pad(d.getMonth() + 1)}`}
         ${e.facts.tasks_done.length ? `<br><span class="muted small">Hôm nay bạn đã xong: ${esc(e.facts.tasks_done.slice(0, 4).join(", "))}${e.facts.tasks_done.length > 4 ? "…" : ""}</span>` : ""}</div>`;
       for (const qa of e.answers) {
         chat += `<div class="bubble asi">${esc(qa.q)}</div>`;
@@ -191,7 +191,7 @@
         <div class="j-head">
           <button class="icon-btn" data-j="prev" title="Ngày trước">‹</button>
           <div class="grow"><b>${WDN[d.getDay()]}, ${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}</b>
-            ${jv.streak ? `<span class="chip amber" style="margin-left:6px">🔥 ${jv.streak} ngày liên tục</span>` : ""}</div>
+            ${jv.streak ? `<span class="chip amber" style="margin-left:6px">${jv.streak} ngày liên tục</span>` : ""}</div>
           <button class="icon-btn" data-j="next" title="Ngày sau" ${isToday ? "disabled" : ""}>›</button>
           <button class="btn sm ghost" data-j="hist">${showHistory ? "Ẩn" : "Các ngày trước"}</button>
           <button class="btn sm ghost" data-j="export" title="Xuất toàn bộ nhật ký ra file Markdown">Xuất .md</button>
@@ -318,7 +318,7 @@
           <div class="th-logo big">@</div>
           <b style="font-size:15px">Threads ngay trên tai thỏ</b>
           <div class="muted small" style="max-width:420px;text-align:center">Đăng nhập bằng tài khoản Instagram / Threads như trên điện thoại. Threads mở trong một cửa sổ nhỏ riêng (bản mobile) — kéo, đổi cỡ, thu nhỏ như cửa sổ thường, không đè lên app khác. Đăng nhập 1 lần, lần sau tự nhớ.</div>
-          <div class="row" style="justify-content:center;margin-top:6px"><button class="btn primary" data-thn="feed" style="height:36px;padding:0 18px">📱 Mở Threads</button>
+          <div class="row" style="justify-content:center;margin-top:6px"><button class="btn primary" data-thn="feed" style="height:36px;padding:0 18px">Mở Threads</button>
             <button class="btn ghost" data-thn="close" style="height:36px">Đóng cửa sổ Threads</button></div>
           <span class="muted small">Hoặc từ biểu tượng Mini-Asi trên thanh menu › Lướt Threads / Đóng Threads</span>
         </div>
@@ -357,10 +357,10 @@
           ${p.permalink ? `<button class="icon-btn" data-th="open" data-url="${esc(p.permalink)}" title="Mở trên Threads">${I.ext}</button>` : ""}</div>
         <div class="th-text">${esc(p.text || "(bài không có chữ)")}</div>
         <div class="row" style="gap:10px;margin-top:4px">
-          ${isMention ? "" : `<span class="muted small">${I.eye} ${num(m.views)}</span><span class="muted small">♥ ${num(m.likes)}</span>
-          <span class="muted small">↻ ${num(m.reposts)}</span>`}
+          ${isMention ? "" : `<span class="muted small">${I.eye} ${num(m.views)}</span><span class="muted small">${I.heart} ${num(m.likes)}</span>
+          <span class="muted small">${I.refresh} ${num(m.reposts)}</span>`}
           <span class="grow"></span>
-          ${isMention ? "" : `<button class="btn sm ghost" data-th="replies">💬 ${num(m.replies)} trả lời ${open ? "▾" : "▸"}</button>`}
+          ${isMention ? "" : `<button class="btn sm ghost" data-th="replies">${I.message} ${num(m.replies)} trả lời ${open ? "▾" : "▸"}</button>`}
           <button class="btn sm ghost" data-th="reply" data-rid="${esc(p.id)}" data-name="${esc(isMention ? p.username || "" : "bài của bạn")}">Trả lời</button>
         </div>
         ${open ? `<div class="th-replies">${!rs ? '<span class="spin"></span>' : rs.length ? rs.map((r) => `<div class="th-reply">
@@ -381,9 +381,9 @@
       v.innerHTML = `
         <div class="row" style="margin-bottom:8px">
           <div class="th-logo">${esc((user[0] || "@").toUpperCase())}</div>
-          <div class="grow"><b>@${esc(user)}</b>${pr.is_verified ? " ✔︎" : ""} <span class="muted small">${pr.name ? esc(pr.name) : ""}</span>
+          <div class="grow"><b>@${esc(user)}</b>${pr.is_verified ? " ✓" : ""} <span class="muted small">${pr.name ? esc(pr.name) : ""}</span>
             <div class="muted small">${ov.followers != null ? `${num(ov.followers)} người theo dõi · ` : ""}2 ngày qua: ${num(ov.views)} lượt xem · ${num(ov.likes)} thích · ${num(ov.replies)} trả lời</div></div>
-          <button class="btn sm primary" data-thn="feed" title="Mở bảng tin Threads trong cửa sổ riêng">📱 Lướt bảng tin</button>
+          <button class="btn sm primary" data-thn="feed" title="Mở bảng tin Threads trong cửa sổ riêng">Lướt bảng tin</button>
           <button class="btn sm ghost" data-thn="close" title="Đóng cửa sổ Threads">Đóng</button>
           <button class="icon-btn" data-th="refresh" title="Làm mới">${loading ? '<span class="spin"></span>' : I.sync}</button>
           <button class="btn sm ghost" data-th="logout">Đăng xuất</button>

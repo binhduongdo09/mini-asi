@@ -453,24 +453,27 @@ body.icons-sm .ios-meta span { display: none; }
 /* Việc */
 .add-wrap { position: sticky; top: 0; z-index: 2; background: var(--cur); padding-bottom: 4px; transition: background 1.2s; }
 .add-row { position: relative; }
-.add-row .input { padding-left: 34px; height: 38px; font-size: 13.5px; }
+.add-row .input { padding-left: 34px; height: 38px; font-size: 13px; }
 .add-row > svg { position: absolute; left: 11px; top: 11px; color: var(--muted); }
 .preview { height: 22px; display: flex; align-items: center; gap: 6px; padding: 4px 2px 0; }
 .task {
-  display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 10px; transition: background 0.15s; position: relative;
+  display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; transition: background 0.15s; position: relative;
 }
-.task:hover { background: var(--card); }
-.task .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task:hover { background: rgba(255, 255, 255, 0.05); }
+.task-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.task .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .task .title[contenteditable="true"] { user-select: text; -webkit-user-select: text; outline: none; background: var(--card2); border-radius: 5px; padding: 0 4px; white-space: normal; }
+.task-due { font-size: 11px; color: var(--muted); }
+.task-due.late { color: var(--red); font-weight: 550; }
 .task .acts { display: flex; gap: 2px; opacity: 0; transition: 0.15s; }
 .task:hover .acts { opacity: 1; }
 .check {
-  width: 18px; height: 18px; border-radius: 50%; border: 1.6px solid var(--faint); flex: none; display: grid; place-items: center;
-  transition: 0.25s var(--spring); color: transparent;
+  width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--faint); flex: none; display: grid; place-items: center;
+  transition: 0.2s var(--spring); color: transparent;
 }
-.check svg { width: 11px; height: 11px; stroke-width: 3.2; }
+.check svg { width: 11px; height: 11px; stroke-width: 3; }
 .check:hover { border-color: #fff; }
-.task.done .check { background: var(--green); border-color: var(--green); color: #002a0b; transform: scale(1.08); }
+.task.done .check { background: var(--green); border-color: var(--green); color: #002a0b; }
 .task.done .title { color: var(--muted); text-decoration: line-through; }
 .task.late .check { border-color: var(--red); }
 .snooze-menu { display: flex; gap: 3px; }
@@ -593,56 +596,39 @@ body.mock::after {
   background: #000; border-radius: 0 0 10px 10px; z-index: 50; pointer-events: none;
 }
 
-/* ───────── Thanh Tab & Nút Tính năng kiểu iOS App Icon Squircle (Hỗ trợ Icon To / Icon Nhỏ) ───────── */
+/* ───────── Thanh Tab chuẩn Apple Segmented Control ───────── */
 .tabs {
-  display: flex; gap: 4px; padding: 4px;
-  background: rgba(28, 28, 30, 0.86);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.085);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  border-radius: 18px; flex: none;
-  justify-content: space-between; overflow: hidden;
+  display: flex; gap: 3px; padding: 4px;
+  background: rgba(118, 118, 128, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px; flex: none;
+  overflow-x: auto;
 }
 .tab {
-  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 3px; height: 52px; padding: 3px 2px; border-radius: 14px;
-  color: var(--muted); font-weight: 600; font-size: 10.5px; transition: 0.22s var(--spring); position: relative;
+  flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px; height: 32px; padding: 0 10px; border-radius: 8px;
+  color: var(--muted); font-weight: 550; font-size: 12px; transition: 0.15s ease; position: relative;
+  white-space: nowrap;
 }
 .tab-ic {
-  width: 28px; height: 28px; border-radius: 8.5px; display: grid; place-items: center;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tc, #0a84ff) 88%, #ffffff) 0%, color-mix(in srgb, var(--tc, #0a84ff) 84%, #000000) 100%);
-  color: #ffffff;
-  opacity: 0.85;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), inset 0 1px 0.5px rgba(255, 255, 255, 0.42);
-  transition: 0.22s var(--spring);
+  display: grid; place-items: center; color: currentColor; opacity: 0.8;
 }
-.tab-ic svg { width: 15px; height: 15px; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2)); }
-.tab .lbl { display: block; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.tab:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
-.tab:hover .tab-ic { opacity: 1; transform: translateY(-1.5px) scale(1.06); }
+.tab-ic svg { width: 14px; height: 14px; }
+.tab .lbl { line-height: 1; }
+.tab:hover { color: #fff; background: rgba(255, 255, 255, 0.05); }
+.tab:hover .tab-ic { opacity: 1; }
 .tab.active {
-  background: rgba(255, 255, 255, 0.13); color: #fff;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 2px 8px rgba(0, 0, 0, 0.25);
+  background: rgba(255, 255, 255, 0.14); color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), inset 0 0.5px 0 rgba(255, 255, 255, 0.2);
 }
-.tab.active .tab-ic {
-  opacity: 1;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--tc, #0a84ff) 78%, #ffffff) 0%, var(--tc, #0a84ff) 100%);
-  color: #ffffff;
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--tc, #0a84ff) 52%, transparent), inset 0 1px 0.5px rgba(255, 255, 255, 0.52);
-  transform: scale(1.06);
-}
-.tab .dot { position: absolute; top: 4px; right: 5px; width: 7px; height: 7px; border-radius: 99px; background: var(--red); box-shadow: 0 0 0 1.5px #1c1c1e; }
+.tab.active .tab-ic { opacity: 1; color: #fff; }
+.tab .dot { position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 99px; background: var(--red); }
 
 /* Chế độ Icon Nhỏ (body.icons-sm) cho thanh Tab */
-body.icons-sm .tabs { padding: 3px; gap: 3px; border-radius: 13px; }
-body.icons-sm .tab {
-  flex: 1 1 0; flex-direction: row; height: 32px; min-width: 0; padding: 0 6px; gap: 5px; border-radius: 10px; font-size: 11.5px;
-}
-body.icons-sm .tab-ic { width: 20px; height: 20px; border-radius: 6px; flex: none; }
-body.icons-sm .tab-ic svg { width: 12px; height: 12px; }
-body.icons-sm .tab .lbl { display: none; }
-body.icons-sm .tab.active { flex: 1.8 1 0; }
-body.icons-sm .tab.active .lbl { display: inline; }
+body.icons-sm .tabs { padding: 3px; gap: 2px; border-radius: 10px; }
+body.icons-sm .tab { height: 28px; padding: 0 8px; font-size: 11.5px; border-radius: 7px; gap: 4px; }
+body.icons-sm .tab-ic svg { width: 13px; height: 13px; }
+body.icons-sm .tab .lbl { display: inline; }
 
 /* ───────── Mic & giọng nói ───────── */
 .add-row .input { padding-right: 84px; }

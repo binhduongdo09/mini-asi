@@ -32,7 +32,7 @@
           <button class="btn sm" data-wa="rec">${I.mic}Đọc thử</button>
           ${r ? `<button class="btn sm ghost" data-wa="mine">Nghe lại giọng mình</button>` : ""}
           <span class="grow"></span>
-          <button class="btn sm ghost" data-wa="learned">${c.progress.learned ? "✓ Đã thuộc" : "Đánh dấu đã thuộc"}</button>
+          <button class="btn sm ghost" data-wa="learned">${c.progress.learned ? `${I.check} Đã thuộc` : "Đánh dấu đã thuộc"}</button>
         </div>
         ${r ? `<div class="w-res ${r.verdict}"><b>${r.score}%</b> ${esc(r.tip)}</div>` : ""}
       </div>`;
@@ -41,11 +41,11 @@
     async function view(fresh) {
       const v = $("#view");
       if (!vb || fresh) await load(fresh);
-      v.innerHTML = `<div class="row" style="margin-bottom:8px"><b class="grow">${I.words} Từ mới hôm nay</b>
-          <span class="chip amber">✓ ${vb.learned}/${vb.total} từ đã thuộc</span>
+      v.innerHTML = `<div class="row" style="margin-bottom:8px"><b class="grow">Từ mới hôm nay</b>
+          <span class="chip green">${vb.learned}/${vb.total} từ đã thuộc</span>
           <button class="btn sm ghost" data-wa="more">Đổi từ khác</button></div>
         <div class="w-list">${vb.cards.map(cardHtml).join("")}</div>
-        <div class="muted small" style="margin-top:6px">Bấm ▶ để nghe mẫu, rồi 🎙 Đọc thử — đọc chuẩn 2 lần là Asi tự đánh dấu đã thuộc. Phát âm & ví dụ lấy từ Free Dictionary API.</div>`;
+        <div class="muted small" style="margin-top:6px">Nghe mẫu rồi bấm Đọc thử để luyện phát âm — đọc chuẩn 2 lần là hoàn thành. Phiên âm và ví dụ lấy từ Free Dictionary API.</div>`;
     }
 
     // Dải từ mới ở trang chủ (mỗi lần mở tai thỏ đổi từ)

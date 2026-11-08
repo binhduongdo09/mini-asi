@@ -108,7 +108,7 @@
   // ───────── Hình học: kích thước từng trạng thái ─────────
   const URL_PARAMS = new URLSearchParams(location.search);
   const IS_SETTINGS_WIN = URL_PARAMS.get("window") === "settings";
-  const INIT_SETTINGS_SEC = URL_PARAMS.get("section") || "";
+  const INIT_SETTINGS_SEC = URL_PARAMS.get("sec") || URL_PARAMS.get("section") || "";
   if (IS_SETTINGS_WIN) document.body.classList.add("settings-win");
 
   const geo = await api("get_geometry");
@@ -349,29 +349,23 @@
     }
   }
 
-  // Màu hòn đảo: đen → đỏ dần theo mức trễ việc. Cam = ổ đĩa, xanh = cần nghỉ.
-  function mix(a, b, t) {
-    const pa = a.match(/\w\w/g).map((x) => parseInt(x, 16));
-    const pb = b.match(/\w\w/g).map((x) => parseInt(x, 16));
-    return "#" + pa.map((v, i) => Math.round(v + (pb[i] - v) * t).toString(16).padStart(2, "0")).join("");
-  }
+  // ───────── Màu sắc hòn đảo ─────────
+  // Clean & Clear: Luôn giữ nền đen/xám trung tính như Apple Dynamic Island
+  // Chỉ báo màu qua điểm/mắt linh vật hoặc accent bar mỏng ở mép đáy
   function applyColor() {
     const s = status;
     let bg = "#000000", glow = "transparent", accent = null;
     island.classList.remove("pulse");
     const calm = s && (s.focus_mode || s.focus_until);
-    if (s && s.lateness.level > 0 && !calm) {
-      const t = [0, 0.18, 0.45, 0.72][s.lateness.level] + 0.2 * s.lateness.heat;
-      bg = mix("000000", "a3121b", Math.min(t, 0.9));
-      glow = `rgba(255, 59, 48, ${0.25 + 0.5 * t})`;
-      if (s.lateness.level >= 3) island.classList.add("pulse");
-    }
     if (s && s.disk && s.disk.level !== "ok") accent = "var(--amber)";
     if (s && s.session_minutes >= s.break_minutes && !calm) accent = "var(--blue)";
+    if (s && s.lateness.level > 0 && !calm) {
+      accent = "var(--red)";
+      if (s.lateness.level >= 3) island.classList.add("pulse");
+    }
     if (calm) accent = null;
     root.style.setProperty("--bg", bg);
-    // Bảng mở rộng chỉ ửng đỏ nhẹ để chữ vẫn dễ đọc
-    root.style.setProperty("--bg-x", s && s.lateness.level > 0 && !calm ? mix("0a0a0b", "a3121b", Math.min(0.06 + 0.05 * s.lateness.level, 0.22)) : "#0a0a0b");
+    root.style.setProperty("--bg-x", "#161618");
     root.style.setProperty("--glow", glow);
     const a = $("#accent");
     a.classList.toggle("on", !!accent);
@@ -381,7 +375,7 @@
   function updateBar() {
     const s = status;
     const rw = $("#rightWing");
-    const titleText = IS_SETTINGS_WIN ? "⚙️ Cài đặt Mini-Asi" : mode === "expanded" ? "Mini-Asi" : "";
+    const titleText = IS_SETTINGS_WIN ? "Cài đặt Mini-Asi" : mode === "expanded" ? "Mini-Asi" : "";
     const btEl = $("#barTitle");
     if (btEl.textContent !== titleText) btEl.textContent = titleText;
     if (mode === "expanded") {
@@ -397,7 +391,7 @@
         return;
       }
       rw.innerHTML = `<button class="ime-pill ${V && V.mode ? "on" : ""}" data-act="ime" title="Bộ gõ tiếng Việt của Asi — bấm để bật/tắt">${V && V.mode ? "VI · " : ""}${ime}</button>
-        ${hasCustomPos ? `<button class="icon-btn on" data-act="reset-pos" title="Đang ghim vị trí tuỳ chọn — bấm để đặt về vị trí mặc định">📍</button>` : ""}
+        ${hasCustomPos ? `<button class="icon-btn on" data-act="reset-pos" title="Đang ghim vị trí tuỳ chọn — bấm để đặt về vị trí mặc định">${I.location}</button>` : ""}
         <button class="icon-btn ${pinned ? "on" : ""}" data-act="pin" title="Ghim mở popup (không tự đóng khi bấm ra ngoài)">${I.pin}</button>
         <button class="icon-btn" data-act="close" title="Thu gọn (Esc)">${I.x}</button>`;
       return;
@@ -465,7 +459,7 @@
         ? `<span class="chip blue">${I.cal}${s.next_event.start <= Date.now() ? "Đang diễn ra" : fmtDue(s.next_event.start)}</span><span class="t">${esc(s.next_event.title)}</span>`
       : s.next
         ? `<span class="chip">${I.clock}${fmtDue(s.next.due)}</span><span class="t">${esc(s.next.title)}</span>`
-        : `<span class="t">${s.open_count ? `${s.open_count} việc chưa hạn` : "Hôm nay thảnh thơi ✨"}</span>`;
+        : `<span class="t">${s.open_count ? `${s.open_count} việc chưa hạn` : "Hôm nay thảnh thơi"}</span>`;
     const disk = s.disk ? `<span>${I.disk}${bytes(s.disk.free_bytes)} trống</span>` : "";
     return `<div class="peek-main">${main}</div>
       <div class="peek-sub">${disk}<span>${I.clock}${mins(s.session_minutes)} liên tục</span>
@@ -514,14 +508,14 @@
         </button>
       </div>
       <div class="peek-snap-row" title="Chia nhanh cửa sổ đang dùng (hoặc kéo thanh tiêu đề cửa sổ vào tai thỏ)">
-        <span class="peek-snap-lbl">🪟 Chia màn hình:</span>
-        <button class="peek-sbtn" data-peek="snap-left" title="Ghép cửa sổ đang dùng sang Nửa trái màn hình"><i class="snap-pv pv-left"></i><span>Trái</span></button>
-        <button class="peek-sbtn" data-peek="snap-right" title="Ghép cửa sổ đang dùng sang Nửa phải màn hình"><i class="snap-pv pv-right"></i><span>Phải</span></button>
-        <button class="peek-sbtn accent" data-peek="snap-split2" title="Chia đôi 2 ứng dụng gần nhất: Trái & Phải"><i class="snap-pv pv-split2"></i><span>Đôi 2 app</span></button>
-        <button class="peek-sbtn" data-peek="snap-max" title="Phóng to toàn vùng làm việc"><i class="snap-pv pv-max"></i><span>Toàn màn</span></button>
-        <button class="peek-sbtn" data-peek="snap-top" title="Ghép cửa sổ lên Nửa trên"><i class="snap-pv pv-top"></i></button>
-        <button class="peek-sbtn" data-peek="snap-bottom" title="Ghép cửa sổ xuống Nửa dưới"><i class="snap-pv pv-bottom"></i></button>
-        <button class="peek-sbtn" data-peek="snap-center" title="Đặt cửa sổ ngay chính giữa màn hình"><i class="snap-pv pv-center"></i></button>
+        <span class="peek-snap-lbl">Chia màn hình:</span>
+        <button class="peek-sbtn" data-peek="snap-left" title="Nửa trái"><i class="snap-pv pv-left"></i><span>Trái</span></button>
+        <button class="peek-sbtn" data-peek="snap-right" title="Nửa phải"><i class="snap-pv pv-right"></i><span>Phải</span></button>
+        <button class="peek-sbtn accent" data-peek="snap-split2" title="Chia đôi 2 app"><i class="snap-pv pv-split2"></i><span>Đôi</span></button>
+        <button class="peek-sbtn" data-peek="snap-max" title="Toàn màn hình"><i class="snap-pv pv-max"></i><span>Toàn màn</span></button>
+        <button class="peek-sbtn" data-peek="snap-top" title="Nửa trên"><i class="snap-pv pv-top"></i></button>
+        <button class="peek-sbtn" data-peek="snap-bottom" title="Nửa dưới"><i class="snap-pv pv-bottom"></i></button>
+        <button class="peek-sbtn" data-peek="snap-center" title="Giữa màn"><i class="snap-pv pv-center"></i></button>
       </div>`;
   }
 
@@ -563,10 +557,6 @@
     const initBar = peekBarHtml();
     pk.innerHTML = `<div class="peek-head">
         <div class="peek-top" title="Bấm để mở bảng điều khiển">${initTop}</div>
-        <div class="peek-tools">
-          <button class="peek-pill-btn" data-peek="toggle-sizer" title="Chỉnh kích thước tai thỏ hoặc ẩn hoàn toàn sau tai thỏ">↔ ${currentWingPx() === 0 ? "Đang ẩn" : "Cỡ tai thỏ"}</button>
-          <button class="peek-pill-btn" data-peek="icon-size" title="Đổi giữa Icon iOS To (có hình + chữ) và Icon Nhỏ">${smIcons ? "⊞ Icon To" : "⊟ Icon Nhỏ"}</button>
-        </div>
       </div>
       <div class="peek-bar">${initBar}</div>
       ${peekSizerHtml()}
@@ -575,8 +565,8 @@
         <div class="peek-cam-bar">
           <span class="peek-cam-badge">Camera đang bật</span>
           <div class="row" style="gap:4px">
-            <button class="peek-btn" data-peek="cam-snap" title="Chụp ảnh lưu vào Clipboard">📸 Chụp</button>
-            <button class="peek-btn danger" data-peek="cam" title="Tắt Camera">✕ Tắt</button>
+            <button class="peek-btn" data-peek="cam-snap" title="Chụp ảnh lưu vào Clipboard">Chụp</button>
+            <button class="peek-btn danger" data-peek="cam" title="Tắt Camera">Đóng</button>
           </div>
         </div>
       </div>` : ""}`;
@@ -1195,7 +1185,7 @@
       island.classList.add("shake");
       setTimeout(() => island.classList.remove("shake"), 1600);
     } else if (a.kind === "break") {
-      el.innerHTML = `<h3>👀 Bạn đã dùng máy ${a.minutes} phút liên tục</h3>
+      el.innerHTML = `<h3>${I.eye} Bạn đã dùng máy ${a.minutes} phút liên tục</h3>
         <p>Nhìn ra xa khoảng 6 mét trong 20 giây để mắt thư giãn nhé.</p>
         <div class="row">
           <button class="btn blue" data-a="rest">Nghỉ 20 giây</button>
@@ -1206,12 +1196,12 @@
     }
     if (a.kind === "event") {
       const mins = Math.max(1, Math.round((a.event.start - Date.now()) / 60000));
-      el.innerHTML = `<h3>📅 ${esc(a.event.title)}</h3><p>${mins} phút nữa · ${hm(new Date(a.event.start))}${a.event.location ? " · " + esc(a.event.location) : ""}</p>
+      el.innerHTML = `<h3>${I.cal} ${esc(a.event.title)}</h3><p>${mins} phút nữa · ${hm(new Date(a.event.start))}${a.event.location ? " · " + esc(a.event.location) : ""}</p>
         <div class="row"><button class="btn blue" data-a="dismiss">Đã biết</button></div>`;
       flashMood("alarm", 3000);
     }
     if (a.kind === "journal") {
-      el.innerHTML = `<h3>📔 Hôm nay bạn thấy thế nào?</h3><p>3 câu hỏi nhỏ, trả lời 2–3 câu thôi — Asi ghi nhật ký giúp bạn.</p>
+      el.innerHTML = `<h3>${I.book} Hôm nay bạn thấy thế nào?</h3><p>3 câu hỏi nhỏ, trả lời 2–3 câu thôi — Asi ghi nhật ký giúp bạn.</p>
         <div class="row"><button class="btn primary" data-a="jwrite">${I.note}Viết</button><button class="btn" data-a="jtalk">${I.mic}Nói</button>
         <button class="btn" data-a="jlater">30 phút nữa</button><button class="btn ghost" data-a="jskip">Bỏ qua hôm nay</button></div>`;
       flashMood("love", 3000);
@@ -1219,7 +1209,7 @@
     el.dataset.id = a.task ? a.task.id : "";
     el.dataset.kind = a.kind;
     if (mode === "expanded") { /* đang mở bảng: không chen ngang, chỉ báo nhỏ */
-      toast(a.kind === "reminder" ? `⏰ ${a.task.title}` : "👀 Đến giờ nghỉ mắt");
+      toast(a.kind === "reminder" ? `${I.clock} ${a.task.title}` : `${I.eye} Đến giờ nghỉ mắt`);
       return;
     }
     setMode("alert", { force: true });
@@ -1585,14 +1575,14 @@
   }).catch(() => {});
 
   const SUGGEST = [
-    ["✨", "Tóm tắt mục vừa copy"],
-    ["🧠", "Gợi ý ưu tiên việc hôm nay"],
-    ["🌐", "Dịch mục vừa copy sang tiếng Anh"],
-    ["✍️", "Viết nháp email xin nghỉ phép"],
-    ["🩺", "Máy mình thế nào?"],
-    ["🧹", "Dọn rác giúp mình"],
-    ["⏰", "Có việc nào trễ không?"],
-    ["🎯", "Tập trung 25 phút"],
+    ["", "Tóm tắt mục vừa copy"],
+    ["", "Gợi ý ưu tiên việc hôm nay"],
+    ["", "Dịch sang tiếng Anh"],
+    ["", "Viết nháp email"],
+    ["", "Tình trạng máy tính"],
+    ["", "Dọn rác giải phóng dung lượng"],
+    ["", "Kiểm tra việc trễ"],
+    ["", "Tập trung 25 phút"],
   ];
   function fmtChatMd(raw) {
     const safe = esc(raw || "");
@@ -1709,10 +1699,10 @@
         <div class="meter" style="margin-top:6px"><i style="width:${u.percent || 5}%"></i></div></div>`;
     }
     if (u && u.phase === "restarting") {
-      return `<div class="card upd-banner" id="updBanner"><div class="row"><span class="grow"><b>✅ ${esc(u.message || "Đã nâng cấp xong! Đang khởi động lại…")}</b></span></div></div>`;
+      return `<div class="card upd-banner" id="updBanner"><div class="row"><span class="chip green">Hoàn tất</span><span class="grow"><b>${esc(u.message || "Đã nâng cấp xong! Đang khởi động lại…")}</b></span></div></div>`;
     }
-    return `<div class="card upd-banner" id="updBanner"><div class="row"><span class="grow"><b>✨ Đã có Mini-Asi v${esc(ver)}</b>
-      <span class="muted small"> — cập nhật tự động ngay trong app, giữ nguyên dữ liệu, không cần cài lại</span></span>
+    return `<div class="card upd-banner" id="updBanner"><div class="row"><div class="grow"><b>Bản cập nhật mới Mini-Asi v${esc(ver)}</b>
+      <div class="muted small">Tự động nâng cấp trực tiếp, giữ nguyên toàn bộ dữ liệu</div></div>
       <button class="btn sm primary" data-upd="install">Cập nhật ngay</button></div></div>`;
   }
   function updateCardHtml(st) {
@@ -1727,19 +1717,19 @@
       body = `<div class="tts-prog" style="margin-top:8px"><span class="spin"></span><div class="grow"><b class="small">${esc(u.message || "Đang cập nhật…")}</b>${dt ? `<div class="muted small">${esc(dt)}</div>` : ""}
         <div class="meter" style="margin-top:6px"><i style="width:${u.percent || 5}%"></i></div></div></div>`;
     } else if (ph === "restarting") {
-      body = `<div class="row" style="margin-top:8px"><span class="chip green">Đã xong</span><span class="small grow">${esc(u.message || "Đã nâng cấp xong! Đang khởi động lại…")}</span></div>`;
+      body = `<div class="row" style="margin-top:8px"><span class="chip green">Hoàn tất</span><span class="small grow">${esc(u.message || "Đã nâng cấp xong! Đang khởi động lại…")}</span></div>`;
     } else if (rel) {
       const sz = rel.asset && rel.asset.size ? `Dung lượng tải: ${bytes(rel.asset.size)} · ` : "";
-      body = `<div class="upd-box" style="margin-top:8px"><div class="row"><div class="grow"><b>🎉 Đã có bản mới v${esc(rel.latest_version)}</b>
-        <div class="muted small">${sz}Tự tải về, chép đè ứng dụng và mở lại ngay (không cần cài lại)</div>
+      body = `<div class="upd-box" style="margin-top:8px"><div class="row"><div class="grow"><b>Đã có bản mới v${esc(rel.latest_version)}</b>
+        <div class="muted small">${sz}Tự tải về và cài đặt trực tiếp, không cần tải lại file dmg</div>
         ${rel.notes ? `<div class="muted small" style="margin-top:4px">${esc(rel.notes)}</div>` : ""}</div>
-        <button class="btn primary sm" data-upd="install">⬇︎ Cập nhật ngay</button></div></div>`;
+        <button class="btn primary sm" data-upd="install">Cập nhật ngay</button></div></div>`;
     } else {
-      body = `<div class="row" style="margin-top:8px"><span class="muted small grow">${ph === "error" ? `<span style="color:var(--red)">Lỗi: ${esc(u.error || "")}</span>` : esc(u.message || "Bạn đang dùng phiên bản mới nhất ✓")}</span>
+      body = `<div class="row" style="margin-top:8px"><span class="muted small grow">${ph === "error" ? `<span style="color:var(--red)">Lỗi: ${esc(u.error || "")}</span>` : esc(u.message || "Bạn đang dùng phiên bản mới nhất")}</span>
         <button class="btn sm" data-upd="check">Kiểm tra cập nhật</button></div>`;
     }
     return `<div class="card" id="updateCard" style="margin-bottom:10px">
-      <div class="row"><div class="grow"><b>🔄 Cập nhật ứng dụng</b> <span class="chip">v${esc(updateVer)}</span></div>
+      <div class="row"><div class="grow"><b>Cập nhật ứng dụng</b> <span class="chip">v${esc(updateVer)}</span></div>
         <label class="row small"><input type="checkbox" data-k2="auto_update_check" ${st.auto_update_check !== false ? "checked" : ""}/> Tự báo khi có bản mới</label></div>
       ${body}</div>`;
   }
@@ -1802,21 +1792,21 @@
         <div class="big-face" id="bigFace"><span class="eye l"></span><span class="eye r"></span></div>
         <div class="grow">
           <div class="row" style="gap:8px;flex-wrap:wrap">
-            <div class="c-greet">${greet()} 👋</div>
+            <div class="c-greet">${greet()}</div>
             <div class="ai-pill ${aiAvail ? "ready" : "fallback"}" id="appleAiBadge" title="${esc(appleAiState.detail || "")}">
-              <span class="ai-spark"></span><b>${aiAvail ? "Apple Intelligence · Sẵn sàng" : "NLP Nội bộ"}</b>
+              <span class="ai-spark"></span><b>${aiAvail ? "Apple Intelligence" : "NLP Nội bộ"}</b>
             </div>
           </div>
-          <div class="muted small">Hỏi đáp thông minh (tóm tắt clipboard, dịch thuật, viết nháp, lên kế hoạch) chạy trực tiếp trên Mac</div>
+          <div class="muted small">Trợ lý on-device trên chip Apple Silicon</div>
           <div class="c-quick">${quick}</div>
         </div>
       </div>
       <div id="vocabStrip"></div>
       <div class="c-log" id="chatLog"></div>
-      <div class="c-chips" id="chatChips">${SUGGEST.map(([ic, t]) => `<button class="c-chip" data-say="${esc(t)}">${ic} ${esc(t)}</button>`).join("")}</div>
+      <div class="c-chips" id="chatChips">${SUGGEST.map(([, t]) => `<button class="c-chip" data-say="${esc(t)}">${esc(t)}</button>`).join("")}</div>
       <div class="c-input">
         <button class="mic big" id="chatMic" title="Nói với Asi">${I.mic}<span class="bars"><i></i><i></i><i></i><i></i></span></button>
-        <input class="input" id="chatInput" placeholder="Hỏi Asi & Apple Intelligence… vd: tóm tắt mục vừa copy, dịch sang tiếng Anh, viết email…" />
+        <input class="input" id="chatInput" placeholder="Hỏi Asi & Apple Intelligence…" />
         <button class="btn primary" id="chatSend">${I.send}</button>
       </div></div>`;
     const inp = $("#chatInput");
@@ -1834,7 +1824,7 @@
     log.innerHTML = chat.length ? chat.map((m) => m.who === "me"
       ? `<div class="bubble me">${esc(m.text)}</div>`
       : `<div class="bubble asi">${m.thinking ? '<span class="dots"><i></i><i></i><i></i></span>' : fmtChatMd(m.text)}${m.reply ? replyHtml(m.reply) : ""}</div>`).join("")
-      : `<div class="muted small" style="text-align:center;padding:10px">Hỏi bất kỳ câu gì với <b> Apple Intelligence</b> hoặc chọn một gợi ý bên dưới 👇</div>`;
+      : `<div class="muted small" style="text-align:center;padding:14px 10px">Hỏi đáp với <b>Apple Intelligence</b> hoặc chọn gợi ý bên dưới</div>`;
     log.scrollTop = log.scrollHeight;
   }
   $("#view").addEventListener("click", (e) => {
@@ -1979,8 +1969,8 @@
         color: "#30d158",
         badge: s.lateness.overdue ? `${s.lateness.overdue} trễ` : `${s.open_count} việc`,
         badgeCls: s.lateness.overdue ? "red" : "green",
-        title: s.next ? s.next.title : (s.open_count ? `Còn ${s.open_count} việc chưa hẹn giờ` : "Hôm nay đã xong hết việc ✨"),
-        sub: s.next ? `⏰ Hạn: ${fmtDue(s.next.due)}` : "Bấm để thêm việc bằng giọng nói hoặc chữ",
+        title: s.next ? s.next.title : (s.open_count ? `Còn ${s.open_count} việc chưa hẹn giờ` : "Hôm nay đã xong hết việc"),
+        sub: s.next ? `Hạn: ${fmtDue(s.next.due)}` : "Bấm để thêm việc bằng giọng nói hoặc chữ",
         go: "tasks",
         artMeta: {},
       },
@@ -2003,7 +1993,7 @@
         color: "#5ac8fa",
         badge: `${clipsL.length} đã chép`,
         badgeCls: "blue",
-        title: latestClip ? (latestClip.text ? latestClip.text.slice(0, 52) : "🖼 Hình ảnh / Tệp tin vừa chép") : "Clipboard đang trống",
+        title: latestClip ? (latestClip.text ? latestClip.text.slice(0, 52) : "Hình ảnh / Tệp tin vừa chép") : "Clipboard đang trống",
         sub: "Nhấn ⌃⇧V mở nhanh · Bấm để xem & dán lại",
         go: "clips",
         liveImg: d.clipImgUrl || "",
@@ -2032,7 +2022,7 @@
         name: "Nhật ký",
         ic: I.book,
         color: "#ff375f",
-        badge: jv && jv.streak ? `🔥 ${jv.streak} ngày` : (wrote ? "Đã viết" : "Hôm nay"),
+        badge: jv && jv.streak ? `${jv.streak} ngày` : (wrote ? "Đã viết" : "Hôm nay"),
         badgeCls: wrote ? "green" : "",
         title: wrote ? (jv.entry.text || jv.entry.answers.map((x) => x.a).filter(Boolean).join(" · ")).slice(0, 54) : "Hôm nay của bạn thế nào?",
         sub: "Lưu giữ kỷ niệm kèm hình ảnh & cảm xúc mỗi ngày",
@@ -2050,7 +2040,7 @@
         sub: "Luyện nghe chuẩn & chấm điểm phát âm tiếng Anh",
         go: "words",
         quickHtml: `<div class="sq-actions">
-          <button class="sq-btn" data-wcmd="word-speak" data-word="${esc(vw.w)}">🔊 Nghe phát âm</button>
+          <button class="sq-btn" data-wcmd="word-speak" data-word="${esc(vw.w)}">${I.vol} Phát âm</button>
           <button class="sq-btn primary" data-wcmd="open-words">Luyện đọc →</button>
         </div>`,
         artMeta: { word: vw.w, ipa: vw.ipa },
@@ -2063,12 +2053,12 @@
         badge: "Camera / Ảnh",
         badgeCls: "blue",
         title: "Khung ảnh & Gương nhanh trên Tai thỏ",
-        sub: "Bấm 🖼 ở góc trên để lồng ảnh yêu thích hoặc mở Camera",
+        sub: "Bấm đổi ảnh để lồng ảnh yêu thích hoặc mở Camera",
         go: "camera-noop",
         liveImg: peekCam.lastSnap || "",
         quickHtml: `<div class="sq-actions">
-          <button class="sq-btn primary" data-wcmd="open-cam">📷 Mở gương Camera</button>
-          <button class="sq-btn" data-wact="img" data-wid="camera">🖼 Đổi ảnh</button>
+          <button class="sq-btn primary" data-wcmd="open-cam">${I.cam} Mở gương Camera</button>
+          <button class="sq-btn" data-wact="img" data-wid="camera">Đổi ảnh</button>
         </div>`,
         artMeta: {},
       },
@@ -2095,8 +2085,8 @@
         sub: "Nhắc nghỉ mắt 20-20-20 & đồng hồ Tập trung Pomodoro",
         go: "health",
         quickHtml: `<div class="sq-actions">
-          <button class="sq-btn primary" data-wcmd="toggle-focus">${s.focus_until ? "⏹ Dừng Tập trung" : "🎯 Tập trung 25p"}</button>
-          <button class="sq-btn" data-wcmd="rest-eyes">👀 Nghỉ mắt</button>
+          <button class="sq-btn primary" data-wcmd="toggle-focus">${s.focus_until ? "Dừng Tập trung" : "Tập trung 25p"}</button>
+          <button class="sq-btn" data-wcmd="rest-eyes">${I.eye} Nghỉ mắt</button>
         </div>`,
         artMeta: {},
       },
@@ -2111,10 +2101,10 @@
         sub: "Bấm nút bên dưới hoặc kéo thanh tiêu đề cửa sổ vào tai thỏ",
         go: "snap-noop",
         quickHtml: `<div class="sq-actions">
-          <button class="sq-btn" data-wcmd="snap" data-snap="left">◧ Trái</button>
-          <button class="sq-btn" data-wcmd="snap" data-snap="right">◨ Phải</button>
-          <button class="sq-btn primary" data-wcmd="snap" data-snap="split2">⊞ Đôi 2 app</button>
-          <button class="sq-btn" data-wcmd="snap" data-snap="max">⬜ Toàn màn</button>
+          <button class="sq-btn" data-wcmd="snap" data-snap="left">Trái 50%</button>
+          <button class="sq-btn" data-wcmd="snap" data-snap="right">Phải 50%</button>
+          <button class="sq-btn primary" data-wcmd="snap" data-snap="split2">Chia đôi 2 app</button>
+          <button class="sq-btn" data-wcmd="snap" data-snap="max">Toàn màn hình</button>
         </div>`,
         artMeta: {},
       },
@@ -2180,10 +2170,10 @@
         ${mediaHtml}
         <div class="sq-media-overlay">
           <span class="sq-badge ${w.badgeCls || ""}">${esc(w.badge)}</span>
-          <div class="sq-tools" title="Kéo để đổi vị trí · Đổi ảnh · Cất vào thư viện">
-            <button class="sq-tool-btn" data-wact="img" data-wid="${w.id}" title="Chọn ảnh từ máy tính để hiển thị trên Widget này">🖼</button>
-            ${customImg ? `<button class="sq-tool-btn" data-wact="reset-img" data-wid="${w.id}" title="Khôi phục hình minh hoạ mặc định">↺</button>` : ""}
-            <button class="sq-tool-btn danger" data-wact="remove" data-wid="${w.id}" title="Cất Widget này vào Thư viện">−</button>
+          <div class="sq-tools" title="Tuỳ chỉnh">
+            <button class="sq-tool-btn" data-wact="img" data-wid="${w.id}" title="Đổi ảnh">Ảnh</button>
+            ${customImg ? `<button class="sq-tool-btn" data-wact="reset-img" data-wid="${w.id}" title="Khôi phục mặc định">${I.refresh}</button>` : ""}
+            <button class="sq-tool-btn danger" data-wact="remove" data-wid="${w.id}" title="Gỡ khỏi bảng">${I.trash}</button>
           </div>
         </div>
       </div>
@@ -2210,27 +2200,26 @@
       ${updateBannerHtml()}
       <div class="wb-toolbar">
         <div class="grow">
-          <b class="wb-heading">⊞ Bảng Widget của bạn</b>
-          <span class="muted small" style="margin-left:6px">Kéo thả để sắp xếp · Bấm 🖼 trên mỗi widget để đổi ảnh · Bấm vào widget để mở</span>
+          <b class="wb-heading">Widget</b>
+          <span class="muted small" style="margin-left:8px">Kéo thả để sắp xếp vị trí</span>
         </div>
-        <button class="btn sm ${showWidgetLib ? "primary" : ""}" id="toggleWidgetLibBtn">
-          📚 ${showWidgetLib ? "Đóng Thư viện Widget" : "Thư viện Widget (+ Kéo thả)"}
+        <button class="btn sm ${showWidgetLib ? "primary" : "ghost"}" id="toggleWidgetLibBtn">
+          ${showWidgetLib ? "Xong" : "Sửa"}
         </button>
-        <button class="btn sm ghost" data-wcmd="open-settings" title="Mở Cài đặt trên cửa sổ riêng">⚙️ Cài đặt ↗</button>
       </div>
-      ${missingList.length ? `<div class="card perm-banner" style="margin-bottom:10px"><div class="row"><span class="grow"><b>🔐 Còn thiếu quyền: ${missingList.map((p) => p.name).join(", ")}</b>
-        <span class="muted small"> — mở cửa sổ Cài đặt để cấp quyền một lần</span></span>
-        <button class="btn sm primary" data-go="perm">Mở Cài đặt quyền ↗</button></div></div>` : ""}
+      ${missingList.length ? `<div class="card perm-banner" style="margin-bottom:10px"><div class="row"><span class="grow"><b>Chưa cấp đủ quyền: ${missingList.map((p) => p.name).join(", ")}</b>
+        <span class="muted small"> — cấp quyền trong Cài đặt</span></span>
+        <button class="btn sm primary" data-go="perm">Cài đặt</button></div></div>` : ""}
       <div class="wb-layout ${showWidgetLib ? "with-lib" : ""}">
         <div class="sq-grid" id="widgetBoard">
           ${activeWidgets.length
             ? activeWidgets.map(renderSquareWidgetCard).join("")
-            : `<div class="wb-empty">Kéo thả các Widget từ <b>Thư viện Widget</b> bên phải vào đây để bắt đầu ✨</div>`}
+            : `<div class="wb-empty">Chưa có Widget nào trên bảng. Bấm Sửa để thêm.</div>`}
         </div>
         ${showWidgetLib ? `<aside class="wb-lib" id="widgetLib">
           <div class="wb-lib-head">
-            <b>📚 Thư viện Widget</b>
-            <span class="muted small">Giữ chuột kéo thả vào bảng bên trái (hoặc bấm ＋)</span>
+            <b>Thư viện Widget</b>
+            <span class="muted small">Kéo thả vào bảng hoặc bấm Thêm</span>
           </div>
           <div class="wb-lib-list">
             ${catalog.map((w) => {
@@ -2242,8 +2231,8 @@
                     <span class="sq-ic sm" style="background:${w.color}">${w.ic}</span>
                     <b class="grow small">${esc(w.name)}</b>
                     ${onBoard
-                      ? `<span class="chip green">Đang hiển thị</span>`
-                      : `<button class="btn sm primary" data-wact="add" data-wid="${w.id}">＋ Thêm</button>`}
+                      ? `<span class="chip">Đã thêm</span>`
+                      : `<button class="btn sm primary" data-wact="add" data-wid="${w.id}">Thêm</button>`}
                   </div>
                   <div class="muted small" style="margin-top:3px">${esc(w.sub)}</div>
                 </div>
@@ -2585,15 +2574,16 @@
   }
   function taskRow(t, now) {
     const late = !t.done_at && t.due && t.due < now;
-    const chip = t.due ? `<span class="chip ${late ? "red" : t.due - now < 3600000 && !t.done_at ? "amber" : ""}">${fmtDue(t.due, now)}</span>` : "";
+    const dueTxt = t.due ? `<span class="task-due ${late ? "late" : ""}">${fmtDue(t.due, now)}</span>` : "";
     return `<div class="task ${t.done_at ? "done" : ""} ${late ? "late" : ""}" data-id="${t.id}">
       <button class="check" data-t="toggle">${I.check}</button>
-      <div class="title" data-t="title" title="Nhấp đúp để sửa">${esc(t.title)}</div>
-      ${chip}
+      <div class="task-info">
+        <div class="title" data-t="title" title="Nhấp đúp để sửa">${esc(t.title)}</div>
+        ${dueTxt}
+      </div>
       <div class="acts">
-        ${t.done_at ? "" : `<button class="icon-btn" data-t="s10" title="Hoãn 10 phút">${I.snooze}</button>
-        <button class="btn sm ghost" data-t="s60">+1h</button><button class="btn sm ghost" data-t="stm">Mai</button>
-        ${t.due && settingsCache.show_calendar ? `<button class="icon-btn" data-t="cal" title="Thêm vào Lịch">${I.cal}</button>` : ""}`}
+        ${t.done_at ? "" : `<button class="icon-btn" data-t="s60" title="Hoãn 1 giờ">+1h</button>
+        <button class="icon-btn" data-t="stm" title="Chuyển sang mai">Mai</button>`}
         <button class="icon-btn" data-t="del" title="Xoá">${I.trash}</button>
       </div></div>`;
   }
@@ -2883,7 +2873,7 @@
       return;
     }
     if (!scan) {
-      $("#view").innerHTML = head + `<div class="empty"><div class="big">🧹</div>
+      $("#view").innerHTML = head + `<div class="empty"><div class="big">${I.broom}</div>
         Quét để tìm cache, log, file cài đặt cũ, thư mục build…<br><span class="small">Quét chỉ đọc, không xoá gì cho tới khi bạn bấm Dọn.</span></div>`;
       return;
     }
@@ -2916,7 +2906,7 @@
       <div class="row" style="margin:12px 2px 4px"><div class="grow"><div class="muted small">Có thể giải phóng</div>
         <div class="big-num">${bytes(rep.available_bytes)}</div></div>
         <button class="btn sm ghost" data-c="safe">Chọn mục an toàn</button><button class="btn sm ghost" data-c="none">Bỏ chọn</button></div>
-      ${rows || '<div class="empty">Máy sạch bong! ✨</div>'}
+      ${rows || '<div class="empty">Ổ đĩa sạch sẽ, không có file rác</div>'}
       ${rep.locked_bytes > 0 ? `<div class="upsell">${I.sparkle}<div class="grow"><b>Bản Pro dọn thêm được ${bytes(rep.locked_bytes)}</b>
         <div class="muted small">File cài đặt cũ, thư mục build, file lớn, ảnh chụp màn hình cũ, bản sao lưu iPhone…</div></div>
         <button class="btn sm" data-c="pro">Nâng cấp</button></div>` : ""}
@@ -2996,7 +2986,7 @@
           <div class="row" style="margin-top:8px"><span class="muted small grow">${pct >= 100 ? "Đến giờ nghỉ rồi!" : `Nghỉ sau ${s.break_minutes - s.session_minutes} phút`}</span>
           <button class="btn sm" data-h="rested">Mình vừa nghỉ</button></div></div>
         <div class="card"><div class="muted small">Hôm nay đã dùng máy</div><div class="big-num">${mins(s.today_minutes)}</div>
-          <div class="muted small" style="margin-top:12px">${s.sleepy ? "🌙 Khuya rồi, đi ngủ sớm nhé" : "Đứng dậy vươn vai mỗi tiếng nhé"}</div></div>
+          <div class="muted small" style="margin-top:12px">${s.sleepy ? "Đã khuya rồi, hãy nghỉ ngơi sớm" : "Đứng dậy vươn vai mỗi tiếng nhé"}</div></div>
       </div>
       <div class="card" style="margin-top:10px"><div class="row">
         <div class="grow"><b>${I.target} Hẹn giờ tập trung</b><div class="muted small">${s.focus_until ? `Còn ${focusLeft} phút — tai thỏ chuyển tím, tạm tắt nhắc nhở` : "Làm việc sâu, không bị nhắc nhở làm phiền"}</div></div>
@@ -3047,35 +3037,35 @@
     const voiceBtn = (engine, ready, [name, g, desc]) => {
       const on = tv.engine === engine && tv.voice === name;
       return `<button class="voice-opt ${on ? "on" : ""}" data-tts="use" data-engine="${engine}" data-voice="${esc(name)}">
-        <span class="voice-av ${g}">${g === "female" ? "🌸" : "🌿"}</span><span class="grow"><b>${esc(name)}</b><span class="muted small">${esc(desc)}</span></span>
-        <span class="icon-btn" data-tts="hear" data-engine="${engine}" data-voice="${esc(name)}" title="Nghe thử ngay">▶</span></button>`;
+        <span class="voice-av ${g}">${g === "female" ? "Nữ" : "Nam"}</span><span class="grow"><b>${esc(name)}</b><span class="muted small">${esc(desc)}</span></span>
+        <span class="icon-btn" data-tts="hear" data-engine="${engine}" data-voice="${esc(name)}" title="Nghe thử">▶</span></button>`;
     };
     const sysOn = tv.engine === "system";
-    const sysOpt = `<button class="voice-opt ${sysOn ? "on" : ""}" data-tts="use" data-engine="system" data-voice=""><span class="voice-av">🍎</span><span class="grow"><b>Giọng mặc định của macOS</b><span class="muted small">Linh / Samantha · giọng robot cơ bản offline</span></span>
+    const sysOpt = `<button class="voice-opt ${sysOn ? "on" : ""}" data-tts="use" data-engine="system" data-voice=""><span class="voice-av">Máy</span><span class="grow"><b>Giọng mặc định macOS</b><span class="muted small">Linh / Samantha · offline</span></span>
         <span class="icon-btn" data-tts="hear" data-engine="system" data-voice="" title="Nghe thử">▶</span></button>`;
-    const qs = tv.qualities || [["compact", "Gọn · Siêu nhanh", 18], ["high", "Chất lượng cao Studio", 32]];
+    const qs = tv.qualities || [["compact", "Gọn · Nhanh", 18], ["high", "Chất lượng cao", 32]];
     const qName = (id) => (qs.find((q) => q[0] === id) || [id, id])[1];
     const packHtml = (p) => {
       const ss = p.status, ph = ss.phase, ready = ph === "ready", vn = p.id === "vieneu";
       let foot = "";
       if (ph === "none" || ph === "error") {
         const qpick = qsel || tv.default_quality || "compact";
-        const qOpts = vn ? `<div class="q-grid grow">${qs.map(([id, name, mb]) => `<button class="q-opt ${qpick === id ? "on" : ""}" data-tts="q" data-q="${id}"><b>${name}</b><span class="muted small">≈ ${mb} MB${id === tv.default_quality ? " · khuyên dùng" : ""}</span></button>`).join("")}</div>` : `<span class="muted small grow">2 giọng · ≈ ${p.model_mb} MB · nghe thử trực tiếp được ngay</span>`;
+        const qOpts = vn ? `<div class="q-grid grow">${qs.map(([id, name, mb]) => `<button class="q-opt ${qpick === id ? "on" : ""}" data-tts="q" data-q="${id}"><b>${name}</b><span class="muted small">≈ ${mb} MB</span></button>`).join("")}</div>` : `<span class="muted small grow">2 giọng · ≈ ${p.model_mb} MB</span>`;
         foot = `${ph === "error" ? `<div class="small" style="color:var(--red);margin-top:6px">Chưa tải được: ${esc(ss.error || "")}</div>` : ""}
-          <div class="row" style="margin-top:6px">${qOpts}<button class="btn primary sm" data-tts="install" data-engine="${p.id}">⬇︎ Cài bộ máy ${esc(p.name)}</button></div>`;
+          <div class="row" style="margin-top:6px">${qOpts}<button class="btn primary sm" data-tts="install" data-engine="${p.id}">Cài đặt ${esc(p.name)}</button></div>`;
       } else if (ph === "installing") {
-        foot = `<div class="tts-prog" data-prog="${p.id}"><span class="spin"></span><div class="grow"><b class="small">${esc(ss.step || "Đang chuẩn bị…")}</b><div class="muted small tts-detail">${esc(ss.detail || "")}</div></div></div>`;
+        foot = `<div class="tts-prog" data-prog="${p.id}"><span class="spin"></span><div class="grow"><b class="small">${esc(ss.step || "Đang cài đặt…")}</b><div class="muted small tts-detail">${esc(ss.detail || "")}</div></div></div>`;
       } else {
         const using = tv.engine === p.id;
-        foot = `<div class="row" style="margin-top:6px"><span class="muted small grow">✅ Đã kích hoạt${vn ? ` · bản ${esc(qName(ss.quality || "compact"))}` : ""}${ss.size_mb ? ` · ${ss.size_mb} MB` : ""}${using ? " · đang dùng" : ""}</span>
+        foot = `<div class="row" style="margin-top:6px"><span class="muted small grow">Đã kích hoạt${vn ? ` · ${esc(qName(ss.quality || "compact"))}` : ""}${using ? " · đang dùng" : ""}</span>
           <button class="btn sm ghost" data-tts="uninstall" data-engine="${p.id}">Gỡ</button></div>`;
       }
       return `<div class="tts-pack"><div class="row"><b class="grow">${esc(p.name)}</b><span class="muted small">${esc(p.blurb)}</span></div>
         <div class="voice-grid two">${p.voices.map((v) => voiceBtn(p.id, ready, v)).join("")}</div>${foot}</div>`;
     };
-    return `<div class="card" id="ttsCard" style="margin-bottom:10px"><div class="row"><b class="grow">🗣 Giọng đọc AI tự nhiên của Asi</b>
-        <label class="row small"><input type="checkbox" data-k2="voice_reply" ${settingsCache.voice_reply !== false ? "checked" : ""}/> Asi đọc to câu trả lời</label></div>
-      <div class="muted small" style="margin:2px 0 6px">Bấm vào tên giọng hoặc nút <b>▶</b> để nghe thử và dùng ngay lập tức (không cần chờ tải 500MB như trước).</div>
+    return `<div class="card" id="ttsCard" style="margin-bottom:10px"><div class="row"><b class="grow">Giọng đọc AI của Asi</b>
+        <label class="row small"><input type="checkbox" data-k2="voice_reply" ${settingsCache.voice_reply !== false ? "checked" : ""}/> Đọc to câu trả lời</label></div>
+      <div class="muted small" style="margin:2px 0 6px">Chọn giọng và bấm ▶ để nghe thử.</div>
       ${tv.packs.map(packHtml).join("")}
       <div class="voice-grid one" style="margin-top:6px">${sysOpt}</div></div>`;
   }
@@ -3265,23 +3255,23 @@
     if (!appleAiState) api("apple_ai_status").then((r) => { appleAiState = r; }).catch(() => {});
     const permIcon = { granted: "✅", denied: "⛔", not_asked: "⚪", unknown: "⚪", manual: "🔸" };
     const permCard = `<div class="card" id="permCard" data-sec="sec-perm" style="margin-bottom:10px">
-        <div class="row"><div class="grow"><b>🔐 Quyền cho Mini-Asi</b><div class="muted small">Bấm một lần, macOS sẽ lần lượt hỏi từng quyền — chọn “Cho phép”.</div></div>
-          <button class="btn primary" data-s="permall">Cấp tất cả quyền</button></div>
-        <div class="perm-list">${perms.map((p) => `<div class="perm-row"><span>${permIcon[p.state] || "⚪"}</span>
+        <div class="row"><div class="grow"><b>Quyền ứng dụng</b><div class="muted small">Cấp các quyền cần thiết để Mini-Asi hoạt động đầy đủ tính năng</div></div>
+          <button class="btn primary sm" data-s="permall">Cấp tất cả</button></div>
+        <div class="perm-list">${perms.map((p) => `<div class="perm-row">
           <div class="grow"><b>${p.name}</b> ${p.required ? "" : '<span class="chip">Tuỳ chọn</span>'} <span class="muted small">${p.why}</span></div>
           ${p.state === "granted" ? '<span class="chip green">Đã cấp</span>' : `<button class="btn sm ghost" data-s="perm" data-p="${p.id}">${p.state === "denied" && ["accessibility", "disk"].includes(p.id) ? "Mở cài đặt" : "Cấp quyền"}</button>`}</div>`).join("")}</div>
       </div>`;
     const ago = (ms) => fmtAgo(ms);
-    const backupCard = `<div class="sec" id="sec-sync">☁️ Sao lưu & đồng bộ nhiều máy</div>
+    const backupCard = `<div class="sec" id="sec-sync">Sao lưu & Đồng bộ đám mây</div>
       <div class="card">
-        <div class="setting"><div class="grow"><b>Thư mục đám mây</b><span>${bk.current ? esc(bk.current) : "Chưa tìm thấy Google Drive — cài “Google Drive cho máy tính” hoặc chọn thư mục"}</span></div>
+        <div class="setting"><div class="grow"><b>Thư mục đám mây</b><span>${bk.current ? esc(bk.current) : "Chưa chọn thư mục sao lưu"}</span></div>
           <select class="input" id="bkDir">${bk.dirs.map((d) => `<option value="${esc(d.path)}" ${bk.current === d.path ? "selected" : ""}>${esc(d.label)}</option>`).join("")}
             ${bk.chosen && !bk.dirs.some((d) => d.path === bk.chosen) ? `<option value="${esc(bk.chosen)}" selected>${esc(bk.chosen.split(/[\\/]/).pop())}</option>` : ""}
             <option value="__pick">Chọn thư mục khác…</option></select></div>
-        <div class="setting"><div class="grow"><b>Sao lưu</b><span>Lần cuối: ${ago(bk.last_backup)} · giữ 14 bản gần nhất</span></div>
+        <div class="setting"><div class="grow"><b>Sao lưu</b><span>Lần cuối: ${ago(bk.last_backup)}</span></div>
           <button class="btn sm" data-s="bknow" ${bk.current ? "" : "disabled"}>Sao lưu ngay</button>
           <button class="switch ${bk.auto_backup ? "on" : ""}" data-bk="auto_backup" title="Tự sao lưu mỗi ngày"></button></div>
-        <div class="setting"><div class="grow"><b>Đồng bộ giữa các máy</b><span>Máy này: “${esc(bk.device_name)}” · ${bk.devices.length} máy dùng chung · lần cuối ${ago(bk.last_device_sync)}</span></div>
+        <div class="setting"><div class="grow"><b>Đồng bộ giữa các máy</b><span>${esc(bk.device_name)} · lần cuối ${ago(bk.last_device_sync)}</span></div>
           <button class="btn sm" data-s="devsync" ${bk.current ? "" : "disabled"}>Đồng bộ ngay</button>
           <button class="switch ${bk.device_sync ? "on" : ""}" data-bk="device_sync" title="Tự đồng bộ mỗi 15 phút"></button></div>
         ${bk.snapshots.length ? `<div class="setting" style="display:block"><b>Khôi phục</b>
@@ -3289,11 +3279,10 @@
             <button class="btn sm ghost" data-s="restore" data-p="${esc(f.path)}">Khôi phục</button></div>`).join("")}</div>` : ""}
       </div>`;
     const vis = st.visible_tabs && st.visible_tabs.length ? st.visible_tabs : ["home", "tasks", "notes", "clips", "journal", "words", "threads"];
-    const featCard = `<details class="card feat-card" style="margin-bottom:10px"><summary><b>🧩 Quản lý tính năng</b> <span class="muted small">— chọn tính năng hiện trên thanh, còn lại nằm trong “Tất cả”</span></summary>
+    const featCard = `<details class="card feat-card" style="margin-bottom:10px"><summary><b>Quản lý thanh tính năng</b> <span class="muted small">— chọn tính năng hiện trên thanh chính</span></summary>
       <div class="feat-grid">${TABS.filter(([id]) => !["home", "settings"].includes(id)).map(([id, name, ic]) => `<label class="feat ${vis.includes(id) ? "on" : ""}">
         <input type="checkbox" data-feat="${id}" ${vis.includes(id) ? "checked" : ""}/>${ic}<span>${name}</span></label>`).join("")}</div>
-      <div class="row" style="margin-top:8px"><label class="row small grow"><input type="checkbox" data-k2="threads_embed_beta" ${st.threads_embed_beta ? "checked" : ""}/> Thử nghiệm: Threads nằm trong khung Asi</label></div>
-      <div class="row" style="margin-top:4px"><span class="muted small grow">Trang “Tất cả” (⊞ trên thanh) luôn có đủ mọi tính năng.</span></div>
+      <div class="row" style="margin-top:8px"><label class="row small grow"><input type="checkbox" data-k2="threads_embed_beta" ${st.threads_embed_beta ? "checked" : ""}/> Thử nghiệm: Threads nhúng trong cửa sổ Asi</label></div>
     </details>`;
     const ime = await api("ime_info").catch(() => null);
     const tv = await api("tts_info").catch(() => null);
@@ -3304,53 +3293,51 @@
     const aiCard = `<div class="card" id="sec-ai" style="margin-bottom:10px">
       <div class="row">
         <div class="grow">
-          <b> Apple Intelligence (FoundationModels On-Device)</b>
-          <div class="muted small">${esc((appleAiState && appleAiState.detail) || "Trí tuệ nhân tạo chạy trực tiếp trên chip Apple Silicon — hỏi đáp thông minh, tóm tắt, dịch thuật, viết nháp kèm ngữ cảnh công việc & ghi chú của bạn.")}</div>
+          <b>Apple Intelligence (On-Device)</b>
+          <div class="muted small">${esc((appleAiState && appleAiState.detail) || "Chạy trực tiếp trên Apple Silicon — hỏi đáp, tóm tắt, viết nháp, dịch thuật")}</div>
         </div>
-        <span class="chip ${aiAvail && st.apple_ai_enabled !== false ? "green" : ""}">${aiAvail ? (st.apple_ai_enabled !== false ? "Đang bật · On-Device" : "Đang tắt") : "Chưa hỗ trợ"}</span>
+        <span class="chip ${aiAvail && st.apple_ai_enabled !== false ? "green" : ""}">${aiAvail ? (st.apple_ai_enabled !== false ? "Đang bật" : "Đang tắt") : "Chưa hỗ trợ"}</span>
         <label class="row small" style="margin-left:6px"><input type="checkbox" data-k2="apple_ai_enabled" ${st.apple_ai_enabled !== false ? "checked" : ""}/> Bật</label>
       </div>
     </div>`;
     const hasCustomPos = (st.bubble_x > 0 || st.bubble_y > 0);
     const isSmallIcon = st.icon_size === "small";
-    const dispCard = `<div class="card" id="sec-disp" style="margin-bottom:10px"><b>🪄 Kiểu hiển thị, Cỡ Icon iOS & Vị trí ghim</b>
-      <div class="muted small" style="margin-top:2px">Kéo trực tiếp <b>tai thỏ, viên thuốc, bong bóng</b> hoặc <b>thanh tiêu đề trên cùng của popup</b> để ghim ở bất kỳ vị trí nào trên màn hình.</div>
-      <div class="disp-grid">${[["notch", "Tai thỏ", "Ôm sát tai thỏ hoặc kéo đi bất kỳ đâu"], ["pill", "Viên thuốc", "Viên thuốc nổi, kéo & ghim mọi vị trí"], ["bubble", "Bong bóng", "Nút tròn nổi gọn, kéo đi đâu cũng được"]]
+    const dispCard = `<div class="card" id="sec-disp" style="margin-bottom:10px"><b>Kiểu hiển thị & Vị trí</b>
+      <div class="disp-grid">${[["notch", "Tai thỏ", "Ôm sát tai thỏ"], ["pill", "Viên thuốc", "Viên thuốc nổi"], ["bubble", "Bong bóng", "Nút tròn nổi"]]
         .map(([id, name, why]) => `<button class="disp-opt ${DISP === id ? "on" : ""}" data-disp="${id}"><span class="disp-pv pv-${id}"></span><b>${name}</b><span class="muted small">${why}</span></button>`).join("")}</div>
       <div class="row" style="margin-top:10px;padding-top:8px;border-top:1px solid var(--line)">
-        <div class="grow small"><b>📱 Cỡ biểu tượng (Icon kiểu iOS):</b> <span class="muted">Áp dụng cho thanh tính năng, bảng Tất cả & Control Center khi rê chuột</span></div>
+        <div class="grow small"><b>Cỡ biểu tượng:</b> <span class="muted">Kích thước thanh điều hướng</span></div>
         <div class="seg">
-          <button class="${!isSmallIcon ? "on" : ""}" data-icon-size="large">Icon To (iOS)</button>
-          <button class="${isSmallIcon ? "on" : ""}" data-icon-size="small">Icon Nhỏ</button>
+          <button class="${!isSmallIcon ? "on" : ""}" data-icon-size="large">Chuẩn</button>
+          <button class="${isSmallIcon ? "on" : ""}" data-icon-size="small">Nhỏ</button>
         </div>
       </div>
       <div class="row" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">
-        <div class="grow small"><b>📍 Vị trí trên màn hình:</b> <span class="muted">${hasCustomPos ? `Đang ghim tại (${Math.round(st.bubble_x)}, ${Math.round(st.bubble_y)})` : "Mặc định (giữa mép trên / góc phải)"}</span></div>
-        <button class="btn sm ${pinned ? "primary" : ""}" data-s="pin-toggle" title="Giữ bảng mở khi bấm sang ứng dụng khác">${I.pin} ${pinned ? "Đang ghim mở popup" : "Ghim mở popup"}</button>
-        <button class="btn sm ghost" data-s="reset-pos" ${hasCustomPos ? "" : "disabled"}>Đặt về vị trí mặc định</button>
+        <div class="grow small"><b>Vị trí ghim:</b> <span class="muted">${hasCustomPos ? `(${Math.round(st.bubble_x)}, ${Math.round(st.bubble_y)})` : "Mặc định"}</span></div>
+        <button class="btn sm ${pinned ? "primary" : ""}" data-s="pin-toggle">${pinned ? "Đang ghim mở" : "Ghim mở"}</button>
+        <button class="btn sm ghost" data-s="reset-pos" ${hasCustomPos ? "" : "disabled"}>Đặt lại vị trí</button>
       </div></div>`;
-    const IDLE_OPTS = [["focus", "⏱", "Đồng hồ tập trung"], ["overdue", "🔴", "Số việc trễ"], ["event", "📅", "Lịch sắp tới"], ["next", "⏰", "Việc sắp đến hạn"], ["time", "🕒", "Giờ hiện tại"],
-      ["tasks", "✅", "Số việc còn lại"], ["notes", "✎", "Số ghi chú"], ["clips", "📋", "Số mục clipboard"], ["disk", "💾", "Dung lượng trống"], ["mic", "🎙", "Nút mic"]];
+    const IDLE_OPTS = [["focus", "", "Đồng hồ tập trung"], ["overdue", "", "Số việc trễ"], ["event", "", "Lịch sắp tới"], ["next", "", "Việc sắp đến hạn"], ["time", "", "Giờ hiện tại"],
+      ["tasks", "", "Số việc còn lại"], ["notes", "", "Số ghi chú"], ["clips", "", "Số mục clipboard"], ["disk", "", "Dung lượng trống"], ["mic", "", "Nút micro"]];
     const idl = idleItems();
     const curWing = currentWingPx();
     const curH = st.notch_h > 0 ? Math.round(st.notch_h) : Math.max(Math.round(geo.notch_height), 32);
-    const idleCard = `<div class="card" style="margin-bottom:10px"><b>🌙 Kích thước Tai thỏ & Chế độ chờ</b>
-      <div class="muted small" style="margin-top:2px">Kéo thanh trượt hoặc nắm kéo trực tiếp 2 mép trái/phải của tai thỏ. Kéo về <b>0 px (Ẩn sau tai thỏ)</b> để tai thỏ hoàn toàn biến mất sau phần cứng MacBook, chỉ hiện ra khi bạn rê chuột lên mép trên.</div>
-      <div class="row" style="margin-top:8px"><span class="small grow">Mức chọn nhanh</span>
-        <div class="seg">${[["hidden", "Ẩn sau tai thỏ"], ["xs", "Siêu gọn"], ["s", "Gọn"], ["m", "Vừa"], ["l", "Rộng"]].map(([v, n]) => `<button class="${(st.wing_size || "s") === v ? "on" : ""}" data-wing="${v}">${n}</button>`).join("")}</div></div>
+    const idleCard = `<div class="card" style="margin-bottom:10px"><b>Kích thước Tai thỏ & Chế độ chờ</b>
+      <div class="row" style="margin-top:8px"><span class="small grow">Độ rộng cánh tai thỏ</span>
+        <div class="seg">${[["hidden", "Ẩn kín"], ["xs", "Rất gọn"], ["s", "Gọn"], ["m", "Vừa"], ["l", "Rộng"]].map(([v, n]) => `<button class="${(st.wing_size || "s") === v ? "on" : ""}" data-wing="${v}">${n}</button>`).join("")}</div></div>
       <div class="row" style="margin-top:8px">
-        <span class="small" style="min-width:135px">Độ rộng cánh tai thỏ:</span>
-        <input type="range" id="notchWRange" min="0" max="180" step="2" value="${curWing}" class="grow" style="accent-color:var(--accent)" />
-        <b class="small" id="notchWVal" style="min-width:155px;text-align:right">${curWing <= 2 ? "0 px (Ẩn hoàn toàn sau tai thỏ)" : `+${curWing} px mỗi bên`}</b>
+        <span class="small" style="min-width:130px">Kéo chỉnh độ rộng:</span>
+        <input type="range" id="notchWRange" min="0" max="180" step="2" value="${curWing}" class="grow" />
+        <b class="small" id="notchWVal" style="min-width:80px;text-align:right">${curWing <= 2 ? "Ẩn kín" : `${curWing} px`}</b>
       </div>
       <div class="row" style="margin-top:6px">
-        <span class="small" style="min-width:135px">Độ cao tai thỏ:</span>
-        <input type="range" id="notchHRange" min="22" max="54" step="1" value="${curH}" class="grow" style="accent-color:var(--accent)" />
-        <b class="small" id="notchHVal" style="min-width:155px;text-align:right">${curH} px</b>
+        <span class="small" style="min-width:130px">Độ cao tai thỏ:</span>
+        <input type="range" id="notchHRange" min="22" max="54" step="1" value="${curH}" class="grow" />
+        <b class="small" id="notchHVal" style="min-width:80px;text-align:right">${curH} px</b>
       </div>
-      <div class="idle-grid" style="margin-top:10px">${IDLE_OPTS.map(([id, ic, name]) => `<label class="feat ${idl.includes(id) ? "on" : ""}"><input type="checkbox" data-idle="${id}" ${idl.includes(id) ? "checked" : ""}/><span>${ic}</span><span>${name}</span></label>`).join("")}</div></div>`;
-    const vocabCard = `<div class="card" style="margin-bottom:10px"><div class="row"><div class="grow"><b>📚 Học từ mới tiếng Anh</b>
-        <div class="muted small">Mỗi lần mở tai thỏ, trang chủ hiện vài từ mới kèm phiên âm; tab “Từ mới” để nghe mẫu và đọc thử.</div></div>
+      <div class="idle-grid" style="margin-top:10px">${IDLE_OPTS.map(([id, , name]) => `<label class="feat ${idl.includes(id) ? "on" : ""}"><input type="checkbox" data-idle="${id}" ${idl.includes(id) ? "checked" : ""}/><span>${name}</span></label>`).join("")}</div></div>`;
+    const vocabCard = `<div class="card" style="margin-bottom:10px"><div class="row"><div class="grow"><b>Học từ mới tiếng Anh</b>
+        <div class="muted small">Hiện từ vựng mới kèm phiên âm trên trang chính</div></div>
         <div class="seg">${[2, 3].map((n) => `<button class="${(st.vocab_count || 3) === n ? "on" : ""}" data-vcount="${n}">${n} từ</button>`).join("")}</div>
         <label class="row small" style="margin-left:8px"><input type="checkbox" data-k2="vocab_enabled" ${st.vocab_enabled !== false ? "checked" : ""}/> Bật</label></div></div>`;
     const V = window.VNKey;
@@ -3358,30 +3345,30 @@
     const imeCard = `<div class="card" id="sec-ime" style="margin-bottom:10px">
       <div class="row">
         <div class="grow">
-          <b>⌨️ Bộ gõ tiếng Việt thông minh (Telex / VNI)</b>
-          <div class="muted small">${ime && ime.current ? `Bàn phím hệ thống: ${esc(ime.current.split(".").pop())} · ` : ""}Tự chuyển macOS sang ABC khi mở bảng và trả lại bộ gõ cũ khi đóng để không bao giờ bị nuốt chữ.</div>
+          <b>Bộ gõ tiếng Việt (Telex / VNI)</b>
+          <div class="muted small">Tự động chuyển bàn phím hệ thống khi tương tác</div>
         </div>
-        <span class="chip ${curMode ? "blue" : ""}" id="imeActiveBadge">${curMode ? `Đang bật: ${curMode === "vni" ? "VNI" : "Telex"}` : "Đang tắt (EN)"}</span>
+        <span class="chip ${curMode ? "blue" : ""}" id="imeActiveBadge">${curMode ? (curMode === "vni" ? "VNI" : "Telex") : "Tắt (EN)"}</span>
       </div>
       <div class="row" style="margin-top:8px">
-        <span class="small muted grow">Chế độ gõ trong Mini-Asi</span>
+        <span class="small muted grow">Chế độ gõ</span>
         <div class="seg">
-          ${[["auto", "Tự động"], ["telex", "Luôn Telex"], ["vni", "Luôn VNI"], ["off", "Tắt (EN)"]].map(([v, lbl]) => `<button class="${(st.viet_engine || "auto") === v ? "on" : ""}" data-vengine="${v}">${lbl}</button>`).join("")}
+          ${[["auto", "Tự động"], ["telex", "Telex"], ["vni", "VNI"], ["off", "Tắt"]].map(([v, lbl]) => `<button class="${(st.viet_engine || "auto") === v ? "on" : ""}" data-vengine="${v}">${lbl}</button>`).join("")}
         </div>
       </div>
       <div style="margin-top:8px">
-        <input class="input" id="imeTestInput" placeholder="Gõ thử tiếng Việt tại đây: xin chaof Vietj Nam, dduwocj, thuwong, nguwoif…" style="height:34px;font-size:12.5px" />
+        <input class="input" id="imeTestInput" placeholder="Gõ thử tiếng Việt: xin chào Việt Nam, được, thương…" style="height:32px;font-size:12px" />
       </div>
     </div>`;
     $("#view").innerHTML = updCard + permCard + dispCard + idleCard + aiCard + ttsCard + vocabCard + imeCard + featCard + backupCard + `<div style="height:10px"></div>
       <div class="card ${lic.pro ? "" : "upsell"}" style="margin:0 0 10px">
         ${lic.pro
-          ? `<div class="row">${I.sparkle}<div class="grow"><b>Mini-Asi Pro</b><div class="muted small">${esc(lic.email)}${lic.expires ? ` · hết hạn ${new Date(lic.expires * 1000).toLocaleDateString("vi-VN")}` : " · vĩnh viễn"}</div></div>
+          ? `<div class="row"><div class="grow"><b>Mini-Asi Pro</b><div class="muted small">${esc(lic.email)}${lic.expires ? ` · hết hạn ${new Date(lic.expires * 1000).toLocaleDateString("vi-VN")}` : " · vĩnh viễn"}</div></div>
              <button class="btn sm ghost" data-s="unlic">Gỡ khoá</button></div>`
-          : `<div class="grow"><b>${I.sparkle} Nâng cấp Mini-Asi Pro</b>
-             <div class="muted small" style="margin:2px 0 8px">Dọn sâu: file cài đặt, thư mục build, file lớn, sao lưu iPhone, ảnh chụp màn hình cũ.</div>
+          : `<div class="grow"><b>Nâng cấp Mini-Asi Pro</b>
+             <div class="muted small" style="margin:2px 0 8px">Dọn sâu: file cài đặt, thư mục build, file lớn, sao lưu iPhone cũ.</div>
              <div class="row"><input class="input" id="licKey" placeholder="Dán khoá bản quyền MASI1.…" style="height:32px" />
-             <button class="btn primary" data-s="lic">Kích hoạt</button></div>
+             <button class="btn primary sm" data-s="lic">Kích hoạt</button></div>
              <div class="small" id="licMsg" style="color:var(--red);margin-top:4px"></div></div>`}
       </div>
       <div class="card">
@@ -3398,7 +3385,7 @@
           <span class="chip">${mac ? "⌘ ⇧ Space" : "Ctrl ⇧ Space"}</span></div>
         <div class="setting"><div class="grow"><b>Màn hình</b><span>${geo.has_notch ? `Có tai thỏ (${Math.round(geo.notch_width)}×${Math.round(geo.notch_height)})` : "Không có tai thỏ — dùng tai thỏ ảo"}</span></div></div>
       </div>
-      <div class="sec">${I.clip} Clipboard</div>
+      <div class="sec">Clipboard</div>
       <div class="card">
         <div class="setting"><div class="grow"><b>Lưu lịch sử clipboard</b><span>Chữ, ảnh, file — bỏ qua mật khẩu từ trình quản lý mật khẩu</span></div>
           <button class="switch ${st.clip_enabled ? "on" : ""}" data-k="clip_enabled"></button></div>
@@ -3410,7 +3397,7 @@
         <div class="setting"><div class="grow"><b>Phím tắt mở clipboard</b><span>Mở thẳng danh sách đã chép</span></div>
           <span class="chip">${esc(st.clip_shortcut.replace("Control", "⌃").replace("Shift", "⇧").replace("Alt", "⌥").replace(/\+/g, " "))}</span></div>
       </div>
-      <div class="sec">${I.mic} Giọng nói & nhật ký</div>
+      <div class="sec">Giọng nói & Nhật ký</div>
       <div class="card">
         <div class="setting"><div class="grow"><b>Ngôn ngữ giọng nói</b><span>Dùng khi ghi chú, thêm việc, viết nhật ký bằng giọng nói</span></div>
           <select class="input" data-k="voice_lang"><option value="vi-VN" ${st.voice_lang === "vi-VN" ? "selected" : ""}>Tiếng Việt</option>
@@ -3419,7 +3406,7 @@
           <input class="input num" type="number" min="17" max="23" value="${st.journal_hour}" data-k="journal_hour" /><span class="muted small">giờ</span>
           <button class="switch ${st.journal_enabled ? "on" : ""}" data-k="journal_enabled"></button></div>
       </div>
-      ${mac ? `<div class="sec">${I.sync} Đồng bộ với app Apple</div>
+      ${mac ? `<div class="sec">Đồng bộ với ứng dụng Apple</div>
       <div class="card">
         <div class="setting"><div class="grow"><b>Việc ⇄ Lời nhắc (Reminders)</b><span>Hai chiều, trong danh sách “${esc(st.reminders_list)}”</span></div>
           <input class="input" style="width:110px;height:28px" value="${esc(st.reminders_list)}" data-k="reminders_list" />
@@ -3531,6 +3518,10 @@
   } else {
     await setMode("collapsed", { force: true });
     flashMood("happy", 1800); // chào khi khởi động
+    // Chỉ dùng khi xem thử bằng trình duyệt (dev-mock): ?open=peek | ?open=<tab> để mở sẵn một màn hình
+    const devOpen = document.body.classList.contains("mock") ? URL_PARAMS.get("open") : null;
+    if (devOpen === "peek") await setMode("peek", { force: true });
+    else if (devOpen) { tab = devOpen; await setMode("expanded", { force: true }); }
   }
 
   // Cho phép extra.js (Clipboard, Nhật ký) dùng chung tiện ích
