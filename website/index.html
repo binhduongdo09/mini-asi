@@ -3,22 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini-Asi — Trợ lý thông minh sống quanh tai thỏ MacBook</title>
-  <meta name="description" content="Trợ lý desktop cá nhân sống quanh tai thỏ MacBook theo phong cách Dynamic Island. Quản lý việc, ghi chú, ghi âm & biên bản cuộc họp, dọn máy và tích hợp Apple Intelligence on-device.">
-  <meta name="keywords" content="Mini-Asi, trợ lý macbook, notch macbook, dynamic island macos, ghi âm cuộc họp mac, apple intelligence tiếng việt">
+  <title>Mini-Asi — Trợ lý cho tai thỏ MacBook</title>
+  <meta name="description" content="Trợ lý desktop sống quanh tai thỏ MacBook: ghi âm và biên bản cuộc họp, quản lý công việc câu tự nhiên, trí tuệ nhân tạo on-device và dọn máy.">
   
-  <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://binhduongdo09.github.io/mini-asi-web/">
-  <meta property="og:title" content="Mini-Asi — Trợ lý thông minh sống quanh tai thỏ MacBook">
-  <meta property="og:description" content="Quản lý việc, ghi chú, ghi âm & biên bản cuộc họp, dọn máy và tích hợp Apple Intelligence on-device. Thuần tiếng Việt, 100% riêng tư.">
-  <meta property="og:image" content="https://binhduongdo09.github.io/mini-asi-web/assets/icon-1024.png">
-
-  <!-- Twitter -->
-  <meta property="twitter:card" content="summary_large_image">
-  <meta property="twitter:title" content="Mini-Asi — Trợ lý thông minh sống quanh tai thỏ MacBook">
-  <meta property="twitter:description" content="Quản lý việc, ghi chú, ghi âm cuộc họp AI và trợ lý tai thỏ MacBook.">
-  <meta property="twitter:image" content="https://binhduongdo09.github.io/mini-asi-web/assets/icon-1024.png">
+  <meta property="og:title" content="Mini-Asi — Trợ lý cho tai thỏ MacBook">
+  <meta property="og:description" content="Biên bản cuộc họp, quản lý công việc và trí tuệ nhân tạo ngay tại camera. Nhanh, bảo mật và thuần tiếng Việt.">
+  <meta property="og:image" content="assets/icon-1024.png">
 
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
@@ -26,596 +18,303 @@
 </head>
 <body>
 
-  <!-- Background Ambience Glow -->
-  <div class="ambient-glow glow-top"></div>
-  <div class="ambient-glow glow-bottom"></div>
-
-  <!-- Header -->
-  <header class="site-header">
-    <div class="header-inner container">
-      <a href="#" class="brand">
-        <img src="assets/icon.png" alt="Mini-Asi Logo" class="brand-logo">
-        <span class="brand-name">Mini-Asi</span>
+  <!-- Navigation -->
+  <nav class="site-nav">
+    <div class="container nav-wrapper">
+      <a href="#" class="nav-brand" aria-label="Trang chủ Mini-Asi">
+        <img src="assets/icon.png" alt="" width="24" height="24" class="brand-icon">
+        <span>Mini-Asi</span>
       </a>
 
-      <nav class="nav-links">
-        <a href="#features">Tính năng</a>
-        <a href="#demo">Trải nghiệm Notch</a>
-        <a href="#meeting">Họp & AI</a>
-        <a href="#privacy">Bảo mật</a>
-        <a href="#download">Tải về</a>
-      </nav>
+      <div class="nav-menu">
+        <a href="#meeting" class="nav-link">Cuộc họp</a>
+        <a href="#tasks" class="nav-link">Công việc</a>
+        <a href="#intelligence" class="nav-link">Trí tuệ nhân tạo</a>
+        <a href="#specs" class="nav-link">Kỹ thuật</a>
+        <a href="#download" class="nav-link">Tải về</a>
+      </div>
 
-      <div class="header-actions">
-        <a href="https://github.com/binhduongdo09/mini-asi" target="_blank" rel="noopener" class="btn btn-ghost" title="Mã nguồn GitHub">
-          <svg class="icon" viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-          </svg>
-          <span class="btn-text">GitHub</span>
+      <div class="nav-actions">
+        <a href="https://github.com/binhduongdo09/mini-asi" target="_blank" rel="noopener" class="btn btn-subtle">
+          GitHub
         </a>
         <a href="#download" class="btn btn-primary">
-          <span>Tải bản v0.16.0</span>
+          Tải về
         </a>
       </div>
     </div>
-  </header>
+  </nav>
 
   <!-- Hero Section -->
-  <section class="hero-section container">
-    <div class="badge-pill">
-      <span class="badge-dot"></span>
-      <span>Phiên bản v0.16.0: Tab Họp AI & Apple Intelligence trên máy</span>
-    </div>
-
-    <h1 class="hero-title">
-      Trợ lý thông minh sống quanh<br>
-      <span class="gradient-text">tai thỏ MacBook</span>
-    </h1>
-
-    <p class="hero-subtitle">
-      Mini-Asi là một hòn đảo màu đen ôm lấy tai thỏ MacBook theo phong cách Dynamic Island.
-      Quản lý việc, ghi chú, ghi âm & tóm tắt cuộc họp, dọn rác và trợ lý AI — tất cả sẵn sàng chỉ với một cái rê chuột.
+  <header class="hero container">
+    <h1 class="hero-title">Trợ lý cho tai thỏ MacBook</h1>
+    <p class="hero-description">
+      Biên bản cuộc họp, quản lý công việc và trí tuệ nhân tạo ngay tại camera. Nhanh, bảo mật và thuần tiếng Việt.
     </p>
 
-    <div class="hero-cta-group">
-      <a href="https://github.com/binhduongdo09/mini-asi/releases/download/build-19/Mini-Asi_0.16.0_universal.dmg" class="btn btn-cta">
-        <svg class="icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-          <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.76 1.05-1.82.93-2.88-.91.04-2.02.61-2.67 1.37-.58.67-1.09 1.74-.95 2.78 1.02.08 2.07-.51 2.69-1.27z"/>
-        </svg>
-        <span>Tải về cho Mac (Universal)</span>
-        <span class="btn-subtext">.dmg • macOS 13+ • 7.8 MB</span>
+    <div class="hero-cta">
+      <a href="https://github.com/binhduongdo09/mini-asi/releases/latest" class="btn btn-primary hero-action-main">
+        Tải cho macOS (Universal)
       </a>
-
-      <a href="#demo" class="btn btn-secondary">
-        <svg class="icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-          <polygon points="5 3 19 12 5 21 5 3"></polygon>
-        </svg>
-        <span>Xem thử tương tác</span>
+      <a href="#meeting" class="btn btn-subtle hero-action-main">
+        Xem tính năng
       </a>
     </div>
 
     <div class="hero-meta">
-      <div class="meta-item">
-        <span class="meta-icon">⚡</span>
-        <span>Hỗ trợ Apple Silicon (M1-M4) & Intel</span>
-      </div>
-      <div class="meta-item">
-        <span class="meta-icon">🔒</span>
-        <span>100% On-device Privacy</span>
-      </div>
-      <div class="meta-item">
-        <span class="meta-icon">🇻🇳</span>
-        <span>Thuần tiếng Việt, giọng đọc tự nhiên</span>
-      </div>
+      <span>Phiên bản v0.17.0</span>
+      <span>Dung lượng 7.8 MB</span>
+      <span>Apple Silicon & Intel</span>
     </div>
-  </section>
+  </header>
 
-  <!-- Interactive Notch Simulator Demo -->
-  <section class="demo-section container" id="demo">
-    <div class="section-header">
-      <h2 class="section-title">Trải nghiệm tương tác ngay trên tai thỏ</h2>
-      <p class="section-subtitle">Bấm vào các nút tính năng bên dưới để xem cách Mini-Asi biến hóa quanh tai thỏ</p>
-    </div>
+  <!-- Hardware Notch Showcase -->
+  <section class="container" aria-label="Giao diện mô phỏng">
+    <div class="notch-display-frame">
+      <div class="camera-hole"></div>
 
-    <!-- Simulator Tabs Selector -->
-    <div class="simulator-controls">
-      <button class="tab-btn active" data-tab="peek">
-        <span class="tab-icon">🏝️</span>
-        <span class="tab-label">Notch & Peek</span>
-      </button>
-      <button class="tab-btn" data-tab="meeting">
-        <span class="tab-icon">🎙️</span>
-        <span class="tab-label">Họp & Tóm tắt AI</span>
-      </button>
-      <button class="tab-btn" data-tab="chat">
-        <span class="tab-icon">✦</span>
-        <span class="tab-label">Asi AI Trợ lý</span>
-      </button>
-      <button class="tab-btn" data-tab="tasks">
-        <span class="tab-icon">✅</span>
-        <span class="tab-label">Việc cần làm</span>
-      </button>
-      <button class="tab-btn" data-tab="drop">
-        <span class="tab-icon">📦</span>
-        <span class="tab-label">Kéo thả & OCR</span>
-      </button>
-      <button class="tab-btn" data-tab="social">
-        <span class="tab-icon">📱</span>
-        <span class="tab-label">Social nhanh</span>
-      </button>
-    </div>
-
-    <!-- Mockup Hardware Screen -->
-    <div class="macbook-screen">
-      <div class="macbook-camera"></div>
-      
-      <!-- Dynamic Island / Notch Container -->
-      <div class="notch-island state-peek" id="notchIsland">
-        
-        <!-- Notch Core Body -->
-        <div class="notch-body">
-
-          <!-- View 1: Peek / Standby -->
-          <div class="notch-view view-peek active">
-            <div class="peek-left">
-              <span class="mascot-eyes">
-                <span class="eye left"></span>
-                <span class="eye right"></span>
-              </span>
-              <span class="peek-status-text">Hôm nay còn 2 việc cần xong</span>
-            </div>
-            <div class="peek-right">
-              <span class="peek-badge badge-green">14:00 Họp dự án</span>
-              <div class="peek-actions">
-                <span class="quick-act" title="Micro">🎙️</span>
-                <span class="quick-act" title="AirDrop">📡</span>
-                <span class="quick-act" title="Tập trung">◎</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- View 2: Meeting Recording -->
-          <div class="notch-view view-meeting">
-            <div class="meeting-header">
-              <div class="rec-indicator">
-                <span class="rec-dot"></span>
-                <span class="rec-text">Đang ghi cuộc họp: Họp kế hoạch Q4</span>
-                <span class="rec-timer" id="recTimer">04:38</span>
-              </div>
-              <button class="btn btn-sm btn-danger">Dừng & Tóm tắt</button>
-            </div>
-            <div class="meeting-wave-container">
-              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
-              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
-              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
-              <div class="wave-bar"></div><div class="wave-bar"></div><div class="wave-bar"></div>
-            </div>
-            <div class="meeting-transcript-preview">
-              <p><strong>Bạn:</strong> Tiến độ phần tích hợp Apple Intelligence đang vượt kế hoạch 2 ngày.</p>
-              <p><strong>Người khác (Zoom):</strong> Đội thiết kế đã chốt giao diện tối giản kiểu Dynamic Island.</p>
-            </div>
-            <div class="meeting-summary-box">
-              <span class="summary-tag">✨ Tóm tắt AI (Apple Intelligence on-device):</span>
-              <ul>
-                <li>Đã thống nhất kiến trúc bản v0.16.0</li>
-                <li><span class="badge-task">+ Việc:</span> Bàn giao tài liệu API trước 17h chiều mai</li>
-              </ul>
-            </div>
-          </div>
-
-          <!-- View 3: Chat AI Assistant -->
-          <div class="notch-view view-chat">
-            <div class="chat-header">
-              <div class="chat-title">
-                <span class="ai-spark">✦</span>
-                <span>Asi — Apple Intelligence on-device</span>
-              </div>
-              <span class="chat-badge">Giọng Mai Phương</span>
-            </div>
-            <div class="chat-messages">
-              <div class="chat-bubble user">
-                Thời tiết chiều nay ở Hà Nội thế nào và có lịch gì không?
-              </div>
-              <div class="chat-bubble bot">
-                <p>Hà Nội chiều nay trời mát 26°C, không mưa. Bạn có 1 sự kiện lịch lúc <strong>15:30: Trao đổi với đối tác</strong> và 2 việc cần hoàn thành.</p>
-                <div class="ai-source-tag">Nguồn: Open-Meteo & Lịch Apple • Trả lời tức thì</div>
-              </div>
-            </div>
-            <div class="chat-input-row">
-              <input type="text" class="chat-field" placeholder="Hỏi Asi hoặc ra lệnh bằng giọng nói..." value="Nhắc tôi sáng mai 9h gửi báo cáo tuần">
-              <button class="btn btn-sm btn-primary">Gửi</button>
-            </div>
-          </div>
-
-          <!-- View 4: Tasks -->
-          <div class="notch-view view-tasks">
-            <div class="tasks-header">
-              <span class="tasks-title">Việc hôm nay (Đồng bộ Apple Reminders)</span>
-              <span class="tasks-count">2/4 Đã xong</span>
-            </div>
-            <div class="task-list">
-              <div class="task-item done">
-                <span class="task-check">✓</span>
-                <span class="task-name">Gửi demo Mini-Asi cho đội kiểm thử</span>
-                <span class="task-time">09:00</span>
-              </div>
-              <div class="task-item">
-                <span class="task-check">○</span>
-                <span class="task-name">Họp thống nhất biên bản v0.16.0</span>
-                <span class="task-time badge-red">14:00 (Sắp tới)</span>
-              </div>
-              <div class="task-item">
-                <span class="task-check">○</span>
-                <span class="task-name">Soát lại các phím tắt tai thỏ</span>
-                <span class="task-time">17:00</span>
-              </div>
-            </div>
-            <div class="task-add-row">
-              <span class="task-add-hint">Nhập tự nhiên: "mai 10h gặp anh Tuấn", "thứ 6 nộp thuế"...</span>
-            </div>
-          </div>
-
-          <!-- View 5: Smart Drop & OCR -->
-          <div class="notch-view view-drop">
-            <div class="drop-header">
-              <span class="drop-icon-large">📦</span>
-              <div>
-                <strong>Thả vào tai thỏ → Tạo việc & Lịch tự động</strong>
-                <p class="drop-sub">Kéo văn bản, ảnh chụp màn hình, link, file danh bạ .vcf</p>
-              </div>
-            </div>
-            <div class="drop-demo-card">
-              <div class="ocr-badge">Vision OCR on-device trích xuất chữ:</div>
-              <div class="ocr-text">"Hẹn phỏng vấn ứng viên lúc 14h30 thứ 4 tuần này tại phòng họp A"</div>
-              <div class="drop-action-suggestion">
-                <span>💡 Asi đề xuất: <strong>Tạo sự kiện Lịch lúc 14:30 Thứ Tư</strong></span>
-                <button class="btn btn-sm btn-primary">Tạo ngay</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- View 6: Social -->
-          <div class="notch-view view-social">
-            <div class="social-header">
-              <span>Cửa sổ Social dạng điện thoại dưới tai thỏ</span>
-              <span class="social-status">Đang mở: Threads</span>
-            </div>
-            <div class="social-grid-pills">
-              <span class="spill active">Threads •</span>
-              <span class="spill">Facebook</span>
-              <span class="spill">Messenger</span>
-              <span class="spill">Instagram</span>
-              <span class="spill">X</span>
-              <span class="spill">TikTok</span>
-              <span class="spill">YouTube</span>
-            </div>
-            <div class="social-preview-card">
-              <p>Mỗi mạng xã hội hiển thị trong một cửa sổ điện thoại gọn gàng ngay dưới tai thỏ. Không tràn màn hình, không làm phiền khi đang làm việc.</p>
-            </div>
-          </div>
-
+      <!-- Menubar -->
+      <div class="frame-topbar">
+        <div class="menubar-left">
+          <span class="apple-mark"></span>
+          <span class="menubar-app">Mini-Asi</span>
+          <span>Tệp</span>
+          <span>Sửa</span>
+          <span>Xem</span>
+        </div>
+        <div>
+          <span>Th 2, 9 Th 11 &nbsp; 14:30</span>
         </div>
       </div>
 
-      <!-- Desktop Wallpaper Simulator Background -->
-      <div class="screen-content-mock">
-        <div class="mock-menubar">
-          <span class="apple-logo"></span>
-          <span class="menu-item active">Finder</span>
-          <span class="menu-item">Tệp</span>
-          <span class="menu-item">Sửa</span>
-          <span class="menu-item">Xem</span>
+      <!-- Notch Body -->
+      <div class="notch-element" id="notchElement">
+
+        <!-- Panel 1: Standby / Peek -->
+        <div class="notch-panel active" id="panelStandby">
+          <div class="notch-standby">
+            <div class="standby-left">
+              <div class="standby-mascot">
+                <span class="mascot-eye"></span>
+                <span class="mascot-eye"></span>
+              </div>
+              <span>Hôm nay còn 2 việc cần hoàn thành</span>
+            </div>
+            <div class="standby-right">
+              <span class="tag-urgent">15:00 Họp kế hoạch</span>
+            </div>
+          </div>
         </div>
-        <div class="mock-desktop-center">
-          <p class="desktop-hint">Bấm các tab phía trên để đổi chế độ của tai thỏ</p>
+
+        <!-- Panel 2: Meeting Rec -->
+        <div class="notch-panel" id="panelMeeting">
+          <div class="meeting-ui">
+            <div class="meeting-bar">
+              <div class="meeting-rec">
+                <span class="rec-pulse"></span>
+                <span>Ghi âm cuộc họp</span>
+                <span class="rec-time" id="recTimer">04:38</span>
+              </div>
+              <span style="font-size: 10px; color: var(--ink-tertiary);">Micro + Zoom</span>
+            </div>
+            <div class="meeting-snippet">
+              <p><span class="snippet-speaker">Bạn:</span> Tiến độ bản build v0.17.0 đang đi đúng kế hoạch.</p>
+              <p><span class="snippet-speaker">Người khác:</span> Giao diện tối giản đã giải quyết hoàn toàn vấn đề thị giác.</p>
+            </div>
+            <div class="meeting-actions-list">
+              <div class="actions-label">Việc cần làm sau cuộc họp:</div>
+              <div>• Xuất bản website mới lên GitHub Pages trước 17:00</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel 3: Chat AI -->
+        <div class="notch-panel" id="panelChat">
+          <div class="chat-ui">
+            <div class="chat-bubble-user">
+              Chiều nay ở Hà Nội có mưa không và tôi có lịch gì tiếp theo?
+            </div>
+            <div class="chat-bubble-bot">
+              <p>Hà Nội chiều nay 26°C, trời tạnh ráo. Lịch tiếp theo là <strong>15:00: Họp kế hoạch</strong> và có 2 việc chưa hoàn thành.</p>
+              <span class="source-label">Apple Intelligence on-device & Lịch Apple</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Frame Body Switcher -->
+      <div class="frame-body">
+        <div class="switcher-pills" role="tablist" aria-label="Chế độ hiển thị tai thỏ">
+          <button class="pill-switch active" data-target="panelStandby" role="tab">Thu gọn</button>
+          <button class="pill-switch" data-target="panelMeeting" role="tab">Ghi âm cuộc họp</button>
+          <button class="pill-switch" data-target="panelChat" role="tab">Trợ lý on-device</button>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Feature Highlights Grid -->
-  <section class="features-section container" id="features">
-    <div class="section-header">
-      <h2 class="section-title">Được thiết kế tinh xảo cho macOS</h2>
-      <p class="section-subtitle">Tối ưu hoá đến từng pixel, tiết kiệm pin tối đa và đặt quyền riêng tư lên hàng đầu.</p>
-    </div>
+  <!-- Section 1: Meeting Intelligence -->
+  <section class="section container" id="meeting">
+    <h2 class="section-title">Ghi âm và lập biên bản cuộc họp</h2>
+    <p class="section-lead">
+      Thu âm thanh song song từ micro của bạn và ứng dụng đàm thoại trực tuyến. 
+      Tự động bóc tách hội thoại, tóm tắt ý chính và trích xuất danh sách công việc.
+    </p>
 
-    <div class="features-grid">
-      
-      <!-- Card 1 -->
-      <div class="feature-card">
-        <div class="card-icon">🧠</div>
-        <h3 class="card-title">Apple Intelligence & AI Đa não</h3>
-        <p class="card-desc">
-          Tích hợp sẵn mô hình Apple Intelligence chạy trực tiếp trên Apple Silicon macOS 26+. 
-          Hỗ trợ thêm tùy chọn kết nối ChatGPT, Gemini, Claude qua API Key lưu bảo mật trong Keychain của bạn.
-        </p>
-        <span class="card-tag">Guided Action</span>
-      </div>
+    <div class="split-grid">
+      <div class="showcase-visual">
+        <div class="visual-header">
+          <span>Biên bản cuộc họp gần nhất</span>
+          <span>14 MB/giờ • m4a</span>
+        </div>
 
-      <!-- Card 2 -->
-      <div class="feature-card highlight">
-        <div class="card-icon">🎙️</div>
-        <h3 class="card-title">Ghi âm & Biên bản cuộc họp</h3>
-        <p class="card-desc">
-          Thu âm song song micro của bạn và âm thanh hệ thống (tiếng người khác trong Zoom, Google Meet, Teams).
-          Tự động chuyển chữ tiếng Việt trên máy và AI tóm tắt: Tóm tắt, Quyết định, Việc cần làm.
-        </p>
-        <span class="card-tag">Mới trong v0.16.0</span>
-      </div>
+        <div class="transcription-block">
+          <p><span class="speaker-tag">14:02 · Bạn:</span> Đã hoàn tất việc chuyển secret key ra file bảo mật 600 để tránh hỏi lại Keychain.</p>
+          <p><span class="speaker-tag">14:04 · Người khác:</span> Tính năng tra cứu cổ phiếu DNSE Entrade phản hồi rất nhanh.</p>
+        </div>
 
-      <!-- Card 3 -->
-      <div class="feature-card">
-        <div class="card-icon">✅</div>
-        <h3 class="card-title">Hiểu câu tự nhiên Việt/Anh</h3>
-        <p class="card-desc">
-          Nhập câu tự nhiên không cần cấu trúc gò bó: <em>"chiều mai 15h gọi khách"</em>, <em>"thứ 6 nộp báo cáo"</em>.
-          Tự động đồng bộ hai chiều với ứng dụng Lời nhắc (Apple Reminders).
-        </p>
-        <span class="card-tag">Đồng bộ Apple</span>
-      </div>
-
-      <!-- Card 4 -->
-      <div class="feature-card">
-        <div class="card-icon">📦</div>
-        <h3 class="card-title">Kéo thả thông minh & Vision OCR</h3>
-        <p class="card-desc">
-          Thả ảnh chụp màn hình, liên kết, danh bạ .vcf hoặc đoạn chat vào tai thỏ. 
-          Apple Vision đọc chữ trong ảnh ngay trên máy và tự động tạo lịch hoặc việc làm tương ứng.
-        </p>
-        <span class="card-tag">Vision on-device</span>
-      </div>
-
-      <!-- Card 5 -->
-      <div class="feature-card">
-        <div class="card-icon">📌</div>
-        <h3 class="card-title">Clipboard ghim vĩnh viễn</h3>
-        <p class="card-desc">
-          Lịch sử sao chép thông minh cho cả văn bản, ảnh và file. 
-          Mục ghim được giữ mãi ở đầu danh sách, hỗ trợ đặt tên (ví dụ: "STK công ty") và tìm kiếm theo nhãn.
-        </p>
-        <span class="card-tag">Phím tắt ⌃⇧V</span>
-      </div>
-
-      <!-- Card 6 -->
-      <div class="feature-card">
-        <div class="card-icon">🧹</div>
-        <h3 class="card-title">Dọn rác máy Mac & Tập trung</h3>
-        <p class="card-desc">
-          Quét dọn an toàn bộ nhớ đệm cache, log, Xcode, node_modules. File người dùng luôn được đưa vào Thùng rác.
-          Chế độ Tập trung Pomodoro 25 phút giúp làm việc không gián đoạn.
-        </p>
-        <span class="card-tag">An toàn 100%</span>
-      </div>
-
-      <!-- Card 7 -->
-      <div class="feature-card">
-        <div class="card-icon">🗣️</div>
-        <h3 class="card-title">Giọng đọc NghiTTS tự nhiên</h3>
-        <p class="card-desc">
-          Một bộ đọc Piper duy nhất chạy trực tiếp trên máy với 2 giọng tự nhiên Mai Phương / Minh Quang.
-          Đọc câu trả lời, không cần kết nối Internet và tự tắt sau 5 phút rảnh để tiết kiệm RAM.
-        </p>
-        <span class="card-tag">Ngoại tuyến</span>
-      </div>
-
-      <!-- Card 8 -->
-      <div class="feature-card">
-        <div class="card-icon">💻</div>
-        <h3 class="card-title">Tai thỏ ảo, Viên thuốc & Bong bóng</h3>
-        <p class="card-desc">
-          Máy bạn không có tai thỏ (Mac mini, Mac Studio, iMac hoặc MacBook đời cũ)?
-          Mini-Asi tự động tạo tai thỏ ảo, hoặc chuyển sang dạng Viên thuốc nổi dưới menu hay Bong bóng di động.
-        </p>
-        <span class="card-tag">Mọi máy Mac</span>
-      </div>
-
-    </div>
-  </section>
-
-  <!-- Deep Dive: Meeting AI -->
-  <section class="meeting-deep-dive container" id="meeting">
-    <div class="meeting-box">
-      <div class="meeting-box-content">
-        <div class="badge-pill">Tính năng nổi bật</div>
-        <h2 class="deep-title">Biến mọi cuộc họp thành hành động cụ thể</h2>
-        <p class="deep-desc">
-          Không còn phải vội vàng ghi chép khi đang họp. Mini-Asi lắng nghe âm thanh từ cả hai phía, 
-          chuyển thành văn bản ngay trên máy và trích xuất danh sách việc cần làm một cách chính xác.
-        </p>
-        
-        <div class="feature-check-list">
-          <div class="check-item">
-            <span class="check-icon">✓</span>
-            <span>Thu âm thanh hệ thống (giọng đồng nghiệp qua Zoom, Meet, Teams)</span>
-          </div>
-          <div class="check-item">
-            <span class="check-icon">✓</span>
-            <span>Nhận dạng tiếng Việt trên thiết bị bằng Apple Speech</span>
-          </div>
-          <div class="check-item">
-            <span class="check-icon">✓</span>
-            <span>Tick chọn việc cần làm để chuyển thẳng vào tab Việc hoặc Apple Reminders</span>
-          </div>
-          <div class="check-item">
-            <span class="check-icon">✓</span>
-            <span>Toàn bộ âm thanh và biên bản chỉ lưu trong máy của bạn</span>
-          </div>
+        <div class="task-extract-card">
+          <h4>Việc cần làm được AI phát hiện:</h4>
+          <ul class="task-checklist">
+            <li class="checklist-row">
+              <span class="check-box checked">✓</span>
+              <span>Kiểm tra bản build Universal trên máy Intel (Đã xong)</span>
+            </li>
+            <li class="checklist-row">
+              <span class="check-box"></span>
+              <span>Cập nhật tài liệu hướng dẫn phím tắt tai thỏ</span>
+            </li>
+          </ul>
         </div>
       </div>
-      <div class="meeting-box-visual">
-        <div class="visual-card">
-          <div class="visual-header">
-            <span class="rec-badge">REC 00:32:15</span>
-            <span class="meeting-title-tag">Họp Sprint Review Q4</span>
-          </div>
-          <div class="visual-body">
-            <div class="action-items-preview">
-              <span class="action-title">Cần làm sau cuộc họp:</span>
-              <div class="action-row checked">
-                <span class="box-check">☑</span>
-                <span>Kiểm tra bản build Universal trên Apple Silicon (Dương)</span>
-              </div>
-              <div class="action-row">
-                <span class="box-check">☐</span>
-                <span>Cập nhật trang giới thiệu trên GitHub Pages (Hạn: 18h)</span>
-              </div>
-              <div class="action-row">
-                <span class="box-check">☐</span>
-                <span>Gửi thông báo cập nhật qua kênh cộng đồng</span>
-              </div>
-            </div>
-          </div>
+
+      <div class="capability-list">
+        <div class="capability-item">
+          <h3>Thu âm thanh hệ thống trực tiếp</h3>
+          <p>Ghi lại giọng người khác qua Zoom, Google Meet hoặc Microsoft Teams kể cả khi bạn đang đeo tai nghe.</p>
+        </div>
+
+        <div class="capability-item">
+          <h3>Nhận dạng tiếng Việt trên thiết bị</h3>
+          <p>Xử lý qua Apple Speech Engine ngay trên máy, không gửi âm thanh ra ngoài và tự động cắt đoạn ở các khoảng lặng.</p>
+        </div>
+
+        <div class="capability-item">
+          <h3>Trình phát nghe lại và biên tập</h3>
+          <p>Nghe lại âm thanh cuộc họp ở tốc độ 1×, 1.5× hoặc 2×. Bấm vào bất kỳ dòng nào để phát đúng thời điểm đó.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- Privacy First Section -->
-  <section class="privacy-section container" id="privacy">
-    <div class="privacy-card">
-      <div class="privacy-icon">🛡️</div>
-      <h2 class="privacy-title">Quyền riêng tư là ưu tiên tuyệt đối</h2>
-      <p class="privacy-desc">
-        Công việc, ghi chú, lịch sử họp, bản ghi âm và clipboard chứa những dữ liệu nhạy cảm nhất của bạn.
-        Mini-Asi được xây dựng với nguyên tắc <strong>Local-First</strong>: dữ liệu được lưu hoàn toàn trên máy tính của bạn
-        tại thư mục dữ liệu cục bộ. Không máy chủ trung gian, không thu thập dữ liệu ngầm, không quảng cáo.
-      </p>
-      <div class="privacy-grid">
-        <div class="p-item">
-          <strong>100% On-device</strong>
-          <span>Apple Intelligence & Speech-to-Text chạy ngay trên Apple Silicon</span>
-        </div>
-        <div class="p-item">
-          <strong>Lưu trữ an toàn</strong>
-          <span>API Key của bạn được bảo mật trong Apple Keychain</span>
-        </div>
-        <div class="p-item">
-          <strong>Sao lưu cá nhân</strong>
-          <span>Tùy chọn sao lưu trực tiếp vào Google Drive hoặc iCloud của chính bạn</span>
-        </div>
+  <!-- Section 2: Tasks & Natural Language -->
+  <section class="section container" id="tasks">
+    <h2 class="section-title">Quản lý việc bằng ngôn ngữ tự nhiên</h2>
+    <p class="section-lead">
+      Gõ câu tự nhiên không cần tuân theo cấu trúc cứng nhắc. Mini-Asi tự động trích xuất ngày, giờ, mức độ ưu tiên và đưa vào danh sách.
+    </p>
+
+    <div class="feature-matrix">
+      <div class="matrix-card">
+        <h3>Hiểu câu tiếng Việt</h3>
+        <p>Nhập "mai 15h gọi đối tác" hoặc "thứ 6 nộp báo cáo", ứng dụng tự đặt lịch nhắc chuẩn xác và đồng bộ hai chiều với Apple Reminders.</p>
+      </div>
+
+      <div class="matrix-card">
+        <h3>Kéo thả vào tai thỏ</h3>
+        <p>Thả ảnh chụp màn hình, liên kết hoặc đoạn văn bản vào tai thỏ. Apple Vision OCR trích xuất chữ và đề xuất tạo sự kiện lịch ngay.</p>
+      </div>
+
+      <div class="matrix-card">
+        <h3>Clipboard ghim vĩnh viễn</h3>
+        <p>Lưu lịch sử sao chép cả chữ lẫn ảnh. Mục ghim giữ nguyên vị trí ở đầu danh sách, hỗ trợ đặt tên gợi nhớ và tìm kiếm nhanh.</p>
       </div>
     </div>
   </section>
 
-  <!-- Download Section -->
-  <section class="download-section container" id="download">
-    <div class="section-header">
-      <h2 class="section-title">Sẵn sàng trải nghiệm Mini-Asi?</h2>
-      <p class="section-subtitle">Tải ngay phiên bản mới nhất hoàn toàn miễn phí. Cài đặt trong 30 giây.</p>
-    </div>
+  <!-- Section 3: Technical Specifications & Privacy -->
+  <section class="section container" id="specs">
+    <h2 class="section-title">Kiến trúc và quyền riêng tư</h2>
+    <p class="section-lead">
+      Thiết kế theo nguyên tắc Local-First. Tất cả dữ liệu cá nhân, ghi chú và lịch sử âm thanh được lưu trữ hoàn toàn trên ổ đĩa máy tính của bạn.
+    </p>
 
-    <div class="download-cards-container">
-      
-      <!-- Primary Mac Card -->
-      <div class="download-card primary">
-        <div class="os-header">
-          <svg class="os-icon" viewBox="0 0 24 24" width="36" height="36" fill="currentColor">
-            <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.62-.76 1.05-1.82.93-2.88-.91.04-2.02.61-2.67 1.37-.58.67-1.09 1.74-.95 2.78 1.02.08 2.07-.51 2.69-1.27z"/>
-          </svg>
-          <div>
-            <h3 class="os-title">macOS Universal</h3>
-            <span class="os-version">Bản v0.16.0 (Build 19) • ~7.8 MB</span>
-          </div>
-        </div>
-        <p class="os-support">Tương thích Apple Silicon (M1/M2/M3/M4) & Intel • macOS 13 Ventura trở lên</p>
-        
-        <div class="download-btn-wrapper">
-          <a href="https://github.com/binhduongdo09/mini-asi/releases/download/build-19/Mini-Asi_0.16.0_universal.dmg" class="btn btn-cta full-width">
-            <span>Tải bộ cài .DMG cho Mac</span>
+    <table class="specs-table">
+      <thead>
+        <tr>
+          <th>Hạng mục</th>
+          <th>Chi tiết kỹ thuật</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Nền tảng hỗ trợ</td>
+          <td>macOS 13 Ventura, macOS 14 Sonoma, macOS 15 Sequoia (Apple Silicon & Intel)</td>
+        </tr>
+        <tr>
+          <td>Dung lượng bộ nhớ</td>
+          <td>~7.8 MB bản tải về, chiếm dưới 40 MB RAM khi chạy nền</td>
+        </tr>
+        <tr>
+          <td>Bộ não trí tuệ nhân tạo</td>
+          <td>Apple Intelligence on-device (FoundationModels). Tùy chọn ChatGPT, Claude, Gemini qua API Key riêng</td>
+        </tr>
+        <tr>
+          <td>Bộ đọc giọng nói</td>
+          <td>Piper NghiTTS offline (giọng Mai Phương & Minh Quang), tự tắt tiến trình sau 5 phút rảnh</td>
+        </tr>
+        <tr>
+          <td>Vị trí lưu trữ dữ liệu</td>
+          <td><code>~/Library/Application Support/com.miniasi.app/</code> (không gửi lên máy chủ trung gian)</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Section 4: Download Box -->
+  <section class="section container" id="download">
+    <div class="download-box">
+      <div class="download-info">
+        <h3>Tải Mini-Asi cho máy tính</h3>
+        <p>Miễn phí, không cần tài khoản, cài đặt trong 30 giây bằng cách kéo vào thư mục Applications.</p>
+
+        <div class="download-actions">
+          <a href="https://github.com/binhduongdo09/mini-asi/releases/latest" class="btn btn-primary" style="padding: 12px 24px; font-size: 14px;">
+            Tải bản macOS Universal (.dmg)
           </a>
-        </div>
-
-        <div class="install-tip">
-          <strong>💡 Mẹo cài đặt lần đầu:</strong> Kéo Mini-Asi vào Applications. Lần đầu mở: chuột phải vào app chọn <em>Mở (Open)</em> hoặc vào <em>Cài đặt hệ thống › Quyền riêng tư & Bảo mật › Mở dù sao</em>.
-        </div>
-      </div>
-
-      <!-- Other Platforms -->
-      <div class="download-card secondary">
-        <div class="os-header">
-          <span class="os-sub-icon">🖥️</span>
-          <div>
-            <h3 class="os-title">Các nền tảng khác</h3>
-            <span class="os-version">Hỗ trợ chế độ Tai thỏ ảo & Viên thuốc</span>
-          </div>
-        </div>
-        
-        <div class="other-links-list">
-          <div class="other-link-item">
-            <span>Windows (x64):</span>
-            <a href="https://github.com/binhduongdo09/mini-asi/releases/download/build-19/Mini-Asi_0.16.0_x64-setup.exe" class="link-download">Bộ cài .EXE</a> •
-            <a href="https://github.com/binhduongdo09/mini-asi/releases/download/build-19/Mini-Asi_0.16.0_x64_en-US.msi" class="link-download">Gói .MSI</a>
-          </div>
-          <div class="other-link-item">
-            <span>Linux:</span>
-            <a href="https://github.com/binhduongdo09/mini-asi/releases/download/build-19/Mini-Asi_0.16.0_amd64.deb" class="link-download">Bản .DEB</a> •
-            <a href="https://github.com/binhduongdo09/mini-asi/releases/download/build-19/Mini-Asi_0.16.0_amd64.AppImage" class="link-download">Bản .AppImage</a>
-          </div>
-          <div class="other-link-item">
-            <span>Mã nguồn:</span>
-            <a href="https://github.com/binhduongdo09/mini-asi" target="_blank" rel="noopener" class="link-download">Xem GitHub Repository</a>
-          </div>
+          <span class="download-note">
+            Lần đầu mở ứng dụng: chuột phải vào Mini-Asi chọn Mở (Open), hoặc vào Cài đặt hệ thống › Quyền riêng tư & Bảo mật › Mở dù sao.
+          </span>
         </div>
       </div>
 
-    </div>
-  </section>
-
-  <!-- FAQ Section -->
-  <section class="faq-section container">
-    <div class="section-header">
-      <h2 class="section-title">Câu hỏi thường gặp</h2>
-    </div>
-
-    <div class="faq-accordion">
-      <details class="faq-item">
-        <summary class="faq-question">Máy tôi là MacBook Air / iMac không có tai thỏ thì dùng được không?</summary>
-        <div class="faq-answer">
-          Hoàn toàn được! Mini-Asi hỗ trợ 3 chế độ hiển thị: <strong>Tai thỏ ảo</strong> (tự vẽ viền tai thỏ ở mép trên màn hình), <strong>Viên thuốc</strong> (nổi nhẹ nhàng dưới thanh menu) hoặc <strong>Bong bóng</strong> (nút tròn nhỏ có thể kéo đi bất cứ đâu trên màn hình).
+      <div class="other-builds">
+        <h4>Các phiên bản khác</h4>
+        <div class="build-link-row">
+          <span>Windows (x64)</span>
+          <a href="https://github.com/binhduongdo09/mini-asi/releases/latest">Tải .exe / .msi</a>
         </div>
-      </details>
-
-      <details class="faq-item">
-        <summary class="faq-question">Apple Intelligence trong Mini-Asi hoạt động thế nào?</summary>
-        <div class="faq-answer">
-          Mini-Asi kết nối với nền tảng Apple Intelligence (FoundationModels) trên macOS Apple Silicon. Mô hình chạy trực tiếp trên chip của bạn, không cần Internet. Khi bạn nhờ thêm việc hay ghi chú, mô hình tự động chọn lệnh để app tạo trực tiếp vào danh sách.
+        <div class="build-link-row">
+          <span>Linux</span>
+          <a href="https://github.com/binhduongdo09/mini-asi/releases/latest">Tải .deb / .AppImage</a>
         </div>
-      </details>
-
-      <details class="faq-item">
-        <summary class="faq-question">Tính năng Ghi âm & Tóm tắt cuộc họp có cần mạng không?</summary>
-        <div class="faq-answer">
-          Không bắt buộc! Nhận dạng giọng nói tiếng Việt chạy trực tiếp bằng Apple Speech on-device và tóm tắt biên bản bằng Apple Intelligence đều hoạt động ngoại tuyến. Bạn chỉ cần mạng nếu chọn dùng thêm mô hình đám mây Gemini.
+        <div class="build-link-row">
+          <span>Mã nguồn</span>
+          <a href="https://github.com/binhduongdo09/mini-asi" target="_blank" rel="noopener">GitHub Repository</a>
         </div>
-      </details>
-
-      <details class="faq-item">
-        <summary class="faq-question">Làm thế nào để cập nhật phiên bản mới?</summary>
-        <div class="faq-answer">
-          Mini-Asi tích hợp sẵn tính năng tự động kiểm tra cập nhật. Khi có bản mới, ứng dụng sẽ thông báo trên tai thỏ và bạn chỉ cần bấm <strong>"Cập nhật ngay"</strong> trong app là xong.
-        </div>
-      </details>
+      </div>
     </div>
   </section>
 
   <!-- Footer -->
   <footer class="site-footer">
-    <div class="footer-inner container">
-      <div class="footer-left">
-        <div class="footer-brand">
-          <img src="assets/icon.png" alt="Mini-Asi Logo" width="28" height="28">
-          <span>Mini-Asi</span>
-        </div>
-        <p class="footer-copy">
-          Phát triển bởi <strong>Đỗ Bình Dương</strong>. Được xây dựng với đam mê nâng tầm trải nghiệm macOS cho người Việt.
-        </p>
-      </div>
-
+    <div class="container footer-content">
+      <span>Mini-Asi — Phát triển bởi Đỗ Bình Dương.</span>
       <div class="footer-links">
-        <a href="https://github.com/binhduongdo09/mini-asi" target="_blank" rel="noopener">GitHub</a>
-        <a href="https://github.com/binhduongdo09/mini-asi/releases" target="_blank" rel="noopener">Nhật ký thay đổi</a>
-        <a href="https://github.com/binhduongdo09/mini-asi/issues" target="_blank" rel="noopener">Báo lỗi & Góp ý</a>
+        <a href="https://github.com/binhduongdo09/mini-asi" target="_blank" rel="noopener">Mã nguồn</a>
+        <a href="https://github.com/binhduongdo09/mini-asi/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Nhật ký thay đổi</a>
+        <a href="https://github.com/binhduongdo09/mini-asi/issues" target="_blank" rel="noopener">Báo lỗi</a>
       </div>
     </div>
   </footer>

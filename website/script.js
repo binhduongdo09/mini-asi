@@ -1,45 +1,38 @@
 /**
- * Mini-Asi Landing Page Interactive Script
+ * Mini-Asi — Hardware Notch Preview Controller
  */
 
 document.addEventListener("DOMContentLoaded", () => {
-  // Simulator Elements
-  const notch = document.getElementById("notchIsland");
-  const tabButtons = document.querySelectorAll(".tab-btn");
-  const views = document.querySelectorAll(".notch-view");
+  const buttons = document.querySelectorAll(".pill-switch");
+  const panels = document.querySelectorAll(".notch-panel");
   const recTimer = document.getElementById("recTimer");
 
-  // Tab Switching Logic
-  tabButtons.forEach((btn) => {
+  // Tab switching between notch states
+  buttons.forEach((btn) => {
     btn.addEventListener("click", () => {
-      const tabId = btn.getAttribute("data-tab");
+      const targetId = btn.getAttribute("data-target");
 
-      // Update button styles
-      tabButtons.forEach((b) => b.classList.remove("active"));
+      buttons.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
 
-      // Update notch dimensions by state class
-      notch.className = `notch-island state-${tabId}`;
-
-      // Update active view
-      views.forEach((view) => {
-        if (view.classList.contains(`view-${tabId}`)) {
-          view.classList.add("active");
+      panels.forEach((p) => {
+        if (p.id === targetId) {
+          p.classList.add("active");
         } else {
-          view.classList.remove("active");
+          p.classList.remove("active");
         }
       });
     });
   });
 
   // Meeting timer simulation
-  let seconds = 278; // 04:38
+  let totalSeconds = 278; // 04:38
   setInterval(() => {
-    seconds++;
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
+    totalSeconds++;
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
     if (recTimer) {
-      recTimer.textContent = `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+      recTimer.textContent = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
     }
   }, 1000);
 
@@ -51,27 +44,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const target = document.querySelector(targetId);
         if (target) {
           e.preventDefault();
-          target.scrollIntoView({ behavior: "smooth", block: "start" });
+          target.scrollIntoView({ behavior: "smooth" });
         }
       }
     });
   });
-
-  // Fetch latest release tag if accessible
-  const REPO = "binhduongdo09/mini-asi";
-  fetch(`https://api.github.com/repos/${REPO}/releases/latest`)
-    .then((res) => {
-      if (res.ok) return res.json();
-      throw new Error("Release not public or accessible");
-    })
-    .then((data) => {
-      const verText = data.name || data.tag_name;
-      const osVersion = document.querySelector(".os-version");
-      if (osVersion && verText) {
-        osVersion.textContent = `${verText} • ~7.8 MB`;
-      }
-    })
-    .catch(() => {
-      // Fallback already in HTML
-    });
 });
