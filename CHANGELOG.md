@@ -1,5 +1,16 @@
 # Nhật ký thay đổi
 
+## 0.18.0 (11/2026) — đổi định dạng file bằng kéo thả (kể cả thư mục)
+Kéo file **hoặc cả thư mục** vào nửa phải tai thỏ → tấm công cụ file có thêm:
+- **Đổi định dạng ảnh**: JPG · PNG · HEIC · TIFF · PDF (mỗi ảnh 1 file) · **1 PDF** (gộp mọi ảnh thành một file).
+  Đọc được PNG, JPG, HEIC, TIFF, GIF, BMP, WebP. Dùng `sips` có sẵn trên macOS (giữ màu, chất lượng cao).
+- **Sang PDF**: .txt .md .csv .log .json .html .docx .rtf .doc .odt → PDF khổ A4, font Unicode của máy (Arial) nên tiếng Việt
+  hiển thị đúng, chọn & tìm chữ được; Markdown có tiêu đề to/đậm, gạch đầu dòng. .rtf/.doc/.odt đọc bằng `textutil` của macOS,
+  .docx đọc trực tiếp. Bộ ghi PDF tự viết (`convert.rs`: nhúng font TrueType, Identity-H + ToUnicode), có test bằng qpdf/pdftotext.
+- **Thư mục**: lấy mọi ảnh / file chữ bên trong (kể cả thư mục con, bỏ file ẩn, tối đa 2000 file); kết quả vào thư mục mới
+  cạnh thư mục gốc, vd. "Ảnh chuyến đi - JPG", giữ nguyên cấu trúc. File lẻ → kết quả ngay cạnh file gốc, không ghi đè.
+- Lệnh mới: `file_kinds`, `file_convert_images`, `file_text_pdf`.
+
 ## 0.17.0 (11/2026) — hết hỏi Keychain, nghe lại & sửa biên bản họp, cổ phiếu & cảnh báo giá, popup luôn nằm trên
 **Không còn bị hỏi quyền Keychain**
 - API key / token (ChatGPT, Gemini, Claude, Threads…) lưu trong file riêng của app (`secrets/`, quyền 600 — chỉ tài khoản

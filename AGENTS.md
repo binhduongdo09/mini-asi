@@ -9,8 +9,8 @@ Mini-Asi là trợ lý desktop sống quanh **tai thỏ** MacBook (máy không t
 Chủ dự án: Đỗ Bình Dương (người Việt). **Giao diện, chú thích code và trả lời người dùng đều bằng tiếng Việt.**
 Ưu tiên macOS, sau đó Linux & Windows. Có bản Free và Pro (khoá ký ed25519, kiểm tra offline).
 
-Luôn có: Asi (chat & lệnh giọng nói), Việc (hiểu câu tự nhiên Việt/Anh), Ghi chú, Clipboard (mục ghim giữ mãi), kéo thả file
-(AirDrop / nén / PDF), thả nội dung → việc / sự kiện lịch (`capture.rs`, `commands/capture.rs`).
+Luôn có: Asi (chat & lệnh giọng nói), Việc (hiểu câu tự nhiên Việt/Anh), Ghi chú, Clipboard (mục ghim giữ mãi), kéo thả file / thư mục
+(AirDrop / nén / PDF / đổi định dạng ảnh, chữ → PDF — `convert.rs`), thả nội dung → việc / sự kiện lịch (`capture.rs`, `commands/capture.rs`).
 Mô-đun bật/tắt (`settings.modules`): Dọn máy, Tập trung, Social (id `threads`, mặc định bật) · Nhật ký, Từ mới (người dùng tự bật).
 Nền: nhắc nghỉ mắt/uống nước, đồng bộ Apple (Lời nhắc, Ghi chú, Lịch), sao lưu đám mây, giọng đọc tải thêm, tự cập nhật.
 

@@ -14,7 +14,7 @@ Bên trong là linh vật hai mắt biết chớp, cười, lo lắng, ngáp ng�
 | ✅ **Việc** | Câu tự nhiên Việt/Anh, có dấu hay không: *"mai 9h gọi khách"*, *"thứ 6 tuần sau chốt hợp đồng"*, *"tomorrow 3pm call John"*. Nhóm Trễ hạn / Hôm nay / Sắp tới; lịch hôm nay (Lịch Apple). Đến giờ: Xong · 10 phút · 1 giờ · Mai. |
 | ✎ **Ghi chú** | Tự lưu, ghim, tìm, đọc cho Asi ghi. ⌘⇧Space mở nhanh. |
 | 📋 **Clipboard** | Nhớ chữ, ảnh, file đã chép. Bấm = chép lại, bấm đúp = dán luôn. Ghim = giữ mãi ở đầu danh sách (đặt tên được). ⌃⇧V. |
-| 📦 **Kéo thả file** | Thả vào **nửa trái** tai thỏ = AirDrop ngay; **nửa phải** = Nén ZIP, giải nén, nén/gộp PDF, chép file. |
+| 📦 **Kéo thả file / thư mục** | Thả vào **nửa trái** tai thỏ = AirDrop ngay; **nửa phải** = Nén ZIP, giải nén, nén/gộp PDF, đổi định dạng ảnh (JPG · PNG · HEIC · TIFF · PDF), chữ → PDF (.txt .md .docx .rtf…), chép file. |
 | 🎙 **Họp** | Ghi cuộc họp trực tiếp hoặc online (micro + âm thanh máy), chuyển chữ bằng Apple ngay trên máy, ghi chú trong lúc họp (máy đủ sức), biên bản sửa được, chuyển ý quan trọng thành việc / lịch / ghi chú, nghe lại ghi âm. |
 | 📈 **Cổ phiếu** | "Giá FPT", "VN-Index hôm nay"; "báo cho tôi khi FPT vượt 100k hoặc giảm dưới 50k" — Asi báo khi chạm ngưỡng trong giờ giao dịch. |
 | 🗓 **Thả → việc / lịch** | Kéo chữ, tin nhắn, link, ảnh, ảnh chụp màn hình, danh bạ vào tai thỏ → Asi đề xuất việc hoặc sự kiện (đọc cả chữ trong ảnh). Sự kiện vào lịch iCloud hoặc Google (tài khoản Google thêm trong Cài đặt hệ thống › Tài khoản Internet). |

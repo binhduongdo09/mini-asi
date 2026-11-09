@@ -861,34 +861,47 @@
     const known = new Set(sheet.files.map((f) => f.path));
     sheet.files.push(...info.filter((f) => !known.has(f.path)));
     sheet.capture = await api("capture_supports", { paths: sheet.files.map((f) => f.path) }).catch(() => false);
+    sheet.pick = false;
+    // ảnh / file chữ (kể cả trong thư mục) → nút đổi định dạng
+    sheet.kinds = await api("file_kinds", { paths: sheet.files.map((f) => f.path) }).catch(() => ({ images: 0, texts: 0 }));
     renderSheet();
     await setMode("sheet", { force: true });
   }
   function renderSheet() {
     const f = sheet.files;
     const pdfs = f.filter((x) => x.is_pdf), arcs = f.filter((x) => x.is_archive);
-    const ic = (x) => (x.is_pdf ? I.pdf : x.is_archive ? I.zip : x.is_dir ? I.folder : I.file);
+    const ic = (x) => (x.is_pdf ? I.pdf : x.is_archive ? I.zip : x.is_dir ? I.folder : x.is_image ? I.image : x.is_text ? I.text : I.file);
     const total = f.reduce((s, x) => s + (x.size || 0), 0);
     const r = sheet.result;
     const resHtml = sheet.busy
       ? `<div class="sh-res"><span class="spin"></span><span class="grow">Đang xử lý…</span></div>`
       : r ? (r.error
         ? `<div class="sh-res err"><span class="grow">${esc(r.error)}</span></div>`
-        : `<div class="sh-res ok">${I.check}<span class="grow"><b>${esc(r.output.split(/[\\/]/).pop())}</b> <span class="dim">${bytes(r.before)} → ${bytes(r.after)}</span></span><button class="btn sm" data-sh="reveal">Mở thư mục</button></div>`)
-      : `<div class="sh-res idle">File mới được lưu ngay cạnh file gốc</div>`;
+        : `<div class="sh-res ok">${I.check}<span class="grow"><b>${esc(r.output.split(/[\\/]/).pop())}</b> <span class="dim">${r.message && /\d+ file|ảnh|lỗi/.test(r.message) ? esc(r.message) + " · " : ""}${bytes(r.before)} → ${bytes(r.after)}</span></span><button class="btn sm" data-sh="reveal">Mở thư mục</button></div>`)
+      : `<div class="sh-res idle">File mới lưu ngay cạnh file gốc · kéo cả thư mục → kết quả vào thư mục mới bên cạnh</div>`;
+    const k = sheet.kinds || { images: 0, texts: 0 };
+    const dis = sheet.busy ? "disabled" : "";
+    const acts = sheet.pick
+      ? `<div class="sh-acts sh-fmt"><span class="sh-fmt-l">${k.images} ảnh →</span>
+          ${[["jpg", "JPG"], ["png", "PNG"], ["heic", "HEIC"], ["tiff", "TIFF"], ["pdf", "PDF"]].map(([f, n]) => `<button class="act" data-fmt="${f}" ${dis}><b>${n}</b><span>${f === "pdf" ? "mỗi ảnh 1 file" : f === "heic" ? "nhẹ nhất" : f === "jpg" ? "phổ biến" : f === "png" ? "không mất nét" : "in ấn"}</span></button>`).join("")}
+          ${k.images > 1 ? `<button class="act" data-fmt="pdf1" ${dis}><b>1 PDF</b><span>gộp ${k.images} ảnh</span></button>` : ""}
+          <button class="act ghost" data-sh="unpick">${I.x}<span>Thôi</span></button></div>`
+      : `<div class="sh-acts">
+        <button class="act" data-sh="zip" ${dis}>${I.zip}<span>Nén ZIP</span></button>
+        ${arcs.length ? `<button class="act" data-sh="extract" ${dis}>${I.unzip}<span>Giải nén</span></button>` : ""}
+        ${pdfs.length ? `<button class="act" data-sh="pdf" ${dis}>${I.pdf}<span>Nén PDF</span></button>` : ""}
+        ${pdfs.length >= 2 ? `<button class="act" data-sh="merge" ${dis}>${I.merge}<span>Gộp ${pdfs.length} PDF</span></button>` : ""}
+        ${k.images ? `<button class="act" data-sh="pick" ${dis}>${I.image}<span>Đổi định dạng</span></button>` : ""}
+        ${k.texts ? `<button class="act" data-sh="topdf" ${dis}>${I.pdf}<span>${k.texts > 1 ? `${k.texts} file → PDF` : "Sang PDF"}</span></button>` : ""}
+        ${sheet.capture ? `<button class="act" data-sh="capture">${I.cal}<span>Tạo việc · lịch</span></button>` : ""}
+        <button class="act" data-sh="airdrop">${I.airdrop}<span>AirDrop</span></button>
+        ${k.images && k.texts ? "" : `<button class="act" data-sh="copy">${I.copy}<span>Chép file</span></button>`}
+      </div>`;
     $("#sheet").innerHTML = `<button class="x" data-sh="close" title="Đóng">${I.x}</button>
       <div class="sh-head"><b>${f.length === 1 ? esc(f[0].name) : `${f.length} mục`}</b><span class="dim">${f.length === 1 && f[0].is_dir ? "Thư mục" : bytes(total)}</span>
         <button class="link" data-sh="add">${I.plus}Thêm</button></div>
       <div class="sh-files">${f.slice(0, 6).map((x) => `<span class="fchip" title="${esc(x.path)}">${ic(x)}${esc(x.name)}</span>`).join("")}${f.length > 6 ? `<span class="fchip">+${f.length - 6}</span>` : ""}</div>
-      <div class="sh-acts">
-        <button class="act" data-sh="zip" ${sheet.busy ? "disabled" : ""}>${I.zip}<span>Nén ZIP</span></button>
-        ${arcs.length ? `<button class="act" data-sh="extract" ${sheet.busy ? "disabled" : ""}>${I.unzip}<span>Giải nén</span></button>` : ""}
-        ${pdfs.length ? `<button class="act" data-sh="pdf" ${sheet.busy ? "disabled" : ""}>${I.pdf}<span>Nén PDF</span></button>` : ""}
-        ${pdfs.length >= 2 ? `<button class="act" data-sh="merge" ${sheet.busy ? "disabled" : ""}>${I.merge}<span>Gộp ${pdfs.length} PDF</span></button>` : ""}
-        ${sheet.capture ? `<button class="act" data-sh="capture">${I.cal}<span>Tạo việc · lịch</span></button>` : ""}
-        <button class="act" data-sh="airdrop">${I.airdrop}<span>AirDrop</span></button>
-        <button class="act" data-sh="copy">${I.copy}<span>Chép file</span></button>
-      </div>${resHtml}`;
+      ${acts}${resHtml}`;
   }
   async function runSheet(fn) {
     sheet.busy = true; sheet.result = null; renderSheet();
@@ -899,10 +912,18 @@
     renderSheet();
   }
   $("#sheet").addEventListener("click", async (e) => {
+    const fm = e.target.closest("[data-fmt]");
+    if (fm && !fm.disabled) {
+      const f = fm.dataset.fmt, paths = sheet.files.map((x) => x.path);
+      sheet.pick = false;
+      return runSheet(() => api("file_convert_images", { paths, format: f === "pdf1" ? "pdf" : f, merge: f === "pdf1" }));
+    }
     const b = e.target.closest("[data-sh]");
     if (!b || b.disabled) return;
     const a = b.dataset.sh, paths = sheet.files.map((f) => f.path);
     if (a === "close") return setMode("collapsed");
+    if (a === "pick" || a === "unpick") { sheet.pick = a === "pick"; return renderSheet(); }
+    if (a === "topdf") return runSheet(() => api("file_text_pdf", { paths }));
     if (a === "capture") { try { return openCapture(await api("drop_read", { paths })); } catch (err) { return toast(String(err)); } }
     if (a === "add") { suppressHoverUntil = Date.now() + 2000; const p = await api("pick_files"); if (p && p.length) openSheet(p, true); return; }
     if (a === "reveal" && sheet.result) return api("reveal", { path: sheet.result.output });
@@ -1357,6 +1378,7 @@
   else if (devOpen === "listen") voiceCommand();
   else if (devOpen === "reply") askAsi("máy mình thế nào", true);
   else if (devOpen === "sheet") openSheet(["/Users/binh/Desktop/Hop-dong.pdf", "/Users/binh/Desktop/Bao-gia.pdf", "/Users/binh/Downloads/Anh.zip"]);
+  else if (devOpen === "sheet2") openSheet(["/Users/binh/Desktop/Ảnh chuyến đi", "/Users/binh/Desktop/IMG_0420.HEIC", "/Users/binh/Desktop/Biên bản.md"]);
   else if (devOpen === "drop") { setDropZone("tools"); setMode("drop"); }
   else if (devOpen === "dropc") { $("#drop").classList.add("content"); setDropZone("capture"); setMode("drop"); }
   else if (devOpen === "capture") openCapture(await api("drop_read", { paths: [] }));

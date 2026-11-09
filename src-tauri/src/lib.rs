@@ -14,6 +14,7 @@ pub mod capture;
 pub mod live;
 pub mod meeting;
 pub mod stocks;
+pub mod convert;
 pub mod social;
 pub mod clipboard;
 pub mod files;
@@ -216,7 +217,7 @@ pub fn run() {
             get_geometry, set_frame, set_interactive, popup_done, set_display, move_bubble, open_settings_window, vocab_batch, vocab_learned, vocab_check, vocab_play, vocab_play_mine, tts_info, tts_install, tts_uninstall, tts_use,
             parse_task, add_task, list_tasks, toggle_task, snooze_task, rename_task, delete_task, clear_done,
             list_notes, save_note, pin_note, delete_note,
-            file_info, pick_files, file_zip, file_extract, file_compress_pdf, file_merge_pdf, reveal,
+            file_info, file_kinds, file_convert_images, file_text_pdf, pick_files, file_zip, file_extract, file_compress_pdf, file_merge_pdf, reveal,
             file_airdrop, cursor_side, media_status, media_control, toggle_mic_mute, ensure_camera_perm,
             clean_scan, clean_run, clean_history, open_disk_settings,
             health_break_done, health_snooze, focus_start, focus_stop,

@@ -1,6 +1,6 @@
 [package]
 name = "mini-asi"
-version = "0.17.0"
+version = "0.18.0"
 edition = "2021"
 description = "Mini-Asi — trợ lý sống quanh tai thỏ"
 license = "Proprietary"
@@ -30,6 +30,7 @@ cpal = "0.18"
 hound = "3"
 base64 = "0.22"
 unicode-normalization = "0.1"
+ttf-parser = "0.25"
 ureq = { version = "2", features = ["json"] }
 asi-clean = { path = "../crates/asi-clean" }
 notch-native = { path = "../crates/notch-native" }

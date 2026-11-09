@@ -685,3 +685,11 @@ body.mock:not(.disp-notch)::before { display: none; }
 .mt-ed textarea.field { resize: vertical; font-size: 13px; line-height: 1.45; padding: 8px 10px; height: auto; }
 .n-folders { display: flex; width: 100%; margin-bottom: 6px; }
 .n-folders button { flex: 1; }
+
+/* Đổi định dạng ảnh trong tấm công cụ file */
+.sh-fmt { align-items: stretch; }
+.sh-fmt-l { display: flex; align-items: center; font-size: 11.5px; color: var(--text-2); white-space: nowrap; padding-right: 2px; }
+.sh-fmt .act b { font-size: 13px; }
+.sh-fmt .act span { font-size: 10px; font-weight: 500; color: var(--text-2); }
+.act.ghost { background: transparent; color: var(--text-2); }
+.sh-acts .act span { text-align: center; line-height: 1.15; }

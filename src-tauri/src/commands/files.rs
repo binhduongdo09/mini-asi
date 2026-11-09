@@ -13,6 +13,9 @@ pub(crate) struct FileInfo {
     pub(crate) is_dir: bool,
     pub(crate) is_pdf: bool,
     pub(crate) is_archive: bool,
+    pub(crate) is_image: bool,
+    /// file chữ chuyển được sang PDF (.txt .md .docx .rtf .html…)
+    pub(crate) is_text: bool,
 }
 
 #[tauri::command]
@@ -28,10 +31,40 @@ pub(crate) fn file_info(paths: Vec<String>) -> Vec<FileInfo> {
                 is_dir: m.as_ref().map(|m| m.is_dir()).unwrap_or(false),
                 is_pdf: files::is_pdf(&pb),
                 is_archive: files::is_archive(&pb),
+                is_image: crate::convert::is_image(&pb),
+                is_text: crate::convert::is_text(&pb),
                 path: p,
             }
         })
         .collect()
+}
+
+/// Số ảnh / file chữ trong danh sách (kể cả bên trong thư mục) — để tấm công cụ hiện nút đổi định dạng
+#[derive(Serialize)]
+pub(crate) struct FileKinds {
+    images: usize,
+    texts: usize,
+}
+
+#[tauri::command]
+pub(crate) async fn file_kinds(paths: Vec<String>) -> Result<FileKinds, String> {
+    blocking(move || {
+        let (images, texts) = crate::convert::count_kinds(&paths.iter().map(PathBuf::from).collect::<Vec<_>>());
+        Ok(FileKinds { images, texts })
+    })
+    .await
+}
+
+/// Đổi định dạng ảnh: format = jpg | png | heic | tiff | pdf; merge = gộp nhiều ảnh thành 1 PDF
+#[tauri::command]
+pub(crate) async fn file_convert_images(paths: Vec<String>, format: String, merge: Option<bool>) -> Result<files::FileResult, String> {
+    blocking(move || crate::convert::convert_images(&paths.iter().map(PathBuf::from).collect::<Vec<_>>(), &format, merge.unwrap_or(false))).await
+}
+
+/// File chữ (.txt .md .docx .rtf .html…, hoặc thư mục chứa chúng) → PDF
+#[tauri::command]
+pub(crate) async fn file_text_pdf(paths: Vec<String>) -> Result<files::FileResult, String> {
+    blocking(move || crate::convert::text_to_pdf(&paths.iter().map(PathBuf::from).collect::<Vec<_>>())).await
 }
 
 #[tauri::command]

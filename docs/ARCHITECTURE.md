@@ -12,7 +12,7 @@
 ┌───────────────▼───────────────────────────────────────────────┴────────────────────┐
 │ src-tauri/src/lib.rs  run(): plugin, phím tắt, khay, cửa sổ, luồng nền, đăng ký lệnh │
 │ commands/*.rs  lớp lệnh mỏng theo tính năng ── gọi logic thuần ↓                     │
-│ store · nlp · sync · apple · clipboard · capture · social · live · meeting · stocks · voice · journal · threads · backup · files │
+│ store · nlp · sync · apple · clipboard · capture · social · live · meeting · stocks · convert · voice · journal · threads · backup · files │
 │ health · assistant · tts · vocab · license                                           │
 │ crates/notch-native (API macOS) · crates/asi-clean (dọn máy)                         │
 └─────────────────────────────────────────────────────────────────────────────────────┘
@@ -86,7 +86,7 @@ Phiên âm/audio/ví dụ: Free Dictionary API (cache trong `vocab.json`). Chấ
 | window | set_display, move_bubble, get_geometry, set_frame, set_interactive, ime_info, open_settings_window |
 | tasks | parse_task, add_task, list_tasks, toggle_task, snooze_task, rename_task, delete_task, clear_done |
 | notes | list_notes, save_note, pin_note, delete_note |
-| files | file_info, pick_files, file_zip, file_extract, file_compress_pdf, file_merge_pdf, file_airdrop, cursor_side, reveal |
+| files | file_info, file_kinds, file_convert_images, file_text_pdf, pick_files, file_zip, file_extract, file_compress_pdf, file_merge_pdf, file_airdrop, cursor_side, reveal |
 | clean | clean_scan, clean_run, clean_history, open_disk_settings |
 | health | health_break_done, health_snooze, focus_start, focus_stop |
 | settings | get_settings, save_settings, patch_settings, license_info, activate_license, deactivate_license, quit |
