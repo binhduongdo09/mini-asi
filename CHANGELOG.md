@@ -1,5 +1,10 @@
 # Nhật ký thay đổi
 
+## 0.18.1 (11/2026) — thanh tab kiểu thanh công cụ macOS
+- Mọi tab luôn hiện đủ **biểu tượng + tên** (biểu tượng trên, tên dưới, như thanh công cụ Finder / Cài đặt hệ thống),
+  mục đang chọn có nền bo góc, chia đều chiều ngang; hẹp quá mới cuộn ngang. Rê chuột hiện phím tắt ⌘1…⌘9.
+- Tab Họp: các nút Sửa · Ghi chú · Chép · Finder · Xoá có cả biểu tượng và chữ.
+
 ## 0.18.0 (11/2026) — đổi định dạng file bằng kéo thả (kể cả thư mục)
 Kéo file **hoặc cả thư mục** vào nửa phải tai thỏ → tấm công cụ file có thêm:
 - **Đổi định dạng ảnh**: JPG · PNG · HEIC · TIFF · PDF (mỗi ảnh 1 file) · **1 PDF** (gộp mọi ảnh thành một file).

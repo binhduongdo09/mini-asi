@@ -1136,8 +1136,9 @@
     const key = list.map(([id]) => id).join(",");
     if (el.dataset.key !== key) {
       el.dataset.key = key;
-      el.classList.toggle("many", list.length > 6);
-      el.innerHTML = list.map(([id, name, ic]) => `<button class="tab" data-tab="${id}" title="${name}">${ic}<span class="lbl">${name}</span><span class="dot"></span></button>`).join("");
+      // Thanh công cụ kiểu macOS: biểu tượng + tên luôn hiện đủ (nhiều mục thì thu hẹp đều, hẹp quá mới cuộn ngang)
+      el.style.setProperty("--n", list.length);
+      el.innerHTML = list.map(([id, name, ic], i) => `<button class="tab" data-tab="${id}" title="${name}${i < 9 ? ` (⌘${i + 1})` : ""}"><span class="ti">${ic}<span class="dot"></span></span><span class="lbl">${name}</span></button>`).join("");
     }
     for (const b of el.children) {
       b.classList.toggle("on", b.dataset.tab === tab);

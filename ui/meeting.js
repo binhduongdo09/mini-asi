@@ -139,11 +139,11 @@
           ${s && !editSum ? `<button class="btn sm" data-mt="sum" ${progress || d.recording ? "disabled" : ""}>${I.sparkle}Tóm tắt lại</button>
             <div class="seg"><button data-eng="apple" class="${A.settings.meeting_ai !== "gemini" ? "on" : ""}">Apple</button><button data-eng="gemini" class="${A.settings.meeting_ai === "gemini" ? "on" : ""}">Gemini</button></div>` : ""}
           <span class="grow"></span>
-          ${s && !editSum ? `<button class="ib" data-mt="ed-start" title="Sửa biên bản">${I.sliders}</button>` : ""}
-          <button class="ib" data-mt="note" title="Mở ghi chú biên bản (Ghi chú › Biên bản họp)" ${d.lines.length ? "" : "disabled"}>${I.note}</button>
-          <button class="ib" data-mt="copy" title="Chép biên bản" ${d.lines.length ? "" : "disabled"}>${I.copy}</button>
-          ${d.has_audio && !d.recording ? `<button class="ib" data-mt="audio" title="Mở file ghi âm trong Finder">${I.folder}</button>` : ""}
-          ${d.recording ? "" : `<button class="ib" data-mt="del" title="Xoá cuộc họp">${I.trash}</button>`}
+          ${s && !editSum ? `<button class="btn sm ghost" data-mt="ed-start" title="Sửa biên bản">${I.sliders}Sửa</button>` : ""}
+          <button class="btn sm ghost" data-mt="note" title="Mở ghi chú biên bản (Ghi chú › Biên bản họp)" ${d.lines.length ? "" : "disabled"}>${I.note}Ghi chú</button>
+          <button class="btn sm ghost" data-mt="copy" title="Chép biên bản" ${d.lines.length ? "" : "disabled"}>${I.copy}Chép</button>
+          ${d.has_audio && !d.recording ? `<button class="btn sm ghost" data-mt="audio" title="Mở file ghi âm trong Finder">${I.folder}Finder</button>` : ""}
+          ${d.recording ? "" : `<button class="btn sm ghost mt-del" data-mt="del" title="Xoá cuộc họp">${I.trash}Xoá</button>`}
         </div>
         ${progress ? `<div class="mt-progress"><span class="spin"></span>${esc(progress)}</div>` : ""}
         ${sumHtml(d)}
