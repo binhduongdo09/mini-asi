@@ -1,5 +1,21 @@
 # Nhật ký thay đổi
 
+## 0.14.0 (11/2026) — hỏi đáp đúng nghĩa trợ lý, thêm ChatGPT / Gemini / Claude
+**Sửa lỗi "hỏi gì cũng bị đẩy vào Việc / Ghi chú"**
+- Mô hình chỉ được thêm việc / ghi chú / bật tập trung khi người dùng nhờ rõ ràng (có "nhắc", "thêm việc", "ghi chú", "lưu"…)
+  — `assistant::user_asks_for`. Chọn nhầm → hỏi lại ở chế độ chỉ trả lời.
+- Câu hỏi (có "?", "không", "gì", "sao", "bao nhiêu", "thế nào"…) không còn bị luật hiểu thành việc chỉ vì có chữ "mai", "thứ 6".
+- "Lưu ý…" không còn bị hiểu là lệnh ghi chú.
+- AI lỗi / chưa sẵn sàng → báo rõ lý do (kèm nút Cài đặt AI, Lưu thành việc, Lưu ghi chú) thay vì âm thầm tạo việc.
+- Chỉ dẫn cho mô hình: mặc định là trả lời; hành động chỉ khi được nhờ.
+- Dưới mỗi câu trả lời hiện nhỏ ai đã trả lời: "Apple Intelligence", "Gemini · gemini-flash-latest", "Lệnh cơ bản".
+
+**Bộ não tuỳ chọn** (Cài đặt › Asi & giọng nói › Bộ não của Asi): Apple Intelligence (trên máy) · ChatGPT · Gemini · Claude.
+- API key của người dùng lưu trong Keychain (không nằm trong file cài đặt / bản sao lưu); nút Lưu tự kiểm tra kết nối.
+- Ô mô hình + nút Kiểm tra: lấy danh sách mô hình của tài khoản, tên cũ thì tự chọn bản nhanh mới nhất.
+- Công tắc "Gửi kèm ngữ cảnh" (việc, lịch, ghi chú, mục vừa chép, tình trạng máy) cho AI đám mây.
+- Mã: `src-tauri/src/llm.rs` (dựng yêu cầu / đọc kết quả, có test), lệnh `ai_info`, `ai_set_key`, `ai_test`.
+
 ## 0.13.0 (11/2026) — giọng đọc gọn nhẹ, trợ lý Apple Intelligence thông minh hơn
 **Giọng đọc**
 - Chỉ còn **1 bộ đọc chạy trên máy**: NghiTTS (Piper) với 2 giọng thường Mai Phương / Minh Quang; chỉ tải giọng được chọn

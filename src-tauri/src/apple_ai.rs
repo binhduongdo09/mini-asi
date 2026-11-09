@@ -154,11 +154,13 @@ fn explain_unavailable(s: &str) -> String {
 }
 
 /// Hỏi Apple Intelligence. `system` = chỉ dẫn (vai trò, quy tắc, ngữ cảnh máy), `prompt` = lịch sử + câu hỏi.
-pub fn ask(data_dir: &Path, system: &str, prompt: &str) -> Result<AiTurn, String> {
+/// `allow_actions = false` → chỉ trả lời chữ (ASI_SIMPLE=1), dùng khi mô hình chọn nhầm hành động.
+pub fn ask(data_dir: &Path, system: &str, prompt: &str, allow_actions: bool) -> Result<AiTurn, String> {
     let bin = helper(data_dir).ok_or("Máy chưa hỗ trợ Apple Intelligence")?;
     let mut child = Command::new(bin)
         .env("ASI_SYSTEM", system)
         .env("ASI_PROMPT", prompt)
+        .env("ASI_SIMPLE", if allow_actions { "0" } else { "1" })
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

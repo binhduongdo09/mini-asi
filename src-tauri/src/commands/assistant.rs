@@ -113,8 +113,8 @@ pub(crate) fn build_ai_context(st: &AppState) -> String {
     out.join("\n")
 }
 
-/// Chỉ dẫn cho Apple Intelligence: vai trò, quy tắc, cách chọn hành động, ngữ cảnh máy
-pub(crate) fn ai_instructions(st: &AppState, en: bool) -> String {
+/// Chỉ dẫn cho "bộ não" AI: vai trò, quy tắc, cách chọn hành động, ngữ cảnh máy (`with_context = false` → không gửi dữ liệu cá nhân)
+pub(crate) fn ai_instructions(st: &AppState, en: bool, with_context: bool) -> String {
     let lang = if en { "English" } else { "Vietnamese (always with full diacritics, natural and friendly, like a capable personal assistant; address the user as \"bạn\", refer to yourself as \"Asi\" or \"mình\")" };
     format!(
         "You are Asi, the user's personal assistant living in the MacBook notch (Mini-Asi app). The user is Vietnamese.\n\
@@ -125,7 +125,8 @@ pub(crate) fn ai_instructions(st: &AppState, en: bool) -> String {
          - Use the conversation so far to understand follow-ups (\"nó\", \"cái đó\", \"dịch lại\", \"ngắn hơn\").\n\
          - Only state facts about the user's tasks, events, notes or Mac that appear in the context. Never invent them. If you are not sure about something, say so briefly.\n\
          - No greetings unless greeted, no disclaimers about being an AI.\n\
-         Choose action when the user wants the app to DO something, otherwise none:\n\
+         Most messages are questions or requests for text: answer them fully in reply and set action to none.\n\
+         Only choose another action when the user explicitly asks the app to DO it (\"nhắc tôi\", \"thêm việc\", \"ghi chú lại\", \"bật tập trung\"…):\n\
          - add_task: wants a reminder or to-do. argument = the task in the user's words including time words (e.g. \"mai 9h gọi khách\").\n\
          - add_note: wants to save something as a note. argument = the note text.\n\
          - start_focus: wants a focus / pomodoro timer. argument = minutes as digits (default 25).\n\
@@ -134,7 +135,7 @@ pub(crate) fn ai_instructions(st: &AppState, en: bool) -> String {
          - open_tab: wants to open a screen. argument = one of tasks, notes, clips, journal, words, threads, clean.\n\
          When you choose an action, reply with one short sentence; the app shows the details.\n\
          Context right now:\n{}",
-        build_ai_context(st)
+        if with_context { build_ai_context(st) } else { format!("Now: {}", Local::now().format("%A %d/%m/%Y %H:%M")) }
     )
 }
 
@@ -408,7 +409,50 @@ fn rule_reply(app2: &AppHandle, st: &AppState, intent: assistant::Intent, rest: 
     Ok(r)
 }
 
-/// Dựng câu trả lời từ Apple Intelligence: chữ của mô hình + thẻ/nút thật của app theo hành động mô hình chọn
+/// Bộ não đang chọn: (nhà cung cấp, nhãn hiển thị)
+fn brain(st: &AppState) -> (Option<llm::Provider>, String) {
+    let s = st.store.lock().unwrap();
+    match llm::Provider::from_id(&s.settings.ai_provider) {
+        Some(p) => {
+            let m = model_of(&s.settings, p);
+            (Some(p), format!("{} · {m}", p.name()))
+        }
+        None => (None, "Apple Intelligence".into()),
+    }
+}
+
+pub(crate) fn model_of(set: &store::Settings, p: llm::Provider) -> String {
+    let m = match p {
+        llm::Provider::OpenAi => &set.ai_model_openai,
+        llm::Provider::Gemini => &set.ai_model_gemini,
+        llm::Provider::Claude => &set.ai_model_claude,
+    };
+    if m.trim().is_empty() { p.default_model().to_string() } else { m.trim().to_string() }
+}
+
+/// Hỏi bộ não đã chọn (Apple Intelligence trên máy hoặc API đám mây). `allow_actions = false` → chỉ trả lời.
+fn ask_brain(st: &AppState, text: &str, en: bool, allow_actions: bool) -> Result<apple_ai::AiTurn, String> {
+    let (prov, _) = brain(st);
+    match prov {
+        None => apple_ai::ask(&st.data_dir, &ai_instructions(st, en, true), &ai_prompt(st, text), allow_actions),
+        Some(p) => {
+            let (model, ctx) = {
+                let s = st.store.lock().unwrap();
+                (model_of(&s.settings, p), s.settings.ai_cloud_context)
+            };
+            let key = threads::secret::get(&p.key_name(), &st.data_dir).filter(|k| !k.trim().is_empty()).ok_or_else(|| format!("Chưa nhập API key {} — vào Cài đặt › Asi & giọng nói", p.name()))?;
+            let system = ai_instructions(st, en, ctx) + &llm::json_rules(allow_actions);
+            let raw = llm::ask(p, key.trim(), &model, &system, &ai_prompt(st, text))?;
+            let mut t = llm::parse_turn(&raw);
+            if !allow_actions {
+                t.action = "none".into();
+            }
+            Ok(t)
+        }
+    }
+}
+
+/// Dựng câu trả lời từ AI: chữ của mô hình + thẻ/nút thật của app theo hành động mô hình chọn
 fn reply_from_ai(app2: &AppHandle, st: &AppState, t: apple_ai::AiTurn, text: &str, en: bool, offset: Option<i32>) -> Result<assistant::Reply, String> {
     use assistant::{Intent, Reply};
     let arg = if t.argument.is_empty() { text.to_string() } else { t.argument.clone() };
@@ -449,11 +493,13 @@ fn reply_from_ai(app2: &AppHandle, st: &AppState, t: apple_ai::AiTurn, text: &st
     Ok(r)
 }
 
-/// Hỏi Asi. Lệnh ngắn, rõ ràng → luật (tức thì, offline). Còn lại → Apple Intelligence (nếu bật) để hiểu rộng
-/// và trả lời như trợ lý; mô hình có thể chọn hành động cho app làm. Lỗi / chưa có Apple Intelligence → luật.
+/// Hỏi Asi. Lệnh ngắn, rõ ràng → luật (tức thì, offline). Còn lại → bộ não AI đã chọn (Apple Intelligence / ChatGPT /
+/// Gemini / Claude) để hiểu rộng và trả lời như trợ lý. Mô hình chỉ được thêm việc / ghi chú / bật tập trung khi người
+/// dùng thật sự nhờ (`assistant::user_asks_for`); chọn nhầm → hỏi lại ở chế độ chỉ trả lời.
+/// AI lỗi → báo rõ lỗi, KHÔNG tự thêm việc / ghi chú.
 #[tauri::command]
 pub(crate) async fn asi_ask(app: AppHandle, st: S<'_>, text: String, offset: Option<i32>) -> Result<assistant::Reply, String> {
-    use assistant::Intent;
+    use assistant::{Intent, Reply};
     let st2 = st.inner().clone();
     let app2 = app.clone();
     blocking(move || {
@@ -467,23 +513,119 @@ pub(crate) async fn asi_ask(app: AppHandle, st: S<'_>, text: String, offset: Opt
         let explicit = assistant::explicit_command(&text);
         let (intent, rest) = assistant::classify(&text);
         let words = text.split_whitespace().count();
-        // "thứ 6 nộp báo cáo" (có giờ hẹn, không có từ lệnh) vẫn để mô hình xem có phải câu hỏi không
-        let quick = explicit.is_some() || (!matches!(intent, Intent::Unknown | Intent::AddTask | Intent::Help) && words <= 5);
+        let quick = explicit.is_some() || (!matches!(intent, Intent::Unknown | Intent::AddTask | Intent::Help) && words <= 4 && !assistant::looks_like_question(&text));
+        let rules_label = if en { "Basic commands" } else { "Lệnh cơ bản" };
         if ai_on && !quick {
-            match apple_ai::ask(&st.data_dir, &ai_instructions(st, en), &ai_prompt(st, &text)) {
-                Ok(turn) => {
-                    let r = reply_from_ai(&app2, st, turn, &text, en, offset)?;
+            let (_, label) = brain(st);
+            let mut res = ask_brain(st, &text, en, true);
+            if let Ok(t) = &res {
+                if matches!(t.action.as_str(), "add_task" | "add_note" | "start_focus") && !assistant::user_asks_for(&t.action, &text) {
+                    // mô hình định tự thêm việc / ghi chú trong khi người dùng chỉ hỏi → hỏi lại, chỉ trả lời
+                    res = ask_brain(st, &text, en, false).or_else(|_| Ok(apple_ai::AiTurn { reply: t.reply.clone(), action: "none".into(), argument: String::new() }));
+                }
+            }
+            match res {
+                Ok(turn) if !(turn.reply.is_empty() && turn.action == "none") => {
+                    let mut r = reply_from_ai(&app2, st, turn, &text, en, offset)?;
+                    r.engine = label;
                     remember(st, &text, &r.text);
                     return Ok(r);
                 }
-                Err(e) => eprintln!("Apple Intelligence: {e}"),
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!("{label}: {e}");
+                    // Câu không phải lệnh rõ ràng → báo lỗi AI, để người dùng tự chọn lưu thành việc / ghi chú
+                    if !matches!(intent, Intent::Status | Intent::Clean | Intent::Overdue | Intent::Today | Intent::Disk | Intent::Battery | Intent::Time | Intent::LastClip) {
+                        let mut r = Reply::new(Intent::Unknown, if en { format!("I couldn't reach {label}: {e}") } else { format!("Asi chưa hỏi được {label}: {e}") });
+                        r.mood = "worried".into();
+                        r.speak = if en { "Sorry, the AI isn't available right now.".into() } else { "Xin lỗi, trợ lý AI chưa trả lời được.".into() };
+                        r.engine = rules_label.into();
+                        let r = r
+                            .act(if en { "AI settings" } else { "Cài đặt AI" }, "open_tab", "ai")
+                            .act(if en { "Save as task" } else { "Lưu thành việc" }, "add_task", &text)
+                            .act(if en { "Save note" } else { "Lưu ghi chú" }, "add_note", &text);
+                        return Ok(r);
+                    }
+                }
             }
         }
-        let r = rule_reply(&app2, st, intent, rest, &text, en, offset)?;
+        let mut r = rule_reply(&app2, st, intent, rest, &text, en, offset)?;
+        r.engine = rules_label.into();
         remember(st, &text, &r.text);
         Ok(r)
     })
     .await
+}
+
+#[derive(Serialize)]
+pub(crate) struct AiProviderInfo {
+    id: String,
+    name: String,
+    has_key: bool,
+    model: String,
+    default_model: String,
+    key_url: String,
+}
+
+/// Thông tin bộ não AI cho Cài đặt (không bao giờ trả key về giao diện)
+#[tauri::command]
+pub(crate) fn ai_info(st: S) -> Vec<AiProviderInfo> {
+    let set = st.store.lock().unwrap().settings.clone();
+    llm::ALL
+        .iter()
+        .map(|&p| AiProviderInfo {
+            id: p.id().into(),
+            name: p.name().into(),
+            has_key: threads::secret::get(&p.key_name(), &st.data_dir).is_some_and(|k| !k.trim().is_empty()),
+            model: model_of(&set, p),
+            default_model: p.default_model().into(),
+            key_url: p.key_url().into(),
+        })
+        .collect()
+}
+
+/// Lưu API key vào Keychain (rỗng = xoá)
+#[tauri::command]
+pub(crate) fn ai_set_key(st: S, provider: String, key: String) -> Result<(), String> {
+    let p = llm::Provider::from_id(&provider).ok_or("Nhà cung cấp lạ")?;
+    let k = key.trim();
+    if k.is_empty() {
+        threads::secret::delete(&p.key_name(), &st.data_dir);
+        Ok(())
+    } else {
+        threads::secret::set(&p.key_name(), k, &st.data_dir)
+    }
+}
+
+/// Kiểm tra key + chọn mô hình còn dùng được (tự đổi sang tên mới nhất nếu tên đang lưu đã cũ). Trả về tên mô hình.
+#[tauri::command]
+pub(crate) async fn ai_test(app: AppHandle, st: S<'_>, provider: String) -> Result<String, String> {
+    let p = llm::Provider::from_id(&provider).ok_or("Nhà cung cấp lạ")?;
+    let st2 = st.inner().clone();
+    let model = blocking(move || {
+        let key = threads::secret::get(&p.key_name(), &st2.data_dir).ok_or("Chưa nhập API key")?;
+        let current = model_of(&st2.store.lock().unwrap().settings, p);
+        let list = llm::list_models(p, key.trim())?;
+        let model = llm::pick_model(p, &current, &list).unwrap_or(current);
+        let raw = llm::ask(p, key.trim(), &model, &format!("Reply in Vietnamese.{}", llm::json_rules(false)), "Chào Asi, trả lời đúng một câu ngắn.")?;
+        if llm::parse_turn(&raw).reply.is_empty() {
+            return Err("Mô hình không trả lời".into());
+        }
+        let snap = {
+            let mut s = st2.store.lock().unwrap();
+            match p {
+                llm::Provider::OpenAi => s.settings.ai_model_openai = model.clone(),
+                llm::Provider::Gemini => s.settings.ai_model_gemini = model.clone(),
+                llm::Provider::Claude => s.settings.ai_model_claude = model.clone(),
+            }
+            let _ = s.save_settings();
+            s.settings.clone()
+        };
+        Ok::<_, String>((model, snap))
+    })
+    .await?;
+    let _ = app.emit("settings-changed", &model.1);
+    Ok(model.0)
 }
 
 /// Thực hiện hành động do Asi đề xuất (chỉ khi người dùng bấm nút)

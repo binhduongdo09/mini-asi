@@ -138,6 +138,16 @@ pub struct Settings {
     /// Bật tích hợp Apple Intelligence (FoundationModels on-device) cho phần Chat & Hỏi đáp
     #[serde(default = "default_true")]
     pub apple_ai_enabled: bool,
+    /// "Bộ não" của Asi khi hỏi đáp tự do: "apple" (Apple Intelligence, trên máy) | "openai" | "gemini" | "claude"
+    /// (API key của người dùng, lưu trong Keychain — xem llm.rs)
+    pub ai_provider: String,
+    /// Mô hình cho từng nhà cung cấp ("" = mặc định trong llm.rs)
+    pub ai_model_openai: String,
+    pub ai_model_gemini: String,
+    pub ai_model_claude: String,
+    /// Gửi kèm ngữ cảnh (việc, lịch, ghi chú, mục vừa chép, tình trạng máy) khi dùng AI đám mây
+    #[serde(default = "default_true")]
+    pub ai_cloud_context: bool,
 }
 
 fn default_true() -> bool {
@@ -217,6 +227,11 @@ impl Default for Settings {
             auto_update_check: true,
             update_repo: crate::updater::DEFAULT_REPO.into(),
             apple_ai_enabled: true,
+            ai_provider: "apple".into(),
+            ai_model_openai: String::new(),
+            ai_model_gemini: String::new(),
+            ai_model_claude: String::new(),
+            ai_cloud_context: true,
         }
     }
 }

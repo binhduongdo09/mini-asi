@@ -520,3 +520,4 @@ body.disp-bubble .notch-edge { display: none !important; }
 body.mock { background: linear-gradient(160deg, #4b5d86 0%, #2a3350 55%, #1b2033 100%); }
 body.mock::before { content: ""; position: fixed; left: 0; right: 0; top: 0; height: 32px; background: rgba(30, 30, 40, 0.35); backdrop-filter: blur(20px); }
 body.mock:not(.disp-notch)::before { display: none; }
+.engine { margin-top: 6px; font-size: 10.5px; font-weight: 600; color: var(--text-3); letter-spacing: 0.01em; }

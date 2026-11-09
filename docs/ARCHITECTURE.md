@@ -50,10 +50,11 @@ Mọi file JSON ghi kiểu "ghi file tạm rồi đổi tên" để không hỏn
 `asi_ask(câu)`:
 1. Lệnh rõ ràng ở đầu câu (`assistant::explicit_command`: "nhắc tôi…", "ghi chú…") hoặc lệnh ngắn ≤ 5 từ mà luật nhận ra
    (`assistant::classify`, khớp theo từ trọn vẹn) → `rule_reply` (offline, tức thì).
-2. Còn lại, nếu bật Apple Intelligence → `apple_ai::ask(chỉ dẫn + ngữ cảnh máy, lịch sử 6 lượt + câu hỏi)` → trợ lý Swift
-   trả `{reply, action, argument}` (guided generation) → `reply_from_ai`: chữ của mô hình + thẻ/nút thật của app;
-   hành động ghi dữ liệu (thêm việc/ghi chú/tập trung) chạy qua đúng lệnh có sẵn, dọn rác vẫn cần bấm xác nhận.
-3. Lỗi / không có Apple Intelligence → luật. Mọi lượt được nhớ trong `AppState.chat_log` (xoá bằng `asi_reset`).
+2. Còn lại, nếu bật trợ lý AI → `ask_brain`: Apple Intelligence (`apple_ai::ask`, guided generation) hoặc API đám mây
+   (`llm::ask` với yêu cầu JSON) — cùng trả `{reply, action, argument}`. Hành động ghi dữ liệu (thêm việc/ghi chú/tập trung)
+   chỉ được làm khi `assistant::user_asks_for` thấy người dùng nhờ rõ ràng; không thì hỏi lại ở chế độ chỉ trả lời.
+   `reply_from_ai`: chữ của mô hình + thẻ/nút thật của app; `Reply.engine` ghi ai đã trả lời.
+3. AI lỗi → báo lỗi rõ ràng (không tự tạo việc); câu là lệnh thông tin (máy, lịch, việc trễ…) → luật. Mọi lượt được nhớ trong `AppState.chat_log` (xoá bằng `asi_reset`).
 Nút trên thẻ gọi `asi_action(cmd, arg)` (add_task, undo_task, add_note, clean_safe, clip_copy, copy_text).
 
 Trợ lý Swift (`resources/asi_ai.swift`): biên dịch sẵn trong `build.rs` (Xcode 26, `-D ASI_STRUCTURED`, không được thì bản
@@ -96,7 +97,7 @@ Phiên âm/audio/ví dụ: Free Dictionary API (cache trong `vocab.json`). Chấ
 | threads | threads_get, threads_save_app, threads_login, threads_finish, threads_set_token, threads_logout, threads_replies, threads_post, threads_mark_read, threads_web, threads_embed, threads_close, threads_embed_ime, threads_embed_nav, open_link |
 | permissions | permissions_status, request_permissions |
 | backup | backup_info, backup_pick_dir, backup_set, backup_now, device_sync_now, backup_restore |
-| assistant | asi_ask, asi_action, asi_reset, apple_ai_status |
+| assistant | asi_ask, asi_action, asi_reset, apple_ai_status, ai_info, ai_set_key, ai_test |
 | speech | asi_speak, asi_stop_speaking, tts_info, tts_install, tts_uninstall, tts_use |
 | vocab | vocab_batch, vocab_learned, vocab_check, vocab_play, vocab_play_mine |
 | status | get_status |

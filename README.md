@@ -104,11 +104,15 @@ Token dài hạn có hạn 60 ngày; Mini-Asi tự gia hạn khi còn dưới 10
 - Giấy phép: thư viện `piper-tts` / eSpeak NG là GPL — được tải về máy người dùng như chương trình riêng, không gói trong app.
   NghiTTS chưa công bố nguồn dữ liệu của từng giọng → nên xin xác nhận của tác giả trước khi bán rộng.
 
-## Apple Intelligence
+## Bộ não của Asi: Apple Intelligence, ChatGPT, Gemini, Claude
 
-Có macOS 26 + chip Apple + đã bật Apple Intelligence: câu hỏi tự do đi qua mô hình trên máy (FoundationModels).
-Asi nhớ 6 lượt gần nhất (30 phút), biết việc, lịch, ghi chú, mục vừa chép và tình trạng máy, và có thể tự **thêm việc,
-ghi chú, bật tập trung, mở lịch hôm nay / việc trễ / tình trạng máy / dọn rác** khi bạn nhờ. Lệnh ngắn rõ ràng
+Cài đặt › Asi & giọng nói › **Bộ não của Asi**: chọn Apple Intelligence (chạy trên máy, miễn phí) hoặc ChatGPT / Gemini /
+Claude bằng API key của bạn (lưu trong Keychain; phí tính vào tài khoản của bạn; tiếng Việt tốt hơn mô hình trên máy).
+Dưới mỗi câu trả lời có ghi nhỏ ai đã trả lời. Có thể tắt "Gửi kèm ngữ cảnh" để không gửi việc / ghi chú / clipboard lên mạng.
+
+Với Apple Intelligence (macOS 26 + chip Apple + đã bật): câu hỏi tự do đi qua mô hình trên máy (FoundationModels).
+Asi nhớ 6 lượt gần nhất (30 phút), biết việc, lịch, ghi chú, mục vừa chép và tình trạng máy, và **chỉ khi bạn nhờ rõ ràng**
+mới tự thêm việc, ghi chú, bật tập trung; ngoài ra có thể mở lịch hôm nay / việc trễ / tình trạng máy / dọn rác. Lệnh ngắn rõ ràng
 ("dọn rác", "nhắc tôi 3h…") vẫn chạy bằng luật cho nhanh. Trợ lý Swift được biên dịch sẵn lúc đóng gói (cần Xcode 26 trên
 máy build) để máy khách không phải cài công cụ gì.
 

@@ -21,6 +21,7 @@ pub mod updater;
 pub mod vocab;
 pub mod voice;
 pub mod license;
+pub mod llm;
 pub mod nlp;
 pub mod store;
 pub mod commands;
@@ -213,7 +214,7 @@ pub fn run() {
             clean_scan, clean_run, clean_history, open_disk_settings,
             health_break_done, health_snooze, focus_start, focus_stop,
             get_settings, save_settings, patch_settings, license_info, activate_license, deactivate_license, quit,
-            get_status, asi_ask, asi_action, asi_reset, asi_speak, asi_stop_speaking, apple_ai_status,
+            get_status, asi_ask, asi_action, asi_reset, ai_info, ai_set_key, ai_test, asi_speak, asi_stop_speaking, apple_ai_status,
             clip_list, clip_copy, clip_merge, clip_copy_files, clip_copy_image, clip_pin, clip_delete, clip_clear, clip_image, clip_to_note, clip_to_task,
             accessibility_status, open_privacy,
             voice_start, voice_stop, voice_cancel,

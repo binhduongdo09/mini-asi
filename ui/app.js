@@ -941,7 +941,8 @@
     return "";
   }
   function replyHtml(r) {
-    return r.cards.map(cardHtml).join("") + (r.actions.length ? `<div class="a-acts">${r.actions.map((a, i) => `<button class="btn sm ${i === 0 ? "primary" : ""}" data-ac="${esc(a.cmd)}" data-arg="${esc(a.arg)}">${esc(a.label)}</button>`).join("")}</div>` : "");
+    return r.cards.map(cardHtml).join("") + (r.actions.length ? `<div class="a-acts">${r.actions.map((a, i) => `<button class="btn sm ${i === 0 ? "primary" : ""}" data-ac="${esc(a.cmd)}" data-arg="${esc(a.arg)}">${esc(a.label)}</button>`).join("")}</div>` : "")
+      + (r.engine ? `<div class="engine">${esc(r.engine)}</div>` : ""); // ai trả lời: Apple Intelligence / ChatGPT · … / Lệnh cơ bản
   }
   async function askAsi(text, compact) {
     text = (text || "").trim();
@@ -984,7 +985,7 @@
   }
   async function runAction(cmd, arg, compact) {
     if (cmd === "ask") return askAsi(arg, compact);
-    if (cmd === "open_tab") { if (arg === "settings") return openSettings(); tab = arg; return setMode("expanded", { force: true }); }
+    if (cmd === "open_tab") { if (arg === "settings" || arg === "ai") return openSettings(arg === "ai" ? "assistant" : null); tab = arg; return setMode("expanded", { force: true }); }
     if (cmd === "open_chat") { tab = "home"; return setMode("expanded", { force: true }); }
     if (cmd === "more_voice") return voiceCommand();
     if (cmd === "close") { api("asi_stop_speaking"); return setMode("collapsed"); }

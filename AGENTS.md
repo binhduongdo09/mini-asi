@@ -20,7 +20,9 @@ Nền: nhắc nghỉ mắt/uống nước, đồng bộ Apple (Lời nhắc, Ghi
 - macOS API qua `objc2` trong `crates/notch-native` (NSScreen, NSWindow level, NSPasteboard, EventKit, Speech, TIS bộ gõ, quyền).
 - Giọng đọc: MỘT bộ đọc Piper (NghiTTS) chạy bằng Python riêng (cài qua `uv`) trong thư mục dữ liệu app — `src-tauri/src/tts.rs`.
   **Không** thêm lại giọng trực tuyến (edge-tts, Google Translate TTS…) hay giọng Linh của macOS cho tiếng Việt.
-- Apple Intelligence: `src-tauri/src/apple_ai.rs` + `src-tauri/resources/asi_ai.swift` (biên dịch sẵn trong `build.rs`).
+- "Bộ não" của Asi (`settings.ai_provider`): Apple Intelligence (`apple_ai.rs` + `resources/asi_ai.swift`, biên dịch sẵn trong
+  `build.rs`) hoặc ChatGPT / Gemini / Claude (`llm.rs`, API key trong Keychain qua `threads::secret`, tên mục `ai_key_<id>`).
+  **Không** để mô hình tự ghi dữ liệu khi người dùng chỉ hỏi — mọi hành động ghi phải qua `assistant::user_asks_for`.
   Luồng hỏi đáp: `commands/assistant.rs::asi_ask` — lệnh ngắn rõ ràng → luật (`assistant.rs`), còn lại → mô hình trả
   `{reply, action, argument}` → `reply_from_ai` thực hiện hành động bằng lệnh có sẵn. Thêm hành động mới: thêm vào
   `apple_ai::ACTIONS`, mô tả trường `action` trong asi_ai.swift, chỉ dẫn trong `ai_instructions` và nhánh trong `reply_from_ai`.

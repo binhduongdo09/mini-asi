@@ -136,15 +136,36 @@
     return out;
   }
   const VOICE_NOTE = "Giọng Piper (NghiTTS) chạy trên máy: nhẹ, đọc gần như tức thì, tự tắt khi rảnh để trả RAM. Câu tiếng Anh dùng giọng tiếng Anh của macOS.";
-  async function secAssistant() {
-    [tts, ai] = await Promise.all([api("tts_info").catch(() => null), api("apple_ai_status").catch(() => null)]);
+  let brains = [];
+  function brainGroup() {
+    const prov = st.ai_provider || "apple";
     const aiOk = ai && ai.available;
+    const rows = [
+      row("Trợ lý AI", "Hỏi đáp tự do, viết, dịch, tóm tắt, lên kế hoạch… — tắt thì Asi chỉ hiểu lệnh cơ bản", sw("apple_ai_enabled", st.apple_ai_enabled !== false)),
+      row("Bộ não", "", seg("ai_provider", [["apple", "Apple Intelligence"], ["openai", "ChatGPT"], ["gemini", "Gemini"], ["claude", "Claude"]], prov)),
+    ];
+    let foot;
+    const b = brains.find((x) => x.id === prov);
+    if (!b) {
+      rows.push(row("Trạng thái", esc(ai ? ai.detail : "Không kiểm tra được"), aiOk ? `<span class="tag green">Sẵn sàng</span>` : `<span class="tag">Chưa có</span>`));
+      foot = aiOk
+        ? "Chạy ngay trên máy, không gửi dữ liệu đi. Mô hình trên máy nhỏ nên tiếng Việt có lúc chưa chuẩn — muốn trả lời hay hơn, chọn ChatGPT, Gemini hoặc Claude."
+        : "Máy chưa dùng được Apple Intelligence (cần macOS 26, chip Apple, đã bật). Chọn ChatGPT, Gemini hoặc Claude với API key của bạn để hỏi đáp tự do.";
+    } else {
+      rows.push(`<div class="srow"><div class="grow"><b>API key</b><span>${b.has_key ? "Đã lưu trong Keychain của máy" : `Chưa có — <button class="link inline-link" data-act="key-url" data-url="${esc(b.key_url)}">lấy key ${esc(b.name)}</button>`}</span></div>
+        <input class="field" id="aiKey" type="password" style="width:200px" placeholder="${b.has_key ? "•••••••• (đã lưu)" : "Dán API key"}" />
+        <button class="btn sm" data-act="key-save" data-p="${b.id}">Lưu</button>${b.has_key ? `<button class="link" data-act="key-del" data-p="${b.id}">Xoá</button>` : ""}</div>`);
+      rows.push(row("Mô hình", `Mặc định ${esc(b.default_model)} · bấm Kiểm tra để tự chọn bản mới nhất`, `${txt("ai_model_" + b.id, 170).replace(`value="${esc(st["ai_model_" + b.id])}"`, `value="${esc(st["ai_model_" + b.id] || b.model)}"`)}<button class="btn sm" data-act="ai-test" data-p="${b.id}" ${b.has_key ? "" : "disabled"}>Kiểm tra</button>`));
+      rows.push(row("Gửi kèm ngữ cảnh", "Việc, lịch hôm nay, ghi chú gần đây, mục vừa chép, tình trạng máy — giúp trả lời sát với bạn hơn", sw("ai_cloud_context", st.ai_cloud_context !== false)));
+      foot = `Câu hỏi${st.ai_cloud_context !== false ? " và ngữ cảnh" : ""} được gửi tới ${esc(b.name)} bằng API key của bạn; phí tính vào tài khoản ${esc(b.name)}. Asi chỉ thêm việc / ghi chú khi bạn nhờ rõ ràng.`;
+    }
+    return group("Bộ não của Asi", rows, foot);
+  }
+  async function secAssistant() {
+    [tts, ai, brains] = await Promise.all([api("tts_info").catch(() => null), api("apple_ai_status").catch(() => null), api("ai_info").catch(() => [])]);
     const hasVoice = tts && tts.status.phase === "ready";
     return head("Asi & giọng nói") +
-      group("Trí tuệ", [row("Apple Intelligence", esc(ai ? ai.detail : "Không kiểm tra được"), aiOk ? sw("apple_ai_enabled", st.apple_ai_enabled !== false) : `<span class="tag">Chưa có</span>`)],
-        aiOk
-          ? "Hỏi gì cũng được: giải thích, viết email, dịch, tóm tắt, lên kế hoạch… Asi nhớ mạch trò chuyện và tự thêm việc, ghi chú khi bạn nhờ. Xử lý ngay trên máy, không gửi lên mạng."
-          : "Khi chưa có, Asi vẫn hiểu các lệnh cơ bản (thêm việc, nhắc, dọn máy…) hoàn toàn offline.") +
+      `<div id="brainGroup">${brainGroup()}</div>` +
       group("Nghe & nói", [
         row("Ngôn ngữ khi nói với Asi", "Dùng cho ghi chú, thêm việc, nhật ký bằng giọng nói", `<select class="field" data-txt="voice_lang">${[["vi-VN", "Tiếng Việt"], ["en-US", "English (US)"], ["en-GB", "English (UK)"]].map(([v, n]) => `<option value="${v}" ${st.voice_lang === v ? "selected" : ""}>${n}</option>`).join("")}</select>`),
         row("Đọc to câu trả lời", hasVoice ? "Asi đọc 1–2 câu đầu của câu trả lời" : "Cần tải giọng đọc bên dưới", hasVoice ? sw("voice_reply") : ""),
@@ -309,6 +330,25 @@
     const busy = () => { b.disabled = true; b.innerHTML = '<span class="spin"></span>'; };
     try {
       if (a === "quit") return api("quit");
+      if (a === "key-url") return api("open_link", { url: b.dataset.url });
+      if (a === "key-save" || a === "key-del") {
+        const key = a === "key-del" ? "" : ($("#aiKey").value || "").trim();
+        if (a === "key-save" && !key) { toast("Dán API key vào ô trước đã"); return; }
+        await api("ai_set_key", { provider: b.dataset.p, key });
+        brains = await api("ai_info");
+        toast(key ? "Đã lưu key — đang kiểm tra…" : "Đã xoá key");
+        $("#brainGroup").innerHTML = brainGroup();
+        if (key) $(`[data-act="ai-test"][data-p="${b.dataset.p}"]`)?.click();
+        return;
+      }
+      if (a === "ai-test") {
+        busy();
+        try { const m = await api("ai_test", { provider: b.dataset.p }); st = await api("get_settings"); toast(`Kết nối tốt · mô hình ${m}`); }
+        catch (err) { toast(String(err)); }
+        brains = await api("ai_info");
+        $("#brainGroup").innerHTML = brainGroup();
+        return;
+      }
       if (a === "upd-check") { busy(); upd = await api("update_check"); const g = $("#updGroup"); if (g) g.innerHTML = group("Cập nhật", updateRows()); return; }
       if (a === "upd-install") { busy(); await api("update_install"); return; }
       if (a === "reset-pos") { await api("move_bubble", { x: 0, y: 0, save: true }); st = await api("get_settings"); toast("Đã đưa về vị trí mặc định"); return render(true); }

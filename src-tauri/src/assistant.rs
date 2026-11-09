@@ -58,7 +58,7 @@ pub fn explicit_command(input: &str) -> Option<(Intent, String)> {
             "them nhiem vu ", "tao nhiem vu ", "them viec ", "tao viec ", "them task ", "tao task ", "them lich ", "nhac nho toi ", "nhac nho minh ",
             "nhac toi ", "nhac minh ", "nhac em ", "nhac anh ", "add a task ", "create a task ", "add task ", "remind me to ", "remind me ", "new task ",
         ][..], Intent::AddTask),
-        (&["ghi chu ", "ghi lai ", "luu y ", "note ", "take a note ", "write down "][..], Intent::AddNote),
+        (&["ghi chu ", "ghi lai ", "luu ghi chu ", "take a note ", "write down ", "note "][..], Intent::AddNote),
     ] {
         for k in keys {
             // chỉ tính khi lệnh nằm ở đầu câu (tối đa 2 từ đệm phía trước: "Asi ơi nhắc tôi…")
@@ -76,6 +76,30 @@ pub fn explicit_command(input: &str) -> Option<(Intent, String)> {
         }
     }
     None
+}
+
+/// Câu hỏi (không phải mệnh lệnh): có "?" hoặc từ để hỏi tiếng Việt / tiếng Anh
+pub fn looks_like_question(input: &str) -> bool {
+    if input.trim_end().ends_with('?') {
+        return true;
+    }
+    let f = format!(" {} ", fold(input.trim()).replace([',', '.', '!'], " "));
+    has_any(&f, &[
+        "khong", "chua", "gi", "sao", "nao", "bao nhieu", "bao gio", "khi nao", "the nao", "lam sao", "o dau", "la ai", "co phai", "duoc khong",
+        "what", "why", "how", "when", "where", "who", "which", "is it", "can you", "could you", "should i",
+    ]) && !f.trim_start().starts_with("nhac ")
+}
+
+/// Người dùng có thật sự nhờ app LÀM việc này không (chặn mô hình tự thêm việc / ghi chú khi người dùng chỉ hỏi)
+pub fn user_asks_for(action: &str, input: &str) -> bool {
+    let f = format!(" {} ", fold(input.trim()).replace([',', '.', '!', '?', ':'], " "));
+    let keys: &[&str] = match action {
+        "add_task" => &["nhac", "them viec", "them cong viec", "tao viec", "tao cong viec", "them task", "tao task", "them nhiem vu", "viec can lam", "len lich", "dat lich", "hen gio", "dat hen", "to do", "todo", "remind", "add task", "add a task", "create a task", "schedule"],
+        "add_note" => &["ghi chu", "ghi lai", "luu lai", "luu vao", "luu thanh", "note", "save", "write down"],
+        "start_focus" => &["tap trung", "focus", "pomodoro"],
+        _ => return true,
+    };
+    has_any(&f, keys)
 }
 
 /// Phân loại câu nói. Trả về ý định + phần nội dung còn lại (vd. nội dung việc cần thêm).
@@ -120,8 +144,8 @@ pub fn classify(input: &str) -> (Intent, String) {
             return (*intent, String::new());
         }
     }
-    // Câu có giờ hẹn rõ ràng → hiểu là thêm việc
-    if crate::nlp::parse(&raw, chrono::Local::now().naive_local()).due.is_some() {
+    // Câu có giờ hẹn rõ ràng (và không phải câu hỏi) → hiểu là thêm việc
+    if !looks_like_question(input) && crate::nlp::parse(&raw, chrono::Local::now().naive_local()).due.is_some() {
         return (Intent::AddTask, raw);
     }
     (Intent::Unknown, raw)
@@ -240,12 +264,14 @@ pub struct Reply {
     pub mood: String,
     pub cards: Vec<Card>,
     pub actions: Vec<Action>,
+    /// ai đã trả lời: "Apple Intelligence" | "ChatGPT · gpt-5-mini" | "Lệnh cơ bản" … (hiện nhỏ dưới câu trả lời)
+    pub engine: String,
 }
 
 impl Reply {
     pub fn new(intent: Intent, text: impl Into<String>) -> Self {
         let t = text.into();
-        Self { intent, speak: t.clone(), text: t, mood: "happy".into(), cards: vec![], actions: vec![] }
+        Self { intent, speak: t.clone(), text: t, mood: "happy".into(), cards: vec![], actions: vec![], engine: String::new() }
     }
     pub fn act(mut self, label: &str, cmd: &str, arg: &str) -> Self {
         self.actions.push(Action { label: label.into(), cmd: cmd.into(), arg: arg.into() });
@@ -308,6 +334,26 @@ mod tests {
         assert_ne!(classify("kể chuyện con mèo trên mái nhà").0, Intent::Overdue);
         assert_ne!(classify("restaurant nào ngon ở Hà Nội").0, Intent::Break);
         assert_eq!(classify("việc nào trễ").0, Intent::Overdue);
+    }
+
+    #[test]
+    fn questions_are_not_tasks() {
+        assert!(looks_like_question("Hà Nội mai có mưa không"));
+        assert!(looks_like_question("Thứ 6 này nên mặc gì đi đám cưới?"));
+        assert!(!looks_like_question("mai 9h gọi khách"));
+        assert_ne!(classify("Thứ 6 này nên mặc gì đi đám cưới?").0, Intent::AddTask);
+        assert_eq!(classify("thứ 6 nộp báo cáo").0, Intent::AddTask);
+        assert!(explicit_command("Lưu ý gì khi đi Đà Lạt").is_none(), "\"lưu ý\" không phải lệnh ghi chú");
+    }
+
+    #[test]
+    fn write_actions_need_explicit_request() {
+        assert!(user_asks_for("add_task", "nhắc mình mai 8h nộp hồ sơ"));
+        assert!(user_asks_for("add_task", "Thêm việc mua sữa"));
+        assert!(!user_asks_for("add_task", "Mai thời tiết Hà Nội thế nào?"));
+        assert!(user_asks_for("add_note", "lưu lại đoạn này vào ghi chú"));
+        assert!(!user_asks_for("add_note", "Viết giúp mình email xin nghỉ phép"));
+        assert!(user_asks_for("show_today", "bất kỳ"));
     }
 
     #[test]

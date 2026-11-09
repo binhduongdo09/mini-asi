@@ -24,7 +24,7 @@
   const settings = { break_enabled: true, break_minutes: 50, water_enabled: true, water_minutes: 60, sleep_hour: 23, focus_mode: false, launch_at_login: true, license_key: null, pdf_quality: "ebook", shortcut: "CmdOrCtrl+Shift+Space",
     clip_enabled: true, clip_max: 200, clip_shortcut: "Control+Shift+V", clip_autopaste: false, sync_reminders: true, reminders_list: "Mini-Asi", sync_notes: true, notes_folder: "Mini-Asi",
     show_calendar: true, event_alert_minutes: 10, voice_lang: "vi-VN", journal_enabled: true, journal_hour: 21,
-    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", notch_w: 0, notch_h: 0, icon_size: q.get("icons") || "large", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", modules: q.get("mods") ? q.get("mods").split(",").filter(Boolean) : ["threads", "clean", "focus"], apple_ai_enabled: true, auto_update_check: true, update_repo: "binhduongdo09/mini-asi", voice_reply: false, tts_engine: "nghi", tts_voice: "Mai Phương" };
+    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", notch_w: 0, notch_h: 0, icon_size: q.get("icons") || "large", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", modules: q.get("mods") ? q.get("mods").split(",").filter(Boolean) : ["threads", "clean", "focus"], apple_ai_enabled: true, ai_provider: q.get("brain") || "apple", ai_model_openai: "", ai_model_gemini: "", ai_model_claude: "", ai_cloud_context: true, auto_update_check: true, update_repo: "binhduongdo09/mini-asi", voice_reply: false, tts_engine: "nghi", tts_voice: "Mai Phương" };
   const today0 = new Date(); today0.setHours(0, 0, 0, 0);
   const at = (h, m = 0) => today0.getTime() + h * H + m * 60e3;
   const events = [
@@ -196,9 +196,13 @@
     vocab_play: () => null, vocab_play_mine: () => null, vocab_learned: () => null,
     vocab_check: ({ word, heard }) => heard.toLowerCase().includes(word) ? { score: 96, verdict: "great", heard, tip: "Chuẩn rồi! 🎉" } : { score: 74, verdict: "close", heard, tip: `Gần đúng — Asi nghe thành “${heard}”.` },
     tts_install: () => null, tts_uninstall: () => null, tts_use: ({ voice }) => { settings.tts_voice = voice; return null; }, asi_reset: () => null,
+    ai_info: () => [["openai", "ChatGPT", "gpt-5-mini", "https://platform.openai.com/api-keys"], ["gemini", "Gemini", "gemini-flash-latest", "https://aistudio.google.com/apikey"], ["claude", "Claude", "claude-haiku-4-5", "https://console.anthropic.com/settings/keys"]]
+      .map(([id, name, dm, url]) => ({ id, name, has_key: id === "gemini", model: settings["ai_model_" + id] || dm, default_model: dm, key_url: url })),
+    ai_set_key: () => null, ai_test: async ({ provider }) => { await wait(500); return provider === "gemini" ? "gemini-flash-latest" : "gpt-5-mini"; },
     ime_info: () => ({ current: "com.lacviet.inputmethod.VietTelex", recognized: "telex", enabled: ["com.apple.keylayout.ABC", "com.lacviet.inputmethod.VietTelex"] }),
     threads_post: async () => { await wait(500); return "p9"; }, threads_mark_read: () => null, open_link: () => null, threads_web: () => null, threads_embed: () => null,
-    asi_ask: async ({ text }) => { await wait(600); const t = text.toLowerCase();
+    asi_ask: async ({ text }) => { await wait(600); const r = await H_._ask_unused({ text }); if (r.intent === "unknown") { r.text = "Có, mai Hà Nội có mưa rào nhẹ buổi chiều (khoảng 60%). Bạn nhớ mang ô khi ra ngoài sau 3 giờ nhé."; r.actions = []; r.mood = "happy"; r.engine = "Gemini · gemini-flash-latest"; } else r.engine = "Lệnh cơ bản"; return r; },
+    _ask_unused: async ({ text }) => { const t = text.toLowerCase();
       if (t.includes("máy") || t.includes("mac")) return { intent: "status", text: "Asi thấy 2 điều cần để ý: ổ đĩa sắp đầy (còn 9%); 2 việc đang trễ.", speak: "", mood: "worried",
         cards: [{ kind: "metrics", items: [{ label: "Ổ đĩa trống", value: "21.4 GB (9%)", level: 1, ratio: 0.91 }, { label: "CPU", value: "23%", level: 0, ratio: 0.23 }, { label: "RAM", value: "71% / 16 GB", level: 0, ratio: 0.71 }, { label: "Pin", value: "64% ⚡", level: 0, ratio: 0.64 }, { label: "Đã bật", value: "3.2 ngày", level: 0, ratio: null }] }],
         actions: [{ label: "Dọn rác ngay", cmd: "ask", arg: "dọn rác" }, { label: "Xem việc trễ", cmd: "ask", arg: "việc nào trễ" }] };
