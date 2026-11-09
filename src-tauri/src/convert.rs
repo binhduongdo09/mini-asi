@@ -653,7 +653,7 @@ mod tests {
         if let Ok(o) = Command::new("qpdf").arg("--check").arg(&r.output).output() {
             assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stdout));
         }
-        if let Ok(o) = Command::new("pdftotext").arg(&r.output).arg("-").output() {
+        if let Ok(o) = Command::new("pdftotext").args(["-enc", "UTF-8"]).arg(&r.output).arg("-").output() {
             let t = String::from_utf8_lossy(&o.stdout);
             assert!(t.contains("Biên bản họp quý 4") && t.contains("Gửi báo giá trước thứ 6"), "{t}");
         }

@@ -166,6 +166,7 @@ pub struct SysInfo {
 
 pub fn sysinfo() -> SysInfo {
     let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+    #[allow(unused_mut)]
     let mut s = SysInfo { cores, ..Default::default() };
     #[cfg(unix)]
     {
