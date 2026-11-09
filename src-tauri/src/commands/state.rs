@@ -22,11 +22,11 @@ pub struct AppState {
     /// Bộ gõ hệ thống thấy được ở lần mở tai thỏ gần nhất (hiện trong Cài đặt)
     pub ime_last: Mutex<String>,
     pub data_dir: PathBuf,
-    /// VieNeu-TTS
+    /// Giọng đọc Asi (Piper, chạy trên máy)
     pub tts: Arc<tts::Tts>,
-    /// NghiTTS (Piper)
-    pub nghi: Arc<tts::Tts>,
     pub vocab: Mutex<vocab::Vocab>,
+    /// Hội thoại gần đây với Asi (câu hỏi, câu trả lời, thời điểm) — để Apple Intelligence hiểu câu hỏi nối tiếp
+    pub chat_log: Mutex<Vec<(String, String, i64)>>,
     /// Trạng thái kiểm tra & tải bản cập nhật
     pub update: Mutex<updater::UpdateProgress>,
 }

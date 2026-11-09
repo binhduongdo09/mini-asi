@@ -9,7 +9,7 @@ pub use std::sync::{mpsc, Arc, Mutex, OnceLock};
 pub use std::time::Duration;
 pub use store::{now_ms, Store, Task};
 pub use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, State, WebviewWindow};
-pub use crate::{apple, assistant, backup, clipboard, files, health, journal, license, nlp, store, sync, threads, tts, updater, vocab, voice};
+pub use crate::{apple, apple_ai, assistant, backup, clipboard, files, health, journal, license, nlp, store, sync, threads, tts, updater, vocab, voice};
 pub use crate::commands::state::*;
 pub use crate::commands::window::*;
 pub use crate::commands::tasks::*;

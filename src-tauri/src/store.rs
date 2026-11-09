@@ -113,7 +113,7 @@ pub struct Settings {
     pub bubble_y: f64,
     /// Asi đọc to câu trả lời
     pub voice_reply: bool,
-    /// Giọng đọc của Asi: "system" (Linh/Samantha của máy) | "vieneu" (VieNeu-TTS, cần tải)
+    /// Giọng đọc của Asi: "nghi" (Piper chạy trên máy, cần tải) — giá trị cũ "vieneu"/"system" coi như chưa chọn
     pub tts_engine: String,
     pub tts_voice: String,
     /// Mô-đun phụ đang bật (mỗi mô-đun = 1 tab / 1 nút): "threads" | "clean" | "focus" | "journal" | "words".
@@ -204,7 +204,7 @@ impl Default for Settings {
             bubble_x: 0.0,
             bubble_y: 0.0,
             voice_reply: false,
-            tts_engine: "vieneu".into(),
+            tts_engine: crate::tts::ENGINE_ID.into(),
             tts_voice: crate::tts::DEFAULT_VOICE.into(),
             modules: default_modules(),
             wing_size: "s".into(),

@@ -18,7 +18,12 @@ Nền: nhắc nghỉ mắt/uống nước, đồng bộ Apple (Lời nhắc, Ghi
 - **Tauri v2** (Rust backend + webview). Không framework UI: `ui/` là HTML/CSS/JS thuần, không có bước build.
 - Rust workspace: `src-tauri` (app) + `crates/asi-clean`, `crates/notch-native`, `crates/license-tool`.
 - macOS API qua `objc2` trong `crates/notch-native` (NSScreen, NSWindow level, NSPasteboard, EventKit, Speech, TIS bộ gõ, quyền).
-- Giọng đọc tải thêm chạy bằng Python riêng (cài qua `uv`) trong thư mục dữ liệu app — xem `src-tauri/src/tts.rs`.
+- Giọng đọc: MỘT bộ đọc Piper (NghiTTS) chạy bằng Python riêng (cài qua `uv`) trong thư mục dữ liệu app — `src-tauri/src/tts.rs`.
+  **Không** thêm lại giọng trực tuyến (edge-tts, Google Translate TTS…) hay giọng Linh của macOS cho tiếng Việt.
+- Apple Intelligence: `src-tauri/src/apple_ai.rs` + `src-tauri/resources/asi_ai.swift` (biên dịch sẵn trong `build.rs`).
+  Luồng hỏi đáp: `commands/assistant.rs::asi_ask` — lệnh ngắn rõ ràng → luật (`assistant.rs`), còn lại → mô hình trả
+  `{reply, action, argument}` → `reply_from_ai` thực hiện hành động bằng lệnh có sẵn. Thêm hành động mới: thêm vào
+  `apple_ai::ACTIONS`, mô tả trường `action` trong asi_ai.swift, chỉ dẫn trong `ai_instructions` và nhánh trong `reply_from_ai`.
 
 ## Chạy, kiểm thử, đóng gói
 
@@ -78,16 +83,17 @@ Kiểm tra biên dịch cho macOS từ Linux (không cần Mac): `RUSTC_BOOTSTRA
 
 ## Những gì chưa kiểm chứng trên Mac thật (ưu tiên test khi có máy)
 
-- Giọng VieNeu / NghiTTS (cài qua `uv`, tải mô hình) — mới test bằng mô hình giả.
+- Giọng NghiTTS (cài qua `uv`, tải giọng) — mới test bằng mô hình giả.
+- Trợ lý Apple Intelligence (`asi_ai.swift`) — chưa biên dịch/chạy trên macOS 26 thật.
 - Tự chuyển bộ gõ khi dùng bộ gõ bên thứ ba (VietTelex, OpenKey…), tầng cửa sổ khi hiện hộp thoại quyền.
 - Cửa sổ Threads ở chế độ bong bóng (đã sửa lỗi bị che & ẩn nhầm, cần xác nhận).
 - Học từ mới: tra từ online (dictionaryapi.dev) và chấm phát âm bằng nhận dạng giọng nói tiếng Anh.
 
 ## Lộ trình gợi ý
 
-0. Rủi ro cần xử lý trước khi bán: `tts::speak_direct_http` gọi endpoint TTS không chính thức của Google Translate
-   (và gói giọng "Asi Neural Studio" dùng edge-tts trực tuyến) — gửi chữ của người dùng ra ngoài, điều khoản không cho dùng thương mại.
-   Updater đọc GitHub Releases của kho private bằng token máy dev và chưa kiểm chữ ký gói cập nhật.
+0. Rủi ro cần xử lý trước khi bán: updater đọc GitHub Releases của kho private bằng token máy dev và chưa kiểm chữ ký gói
+   cập nhật; NghiTTS chưa công bố nguồn dữ liệu giọng (xin xác nhận tác giả); trợ lý Apple Intelligence chưa chạy thử trên
+   máy macOS 26 thật (kiểm tra cú pháp `@Generable`/`@Guide` khi build bằng Xcode 26).
 1. Ký số + notarize Apple; ký gói cập nhật.
 2. Chạy VieNeu trực tiếp trong Rust (crate `ort`) để bỏ Python (~150 MB).
 3. Nhận dạng giọng nói trên Windows/Linux (Whisper on-device).

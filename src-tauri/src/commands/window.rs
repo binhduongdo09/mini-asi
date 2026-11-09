@@ -209,11 +209,11 @@ pub(crate) fn on_main<T: Send + 'static>(app: &AppHandle, f: impl FnOnce() -> T 
 pub(crate) async fn set_interactive(app: AppHandle, win: WebviewWindow, st: S<'_>, on: bool, keep_focus: Option<bool>) -> Result<Option<String>, String> {
     let (engine, tts_on) = {
         let g = st.store.lock().unwrap();
-        (g.settings.viet_engine.clone(), if g.settings.voice_reply { tts::Engine::from_id(&g.settings.tts_engine) } else { None })
+        (g.settings.viet_engine.clone(), g.settings.voice_reply)
     };
     if on {
-        if let Some(e) = tts_on {
-            tts_pack(&st, e).ensure_worker(); // nạp sẵn giọng khi mở tai thỏ
+        if tts_on {
+            st.tts.ensure_worker(); // nạp sẵn giọng khi mở tai thỏ
         }
         if engine == "off" {
             if let Some(prev) = st.ime_prev.lock().unwrap().take() {

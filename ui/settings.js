@@ -115,49 +115,51 @@
   }
 
   // ───────── Asi & giọng nói ─────────
-  let tts = null, ai = null, qsel = null;
+  let tts = null, ai = null;
   function voiceRows() {
     if (!tts) return [];
-    const cur = (e, v) => tts.engine === e && tts.voice === v;
-    const voice = (engine, [name, g, desc], ready) => `<div class="srow voice ${cur(engine, name) ? "on" : ""}">
-        <span class="vav">${g === "female" ? "Nữ" : "Nam"}</span><div class="grow"><b>${esc(name)}</b><span>${esc(desc)}</span></div>
-        <button class="ib" data-tts="hear" data-engine="${engine}" data-voice="${esc(name)}" title="Nghe thử" ${ready ? "" : "disabled"}>${I.play}</button>
-        <button class="btn sm ${cur(engine, name) ? "primary" : ""}" data-tts="use" data-engine="${engine}" data-voice="${esc(name)}" ${ready ? "" : "disabled"}>${cur(engine, name) ? "Đang dùng" : "Dùng"}</button></div>`;
-    const qs = tts.qualities || [];
+    const s = tts.status, installed = s.phase === "ready", busy = s.phase === "installing";
     const out = [];
-    for (const p of tts.packs) {
-      const s = p.status, ready = s.phase === "ready";
-      let ctrl = "";
-      if (s.phase === "none" || s.phase === "error") {
-        const q = qsel || tts.default_quality || "compact";
-        ctrl = `${p.id === "vieneu" && qs.length ? seg("_q", qs.map(([id, n, mb]) => [id, `${n} · ${mb} MB`]), q) : `<span class="dim">≈ ${p.model_mb} MB</span>`}<button class="btn sm primary" data-tts="install" data-engine="${p.id}">Tải về</button>`;
-      } else if (s.phase === "installing") ctrl = `<span class="spin"></span><span class="dim prog" data-prog="${p.id}">${esc(s.step || "Đang cài…")}</span>`;
-      else ctrl = `<button class="link" data-tts="uninstall" data-engine="${p.id}">Gỡ</button>`;
-      out.push(`<div class="srow pack"><div class="grow"><b>${esc(p.name)}</b><span>${esc(p.blurb)}${s.phase === "error" ? ` · <span class="err">${esc(s.error || "Lỗi")}</span>` : ""}</span></div>${ctrl}</div>`);
-      if (ready) for (const v of p.voices) out.push(voice(p.id, v, true));
+    if (busy) out.push(`<div class="srow pack"><span class="spin"></span><div class="grow"><b>Đang tải giọng đọc…</b><span class="prog" id="ttsProg">${esc(s.step || "")}</span></div></div>`);
+    else if (!installed) {
+      out.push(`<div class="srow pack"><div class="grow"><b>Chưa có giọng đọc</b><span>Chọn một giọng để tải — chỉ 1 lần, sau đó đọc không cần mạng.${s.phase === "error" ? ` <span class="err">${esc(s.error || "Lỗi")}</span>` : ""}</span></div></div>`);
     }
-    out.push(`<div class="srow voice ${tts.engine === "system" ? "on" : ""}"><span class="vav">Máy</span><div class="grow"><b>Giọng có sẵn của máy</b><span>Không cần tải · offline</span></div>
-      <button class="ib" data-tts="hear" data-engine="system" data-voice="" title="Nghe thử">${I.play}</button>
-      <button class="btn sm ${tts.engine === "system" ? "primary" : ""}" data-tts="use" data-engine="system" data-voice="">${tts.engine === "system" ? "Đang dùng" : "Dùng"}</button></div>`);
+    for (const v of tts.voices) {
+      const on = installed && v.downloaded && tts.voice === v.name;
+      const ctrl = v.downloaded
+        ? `<button class="ib" data-tts="hear" data-voice="${esc(v.name)}" title="Nghe thử" ${busy ? "disabled" : ""}>${I.play}</button>
+           <button class="btn sm ${on ? "primary" : ""}" data-tts="use" data-voice="${esc(v.name)}" ${busy || on ? "disabled" : ""}>${on ? "Đang dùng" : "Dùng"}</button>`
+        : `<span class="dim">${installed ? tts.voice_mb : tts.first_mb} MB</span><button class="btn sm ${installed ? "" : "primary"}" data-tts="install" data-voice="${esc(v.name)}" ${busy ? "disabled" : ""}>Tải về</button>`;
+      out.push(`<div class="srow voice ${on ? "on" : ""}"><span class="vav">${v.gender === "female" ? "Nữ" : "Nam"}</span><div class="grow"><b>${esc(v.name)}</b><span>${esc(v.desc)}</span></div>${ctrl}</div>`);
+    }
+    if (installed && !busy) out.push(row("Dung lượng", `${s.size_mb || "…"} MB trên máy`, `<button class="link" data-tts="uninstall">Gỡ giọng đọc</button>`));
     return out;
   }
+  const VOICE_NOTE = "Giọng Piper (NghiTTS) chạy trên máy: nhẹ, đọc gần như tức thì, tự tắt khi rảnh để trả RAM. Câu tiếng Anh dùng giọng tiếng Anh của macOS.";
   async function secAssistant() {
     [tts, ai] = await Promise.all([api("tts_info").catch(() => null), api("apple_ai_status").catch(() => null)]);
     const aiOk = ai && ai.available;
+    const hasVoice = tts && tts.status.phase === "ready";
     return head("Asi & giọng nói") +
-      group("Trí tuệ", [row("Apple Intelligence", esc(ai ? ai.detail : "Không kiểm tra được"), aiOk ? sw("apple_ai_enabled", st.apple_ai_enabled !== false) : `<span class="tag">Chưa hỗ trợ</span>`)],
-        aiOk ? "Câu hỏi được xử lý ngay trên máy — không gửi lên mạng." : "Cần macOS 26 trở lên trên máy Apple Silicon. Khi chưa có, Asi vẫn hiểu các lệnh cơ bản (thêm việc, nhắc, dọn máy…) hoàn toàn offline.") +
+      group("Trí tuệ", [row("Apple Intelligence", esc(ai ? ai.detail : "Không kiểm tra được"), aiOk ? sw("apple_ai_enabled", st.apple_ai_enabled !== false) : `<span class="tag">Chưa có</span>`)],
+        aiOk
+          ? "Hỏi gì cũng được: giải thích, viết email, dịch, tóm tắt, lên kế hoạch… Asi nhớ mạch trò chuyện và tự thêm việc, ghi chú khi bạn nhờ. Xử lý ngay trên máy, không gửi lên mạng."
+          : "Khi chưa có, Asi vẫn hiểu các lệnh cơ bản (thêm việc, nhắc, dọn máy…) hoàn toàn offline.") +
       group("Nghe & nói", [
         row("Ngôn ngữ khi nói với Asi", "Dùng cho ghi chú, thêm việc, nhật ký bằng giọng nói", `<select class="field" data-txt="voice_lang">${[["vi-VN", "Tiếng Việt"], ["en-US", "English (US)"], ["en-GB", "English (UK)"]].map(([v, n]) => `<option value="${v}" ${st.voice_lang === v ? "selected" : ""}>${n}</option>`).join("")}</select>`),
-        row("Đọc to câu trả lời", "Asi nói khi trả lời lệnh giọng nói", sw("voice_reply")),
+        row("Đọc to câu trả lời", hasVoice ? "Asi đọc 1–2 câu đầu của câu trả lời" : "Cần tải giọng đọc bên dưới", hasVoice ? sw("voice_reply") : ""),
       ]) +
-      `<div id="ttsGroup">${group("Giọng đọc", voiceRows())}</div>`;
+      `<div id="ttsGroup">${group("Giọng đọc", voiceRows(), VOICE_NOTE)}</div>`;
   }
-  const redrawTts = async () => { tts = await api("tts_info").catch(() => tts); const g = $("#ttsGroup"); if (g) g.innerHTML = group("Giọng đọc", voiceRows()); };
+  const redrawTts = async () => { tts = await api("tts_info").catch(() => tts); const g = $("#ttsGroup"); if (g) g.innerHTML = group("Giọng đọc", voiceRows(), VOICE_NOTE); };
   on("tts-progress", (ev) => {
     const s = ev.status || ev;
-    if (s.phase === "ready" || s.phase === "error") { toast(s.phase === "ready" ? "Đã cài giọng đọc mới" : "Chưa cài được giọng đọc"); return redrawTts(); }
-    const el = $(`[data-prog="${ev.engine || "vieneu"}"]`);
+    if (s.phase === "ready" || s.phase === "error") {
+      toast(s.phase === "ready" ? "Đã tải giọng đọc — Asi sẽ đọc to câu trả lời" : "Chưa tải được giọng đọc");
+      if (sec === "assistant") render(true);
+      return;
+    }
+    const el = $("#ttsProg");
     if (el) el.textContent = s.step || ""; else redrawTts();
   });
 
@@ -268,7 +270,6 @@
     const sg = t.closest("[data-seg]");
     if (sg) {
       const k = sg.dataset.seg, raw = sg.dataset.v;
-      if (k === "_q") { qsel = raw; return redrawTts(); }
       const v = /^\d+$/.test(raw) ? Number(raw) : raw;
       const p = { [k]: v };
       if (k === "wing_size") p.notch_w = { hidden: 0, xs: 28, s: 56, m: 88, l: 128 }[v] ?? st.notch_w;
@@ -287,17 +288,20 @@
     }
     const tt = t.closest("[data-tts]");
     if (tt && !tt.disabled) {
-      const a = tt.dataset.tts, engine = tt.dataset.engine || "vieneu", voice = tt.dataset.voice || "";
-      if (a === "install") { try { await api("tts_install", { engine, quality: qsel || null }); } catch (err) { toast(String(err)); } qsel = null; setTimeout(redrawTts, 200); return; }
-      if (a === "uninstall") {
-        if (tt.dataset.sure !== "1") { tt.dataset.sure = "1"; tt.textContent = "Bấm lần nữa để gỡ"; tt.classList.add("danger"); return; }
-        await api("tts_uninstall", { engine }); toast("Đã gỡ giọng đọc"); return redrawTts();
-      }
-      if (a === "use" || a === "hear") {
-        await api("tts_use", { engine, voice, preview: a === "hear" });
-        if (a === "use") toast(voice ? `Đã chọn giọng ${voice}` : "Đã chọn giọng của máy");
-        return redrawTts();
-      }
+      const a = tt.dataset.tts, voice = tt.dataset.voice || "";
+      try {
+        if (a === "install") { await api("tts_install", { voice }); setTimeout(redrawTts, 150); return; }
+        if (a === "uninstall") {
+          if (tt.dataset.sure !== "1") { tt.dataset.sure = "1"; tt.textContent = "Bấm lần nữa để gỡ"; tt.classList.add("danger"); return; }
+          await api("tts_uninstall"); toast("Đã gỡ giọng đọc"); return render(true);
+        }
+        if (a === "use" || a === "hear") {
+          await api("tts_use", { voice, preview: a === "hear" });
+          if (a === "use") toast(`Đã chọn giọng ${voice}`);
+          return redrawTts();
+        }
+      } catch (err) { toast(String(err)); }
+      return;
     }
     const b = t.closest("[data-act]");
     if (!b || b.disabled) return;

@@ -1,5 +1,24 @@
 # Nhật ký thay đổi
 
+## 0.13.0 (11/2026) — giọng đọc gọn nhẹ, trợ lý Apple Intelligence thông minh hơn
+**Giọng đọc**
+- Chỉ còn **1 bộ đọc chạy trên máy**: NghiTTS (Piper) với 2 giọng thường Mai Phương / Minh Quang; chỉ tải giọng được chọn
+  (≈ 156 MB lần đầu, ≈ 61 MB mỗi giọng thêm); tiến trình đọc tự tắt sau 5 phút rảnh (trước: 20 phút).
+- Bỏ: VieNeu-TTS, edge-tts ("Asi Neural Studio" — thực chất là giọng Microsoft trực tuyến), Google Translate TTS,
+  giọng Linh của macOS cho tiếng Việt; 6 tên giọng "ảo" (cùng 2 giọng Microsoft đổi cao độ). Tự xoá thư mục `vieneu/` cũ.
+- Chưa tải giọng → Asi chỉ hiện chữ; tải xong tự bật "Đọc to câu trả lời". Câu tiếng Anh dùng giọng tiếng Anh của macOS.
+
+**Trợ lý (Apple Intelligence)**
+- Câu hỏi tự do (không chỉ khi luật "không hiểu") → Apple Intelligence; lệnh ngắn rõ ràng vẫn chạy bằng luật cho nhanh.
+- Nhớ mạch trò chuyện (6 lượt / 30 phút) để hiểu câu nối tiếp; nút "Cuộc trò chuyện mới" xoá trí nhớ (`asi_reset`).
+- Ngữ cảnh đầy đủ hơn: việc kèm hạn theo giờ máy, lịch hôm nay, ghi chú, mục vừa chép, ổ đĩa / pin / RAM.
+- "Guided generation": mô hình vừa trả lời vừa chọn hành động (thêm việc, ghi chú, tập trung, xem lịch / việc trễ /
+  tình trạng máy, dọn rác, mở tab) → app thực hiện bằng đúng lệnh có sẵn (có Hoàn tác), kèm thẻ số liệu thật.
+- Trợ lý Swift tách ra `resources/asi_ai.swift`, **biên dịch sẵn lúc build** (build.rs, cần Xcode 26) và nhúng vào app;
+  máy khách không cần Command Line Tools. Không còn gọi `/usr/bin/swiftc` trên máy chưa có công cụ (tránh bật hộp thoại cài Xcode).
+  Có hẹn giờ 45 giây; lỗi → quay về luật.
+- Luật nhận lệnh khớp theo **từ trọn vẹn** ("tre" không còn khớp "trên"); lệnh "nhắc tôi…" chỉ tính khi ở đầu câu.
+
 ## 0.12.0 (11/2026) — làm lại giao diện, cắt bớt tính năng thừa
 **Giao diện mới kiểu Dynamic Island tối giản**: nền đen, chữ trắng, màu chỉ dùng để báo trạng thái; một màn hình một việc chính.
 - **Peek** (rê chuột) gọn lại: 1 dòng trạng thái (bấm để mở đúng tab) · thẻ nhạc chỉ hiện khi có nhạc · 4 nút Micro / Camera / AirDrop / Tập trung.

@@ -1,54 +1,32 @@
-//! Asi đọc to: giọng máy (say) hoặc bộ đọc tải thêm (VieNeu / NghiTTS, xem tts.rs).
+//! Asi đọc to bằng giọng tải thêm chạy trên máy (Piper — xem tts.rs). Chưa tải giọng thì Asi chỉ hiện chữ,
+//! không dùng giọng tiếng Việt có sẵn của macOS (kém tự nhiên). Câu tiếng Anh dùng giọng tiếng Anh của máy.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 
 pub(crate) static SAY_PID: Mutex<Option<u32>> = Mutex::new(None);
 
-/// Asi đọc to: bằng bộ đọc đã tải (VieNeu / NghiTTS), chưa có hoặc đang nạp thì dùng giọng của máy
+/// Bỏ emoji & ký hiệu markdown cho giọng đọc tự nhiên hơn
+pub(crate) fn speakable(text: &str) -> String {
+    text.chars().filter(|c| c.is_alphanumeric() || c.is_whitespace() || ",.;:!?%()/-–“”\"'…".contains(*c)).collect()
+}
+
 #[tauri::command]
 pub(crate) fn asi_speak(st: S, text: String) {
-    let (on, lang, engine, voice) = {
+    let (on, lang, voice) = {
         let s = st.store.lock().unwrap();
-        (s.settings.voice_reply, s.settings.voice_lang.clone(), s.settings.tts_engine.clone(), s.settings.tts_voice.clone())
+        (s.settings.voice_reply, s.settings.voice_lang.clone(), s.settings.tts_voice.clone())
     };
     stop_all_speaking(&st);
-    if !on || text.trim().is_empty() {
+    let clean = speakable(&text);
+    if !on || clean.trim().is_empty() {
         return;
     }
-    // bỏ emoji cho giọng đọc tự nhiên hơn
-    let clean: String = text.chars().filter(|c| c.is_alphanumeric() || c.is_whitespace() || ",.;:!?%()/-–“”\"'…".contains(*c)).collect();
-    let en = looks_english(&text, &lang) || lang.starts_with("en");
-    if let Some(e) = tts::Engine::from_id(&engine) {
-        let v = voice_for(e, &voice).to_string();
-        if tts_pack(&st, e).speak(&clean, &v) {
-            return;
-        }
-        std::thread::spawn(move || {
-            if let Some(c) = tts::speak_direct_http(&clean, &v, en) {
-                track_audio_child(c);
-            }
-        });
+    if looks_english(&text, &lang) {
+        system_say(&clean, true); // giọng tiếng Anh của macOS (Samantha) đọc tiếng Anh tốt
         return;
     }
-    std::thread::spawn(move || {
-        if let Some(c) = tts::speak_direct_http(&clean, &voice, en) {
-            track_audio_child(c);
-        } else {
-            system_say(&clean, en);
-        }
-    });
-}
-
-pub(crate) fn tts_pack(st: &AppState, e: tts::Engine) -> &Arc<tts::Tts> {
-    match e {
-        tts::Engine::VieNeu => &st.tts,
-        tts::Engine::Nghi => &st.nghi,
-    }
-}
-
-pub(crate) fn voice_for(e: tts::Engine, v: &str) -> &str {
-    if e.has_voice(v) { v } else { e.default_voice() }
+    st.tts.speak(&clean, &voice);
 }
 
 pub(crate) fn track_audio_child(mut child: std::process::Child) {
@@ -63,6 +41,7 @@ pub(crate) fn track_audio_child(mut child: std::process::Child) {
     });
 }
 
+/// Giọng của hệ điều hành — chỉ dùng cho tiếng Anh (đọc từ vựng, câu trả lời tiếng Anh)
 pub(crate) fn system_say(clean: &str, en: bool) {
     #[cfg(target_os = "macos")]
     let child = std::process::Command::new("say").args(["-v", if en { "Samantha" } else { "Linh" }, clean]).spawn();
@@ -75,7 +54,6 @@ pub(crate) fn system_say(clean: &str, en: bool) {
 
 pub(crate) fn stop_all_speaking(st: &AppState) {
     st.tts.stop();
-    st.nghi.stop();
     if let Some(pid) = SAY_PID.lock().unwrap().take() {
         tts::kill_pid(pid);
     }
@@ -87,122 +65,96 @@ pub(crate) fn asi_stop_speaking(st: S) {
 }
 
 #[derive(Serialize)]
-pub(crate) struct TtsPackInfo {
-    pub(crate) id: String,
+pub(crate) struct TtsVoice {
     pub(crate) name: String,
-    pub(crate) status: tts::Status,
-    /// (tên, giới tính, mô tả)
-    pub(crate) voices: Vec<(String, String, String)>,
-    /// dung lượng mô hình ước lượng (MB) cho bản mặc định
-    pub(crate) model_mb: u32,
-    pub(crate) blurb: String,
+    pub(crate) gender: String,
+    pub(crate) desc: String,
+    pub(crate) downloaded: bool,
 }
 
 #[derive(Serialize)]
 pub(crate) struct TtsInfo {
-    /// system | vieneu | nghi
-    pub(crate) engine: String,
+    pub(crate) status: tts::Status,
+    /// giọng đang chọn
     pub(crate) voice: String,
-    pub(crate) packs: Vec<TtsPackInfo>,
-    /// máy Intel cũ có thể chậm hơn
-    pub(crate) arm: bool,
-    /// bản của VieNeu: (mã, tên, dung lượng MB)
-    pub(crate) qualities: Vec<(String, String, u32)>,
-    pub(crate) default_quality: String,
+    pub(crate) voices: Vec<TtsVoice>,
+    /// dung lượng tải lần đầu (bộ đọc + 1 giọng) và mỗi giọng thêm (MB)
+    pub(crate) first_mb: u32,
+    pub(crate) voice_mb: u32,
 }
 
 #[tauri::command]
 pub(crate) fn tts_info(st: S) -> TtsInfo {
-    let s = st.store.lock().unwrap();
-    let pack = |e: tts::Engine, blurb: &str| TtsPackInfo {
-        id: e.id().into(),
-        name: e.name().into(),
-        status: tts_pack(&st, e).status(),
-        voices: e.voices().iter().map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string())).collect(),
-        model_mb: e.model_mb(tts::default_quality()),
-        blurb: blurb.into(),
-    };
+    let voice = st.store.lock().unwrap().settings.tts_voice.clone();
     TtsInfo {
-        engine: s.settings.tts_engine.clone(),
-        voice: s.settings.tts_voice.clone(),
-        packs: vec![
-            pack(tts::Engine::VieNeu, "24 kHz · 4 giọng AI tự nhiên, truyền cảm (Hoài My, Nam Minh, Thảo Vy, Bảo Khang)"),
-            pack(tts::Engine::Nghi, "Siêu nhẹ · 2 giọng đọc nhanh, rõ chữ (Ngọc Lan, Minh Quân)"),
-        ],
-        arm: cfg!(target_arch = "aarch64"),
-        qualities: tts::QUALITIES.iter().map(|(a, b, c)| (a.to_string(), b.to_string(), *c)).collect(),
-        default_quality: tts::default_quality().into(),
+        status: st.tts.status(),
+        voice: st.tts.usable_voice(&voice),
+        voices: tts::VOICES
+            .iter()
+            .map(|(n, g, d, _)| TtsVoice { name: n.to_string(), gender: g.to_string(), desc: d.to_string(), downloaded: st.tts.has_downloaded(n) })
+            .collect(),
+        first_mb: tts::BASE_MB + tts::VOICE_MB,
+        voice_mb: tts::VOICE_MB,
     }
 }
 
+/// Tải bộ đọc (nếu chưa có) + giọng `voice`. Xong thì dùng luôn giọng đó.
 #[tauri::command]
-pub(crate) fn tts_install(app: AppHandle, st: S, engine: Option<String>, quality: Option<String>) -> Result<(), String> {
-    let e = tts::Engine::from_id(engine.as_deref().unwrap_or("vieneu")).ok_or("Bộ đọc lạ")?;
+pub(crate) fn tts_install(app: AppHandle, st: S, voice: Option<String>) -> Result<(), String> {
+    let v = tts::voice_or_default(voice.as_deref().unwrap_or(tts::DEFAULT_VOICE)).to_string();
     let h = app.clone();
-    tts_pack(&st, e).install(quality.as_deref().unwrap_or(tts::default_quality()), move |s| {
+    let chosen = v.clone();
+    st.tts.install(&chosen, move |s| {
         if s.phase == "ready" {
-            // tải xong → dùng luôn bộ đọc này với giọng mặc định của nó
             if let Some(st) = h.try_state::<Arc<AppState>>() {
-                let mut g = st.store.lock().unwrap();
-                g.settings.tts_engine = e.id().into();
-                if !e.has_voice(&g.settings.tts_voice) {
-                    g.settings.tts_voice = e.default_voice().into();
-                }
-                let _ = g.save_settings();
+                let snap = {
+                    let mut g = st.store.lock().unwrap();
+                    g.settings.tts_engine = tts::ENGINE_ID.into();
+                    g.settings.tts_voice = v.clone();
+                    g.settings.voice_reply = true;
+                    let _ = g.save_settings();
+                    g.settings.clone()
+                };
+                let _ = h.emit("settings-changed", &snap);
             }
         }
-        let _ = h.emit("tts-progress", serde_json::json!({ "engine": e.id(), "status": s }));
+        let _ = h.emit("tts-progress", serde_json::json!({ "status": s }));
     });
     Ok(())
 }
 
 #[tauri::command]
-pub(crate) fn tts_uninstall(st: S, engine: Option<String>) -> Result<(), String> {
-    let e = tts::Engine::from_id(engine.as_deref().unwrap_or("vieneu")).ok_or("Bộ đọc lạ")?;
-    {
+pub(crate) fn tts_uninstall(app: AppHandle, st: S) -> Result<(), String> {
+    stop_all_speaking(&st);
+    st.tts.uninstall()?;
+    let snap = {
         let mut g = st.store.lock().unwrap();
-        if g.settings.tts_engine == e.id() {
-            g.settings.tts_engine = "system".into();
-        }
+        g.settings.voice_reply = false;
         let _ = g.save_settings();
-    }
-    tts_pack(&st, e).uninstall()
+        g.settings.clone()
+    };
+    let _ = app.emit("settings-changed", &snap);
+    Ok(())
 }
 
-/// Chọn giọng & nghe thử. engine: system | vieneu | nghi
+/// Chọn giọng (đã tải) và/hoặc nghe thử
 #[tauri::command]
-pub(crate) fn tts_use(st: S, engine: String, voice: String, preview: bool) -> bool {
-    let e = tts::Engine::from_id(&engine);
+pub(crate) fn tts_use(st: S, voice: String, preview: bool) -> Result<(), String> {
+    let v = tts::voice_or_default(&voice).to_string();
+    if !st.tts.has_downloaded(&v) {
+        return Err(format!("Chưa tải giọng {v}"));
+    }
     {
         let mut g = st.store.lock().unwrap();
-        g.settings.tts_engine = e.map_or("system", |e| e.id()).into();
-        if let Some(e) = e {
-            g.settings.tts_voice = voice_for(e, &voice).into();
-        }
+        g.settings.tts_engine = tts::ENGINE_ID.into();
+        g.settings.tts_voice = v.clone();
         let _ = g.save_settings();
     }
-    let Some(e) = e else {
-        if preview {
-            stop_all_speaking(&st);
-            system_say("Chào bạn, mình là Asi. Hôm nay bạn thấy thế nào?", false);
-        }
-        return true;
-    };
-    if !preview {
-        tts_pack(&st, e).ensure_worker();
-        return true;
+    if preview {
+        stop_all_speaking(&st);
+        st.tts.speak("Chào bạn, mình là Asi. Hôm nay có gì cần mình giúp không?", &v);
+    } else {
+        st.tts.ensure_worker();
     }
-    stop_all_speaking(&st);
-    let v = voice_for(e, &voice).to_string();
-    let male = e.voices().iter().any(|x| x.0 == v && x.1 == "male");
-    let line = if male { "Chào bạn, mình là Asi. Hôm nay bạn thấy thế nào?" } else { "Chào bạn, mình là Asi nè. Hôm nay có gì vui không?" };
-    if tts_pack(&st, e).speak(line, &v) {
-        return true;
-    }
-    std::thread::spawn(move || {
-        if let Some(c) = tts::speak_direct_http(line, &v, false) {
-            track_audio_child(c);
-        }
-    });
-    true
+    Ok(())
 }

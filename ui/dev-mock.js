@@ -24,7 +24,7 @@
   const settings = { break_enabled: true, break_minutes: 50, water_enabled: true, water_minutes: 60, sleep_hour: 23, focus_mode: false, launch_at_login: true, license_key: null, pdf_quality: "ebook", shortcut: "CmdOrCtrl+Shift+Space",
     clip_enabled: true, clip_max: 200, clip_shortcut: "Control+Shift+V", clip_autopaste: false, sync_reminders: true, reminders_list: "Mini-Asi", sync_notes: true, notes_folder: "Mini-Asi",
     show_calendar: true, event_alert_minutes: 10, voice_lang: "vi-VN", journal_enabled: true, journal_hour: 21,
-    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", notch_w: 0, notch_h: 0, icon_size: q.get("icons") || "large", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", modules: q.get("mods") ? q.get("mods").split(",").filter(Boolean) : ["threads", "clean", "focus"], apple_ai_enabled: true, auto_update_check: true, update_repo: "binhduongdo09/mini-asi", voice_reply: false, tts_engine: "vieneu", tts_voice: "Hoài My" };
+    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", notch_w: 0, notch_h: 0, icon_size: q.get("icons") || "large", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", modules: q.get("mods") ? q.get("mods").split(",").filter(Boolean) : ["threads", "clean", "focus"], apple_ai_enabled: true, auto_update_check: true, update_repo: "binhduongdo09/mini-asi", voice_reply: false, tts_engine: "nghi", tts_voice: "Mai Phương" };
   const today0 = new Date(); today0.setHours(0, 0, 0, 0);
   const at = (h, m = 0) => today0.getTime() + h * H + m * 60e3;
   const events = [
@@ -186,28 +186,16 @@
       }
     },
     tts_info: () => {
-      const st = (ph, extra) => ({ phase: ph, step: "3/4 · Cài đặt bộ giải mã giọng Neural HD…", detail: "edge-tts", error: null, warm: true, size_mb: 18, quality: "compact", ...extra });
-      return { engine: settings.tts_engine || "vieneu", voice: settings.tts_voice || "Hoài My", arm: true, default_quality: "compact",
-        qualities: [["compact", "Gọn · Siêu nhanh", 18], ["high", "Chất lượng cao Studio", 32]],
-        packs: [
-          { id: "vieneu", name: "Asi Neural Studio", blurb: "4 giọng Bắc/Nam tự nhiên nhất · kích hoạt trong 2 giây", model_mb: 18, status: st(q.get("tts") || "ready", q.get("tts") === "ready" ? { quality: "compact", size_mb: 18 } : {}),
-            voices: [
-              ["Hoài My", "female", "Nữ · giọng chuẩn ấm áp, truyền cảm, tự nhiên nhất"],
-              ["Nam Minh", "male", "Nam · giọng chuẩn trầm ấm, lịch lãm, rõ chữ"],
-              ["Thảo Vy", "female", "Nữ · sắc thái nhẹ nhàng, trẻ trung, trong trẻo"],
-              ["Bảo Khang", "male", "Nam · sắc thái điềm đạm, dứt khoát, tin cậy"],
-            ] },
-          { id: "nghi", name: "Asi Thanh Âm Nhanh", blurb: "Nhẹ & phản hồi tức thì · tối ưu đọc thông báo ngắn", model_mb: 12, status: st(q.get("nghi") || "ready", q.get("nghi") === "ready" ? { size_mb: 12 } : {}),
-            voices: [
-              ["Ngọc Lan", "female", "Nữ · nhịp nhanh gọn, tươi sáng, đọc báo cáo cực mượt"],
-              ["Minh Quân", "male", "Nam · nhịp nhanh gọn, khoẻ khoắn, đọc nhắc việc rõ ràng"],
-            ] },
-        ] };
+      const ph = q.get("tts") || "ready";
+      const dl = ph === "ready" ? ["Mai Phương"] : [];
+      return { status: { phase: ph, step: "4/4 · Tải giọng Mai Phương (≈ 61 MB)", detail: "", error: null, warm: true, size_mb: 158, voices: dl },
+        voice: settings.tts_voice || "Mai Phương", first_mb: 156, voice_mb: 61,
+        voices: [["Mai Phương", "female", "Nữ · rõ chữ, nhẹ nhàng"], ["Minh Quang", "male", "Nam · trầm, chắc giọng"]].map(([name, gender, desc]) => ({ name, gender, desc, downloaded: dl.includes(name) })) };
     },
     vocab_batch: () => ({ learned: 12, total: 190, cards: [{"word": "schedule", "pos": "noun", "vi": "lịch trình", "details": {"ipa_us": "/ˈskɛdʒuːl/", "ipa_uk": "/ˈʃɛdjuːl/", "definition": "A plan for carrying out a process.", "example": "I have a busy schedule this week."}, "progress": {"learned": false, "correct": 0, "tries": 0, "best": 0, "shown": 1}}, {"word": "resilient", "pos": "adjective", "vi": "kiên cường", "details": {"ipa_us": "/rɪˈzɪliənt/", "ipa_uk": null, "definition": "Able to recover quickly from difficulties.", "example": "Kids are remarkably resilient."}, "progress": {"learned": false, "correct": 0, "tries": 0, "best": 0, "shown": 1}}, {"word": "prioritize", "pos": "verb", "vi": "ưu tiên", "details": {"ipa_us": "/praɪˈɒrɪtaɪz/", "ipa_uk": null, "definition": "To arrange in order of importance.", "example": "You need to prioritize your tasks."}, "progress": {"learned": false, "correct": 0, "tries": 0, "best": 0, "shown": 1}}] }),
     vocab_play: () => null, vocab_play_mine: () => null, vocab_learned: () => null,
     vocab_check: ({ word, heard }) => heard.toLowerCase().includes(word) ? { score: 96, verdict: "great", heard, tip: "Chuẩn rồi! 🎉" } : { score: 74, verdict: "close", heard, tip: `Gần đúng — Asi nghe thành “${heard}”.` },
-    tts_install: () => null, tts_uninstall: () => null, tts_use: ({ engine, voice }) => { settings.tts_engine = engine; settings.tts_voice = voice; return true; },
+    tts_install: () => null, tts_uninstall: () => null, tts_use: ({ voice }) => { settings.tts_voice = voice; return null; }, asi_reset: () => null,
     ime_info: () => ({ current: "com.lacviet.inputmethod.VietTelex", recognized: "telex", enabled: ["com.apple.keylayout.ABC", "com.lacviet.inputmethod.VietTelex"] }),
     threads_post: async () => { await wait(500); return "p9"; }, threads_mark_read: () => null, open_link: () => null, threads_web: () => null, threads_embed: () => null,
     asi_ask: async ({ text }) => { await wait(600); const t = text.toLowerCase();
@@ -236,7 +224,7 @@
     backup_pick_dir: () => null, backup_set: () => null, backup_now: async () => { await wait(600); return ["/Users/binh/Library/CloudStorage/GoogleDrive-x/My Drive/Mini-Asi/backups/a.zip", 2.4e6]; },
     device_sync_now: async () => { await wait(600); return { devices: ["iMac văn phòng"], stats: { tasks: 3, notes: 1, journal: 0, clips: 5, removed: 0 } }; }, backup_restore: async () => { await wait(500); },
     open_settings_window: async ({ section } = {}) => { window.open(`settings.html${section ? `?sec=${encodeURIComponent(section)}` : ""}`, "_blank", "width=860,height=650"); return null; },
-    apple_ai_status: async () => ({ available: true, engine: "Apple Intelligence (FoundationModels)", detail: "Sẵn sàng · Chạy trực tiếp trên chip Apple Silicon (Offline & Bảo mật)" }),
+    apple_ai_status: async () => (q.get("ai") === "0" ? { available: false, engine: "Apple Intelligence", detail: "Cần macOS 26 trở lên trên máy chip Apple, đã bật Apple Intelligence" } : { available: true, engine: "Apple Intelligence", detail: "Sẵn sàng · chạy ngay trên máy, không gửi dữ liệu đi" }),
   };
   window.__TAURI__ = {
     core: { invoke: async (cmd, args) => { if (!(cmd in H_)) throw "mock: thiếu lệnh " + cmd; return H_[cmd](args || {}); } },

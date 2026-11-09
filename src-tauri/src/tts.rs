@@ -1,14 +1,15 @@
-//! Giọng đọc tự nhiên cho Asi — tải về khi người dùng chọn, chạy hoàn toàn trên máy.
+//! Giọng đọc của Asi — **một** bộ đọc nhẹ chạy hoàn toàn trên máy, tải về khi người dùng chọn.
 //!
-//! Hai bộ đọc (mỗi bộ một thư mục riêng trong `<data_dir>/`, gỡ là xoá sạch):
-//! - **VieNeu-TTS v3 Turbo** (`vieneu/`, Apache-2.0): 48 kHz, tự nhiên nhất. Bản Gọn (int8) ≈ 210 MB mô hình,
-//!   bỏ phần nhân bản giọng (denoiser, codec encoder) vì Asi chỉ dùng giọng dựng sẵn.
-//! - **NghiTTS** (`nghitts/`, Piper/VITS qua `piper-tts`): 22 kHz, rất nhẹ & nhanh, ≈ 60 MB mỗi giọng.
-//!   Chỉ dùng giọng "thường", KHÔNG dùng các giọng mang tên người nổi tiếng / giọng thương mại.
+//! Bộ đọc: NghiTTS (Piper/VITS qua thư viện `piper-tts`, onnxruntime + eSpeak-ng) — 22 kHz, đọc gần như tức thì
+//! trên CPU, RAM ≈ 100 MB khi đang chạy, mỗi giọng ≈ 60 MB. Chỉ dùng giọng "thường" (Mai Phương, Minh Quang),
+//! KHÔNG dùng các giọng mang tên người nổi tiếng / giọng thương mại. Chỉ tải giọng người dùng chọn.
 //!
-//! Cài: tải `uv` → tạo Python 3.12 riêng → cài gói tối giản của bộ đọc → chạy thử (tải mô hình).
-//! Đọc: tiến trình nền `resources/tts_worker.py` giữ mô hình trong RAM, đọc từng câu ra WAV; câu đầu xong
-//! là phát ngay (afplay / paplay / PowerShell). Rảnh 20 phút thì tự tắt. Đang nạp thì Asi dùng giọng hệ thống.
+//! Đã bỏ (0.13): VieNeu-TTS (nặng), edge-tts & Google Translate TTS (gửi chữ ra mạng, điều khoản không cho dùng
+//! thương mại), giọng Linh của macOS cho tiếng Việt (kém tự nhiên).
+//!
+//! Cài: tải `uv` → Python 3.12 riêng trong `<data_dir>/nghitts/` → `piper-tts` → tải giọng (kiểm SHA-256) → đọc thử.
+//! Đọc: tiến trình nền `resources/tts_worker.py` giữ mô hình trong RAM, đọc từng câu ra WAV, câu đầu xong là phát;
+//! rảnh 5 phút thì tự tắt để trả RAM.
 
 use serde::Serialize;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -19,84 +20,38 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 
 pub const WORKER_PY: &str = include_str!("../resources/tts_worker.py");
-pub const VIENEU_VERSION: &str = "3.8.3";
 pub const PIPER_VERSION: &str = "1.8.0";
-// Chỉ những gói cần để ĐỌC bằng giọng dựng sẵn (soxr, kaldi-native-fbank chỉ dùng khi nhân bản giọng → bỏ)
-const VIENEU_DEPS: &[&str] = &["sea-g2p>=0.9.1", "onnxruntime>=1.20.0", "numpy", "soundfile", "tokenizers>=0.20", "huggingface_hub"];
+/// Mã bộ đọc lưu trong cài đặt (`tts_engine`)
+pub const ENGINE_ID: &str = "nghi";
+/// (tên, giới tính, mô tả, tên file)
+pub const VOICES: &[(&str, &str, &str, &str)] = &[
+    ("Mai Phương", "female", "Nữ · rõ chữ, nhẹ nhàng", "mai-phuong"),
+    ("Minh Quang", "male", "Nam · trầm, chắc giọng", "minh-quang"),
+];
+pub const DEFAULT_VOICE: &str = "Mai Phương";
+/// Dung lượng ước lượng (MB): phần chung (Python + piper) và mỗi giọng
+pub const BASE_MB: u32 = 95;
+pub const VOICE_MB: u32 = 61;
+const IDLE_KILL: Duration = Duration::from_secs(5 * 60);
 
-/// Bộ đọc giọng tải thêm
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Engine {
-    VieNeu,
-    Nghi,
+pub fn has_voice(v: &str) -> bool {
+    VOICES.iter().any(|x| x.0 == v)
+}
+/// Tên giọng hợp lệ (tên cũ / lạ → giọng mặc định)
+pub fn voice_or_default(v: &str) -> &str {
+    VOICES.iter().find(|x| x.0 == v).map(|x| x.0).unwrap_or(DEFAULT_VOICE)
+}
+fn slug(v: &str) -> &'static str {
+    VOICES.iter().find(|x| x.0 == v).map(|x| x.3).unwrap_or(VOICES[0].3)
 }
 
-impl Engine {
-    pub fn from_id(id: &str) -> Option<Self> {
-        match id {
-            "vieneu" => Some(Self::VieNeu),
-            "nghi" => Some(Self::Nghi),
-            _ => None,
-        }
-    }
-    pub fn id(self) -> &'static str {
-        match self {
-            Self::VieNeu => "vieneu",
-            Self::Nghi => "nghi",
-        }
-    }
-    fn dir_name(self) -> &'static str {
-        match self {
-            Self::VieNeu => "vieneu",
-            Self::Nghi => "nghitts",
-        }
-    }
-    pub fn name(self) -> &'static str {
-        match self {
-            Self::VieNeu => "Asi Neural Studio",
-            Self::Nghi => "Asi Thanh Âm Nhanh",
-        }
-    }
-    /// (tên giọng, giới tính, mô tả)
-    pub fn voices(self) -> &'static [(&'static str, &'static str, &'static str)] {
-        match self {
-            Self::VieNeu => &[
-                ("Hoài My", "female", "Nữ · giọng Bắc truyền cảm, trong trẻo, tự nhiên"),
-                ("Nam Minh", "male", "Nam · giọng Bắc trầm ấm, rõ ràng, lịch thiệp"),
-                ("Thảo Vy", "female", "Nữ · giọng trẻ trung, nhịp nhanh, năng động"),
-                ("Bảo Khang", "male", "Nam · giọng điềm đạm, sâu lắng, đọc nhật ký"),
-            ],
-            Self::Nghi => &[
-                ("Ngọc Lan", "female", "Nữ · giọng chuẩn, rõ chữ, phản hồi tức thì"),
-                ("Minh Quân", "male", "Nam · giọng nam ấm, đọc thông báo & nhắc việc nhanh"),
-            ],
-        }
-    }
-    pub fn default_voice(self) -> &'static str {
-        self.voices()[0].0
-    }
-    pub fn has_voice(self, v: &str) -> bool {
-        self.voices().iter().any(|x| x.0 == v)
-            || matches!((self, v), (Self::VieNeu, "Trúc Ly" | "Hải Đăng") | (Self::Nghi, "Mai Phương" | "Minh Quang"))
-    }
-    /// Dung lượng gói tải (MB, ước lượng)
-    pub fn model_mb(self, quality: &str) -> u32 {
-        match self {
-            Self::VieNeu => QUALITIES.iter().find(|q| q.0 == quality).map(|q| q.2).unwrap_or(15),
-            Self::Nghi => 5,
-        }
+/// Xoá các bộ đọc cũ đã bỏ (giải phóng ổ đĩa): `vieneu/` (VieNeu / edge-tts)
+pub fn remove_legacy(data_dir: &Path) {
+    let old = data_dir.join("vieneu");
+    if old.exists() {
+        let _ = std::fs::remove_dir_all(old);
     }
 }
-
-/// "compact" = Gọn nhẹ (≈ 15 MB) · "high" = Chất lượng cao 24 kHz (≈ 20 MB)
-pub const QUALITIES: &[(&str, &str, u32)] = &[("compact", "Tiêu chuẩn", 15), ("high", "Studio 24 kHz", 20)];
-pub fn default_quality() -> &'static str {
-    "high"
-}
-const IDLE_KILL: Duration = Duration::from_secs(20 * 60);
-
-/// Giọng mặc định của Asi Neural Studio
-pub const DEFAULT_VOICE: &str = "Hoài My";
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct Status {
@@ -105,11 +60,11 @@ pub struct Status {
     pub step: String,
     pub detail: String,
     pub error: Option<String>,
-    /// tiến trình nền đã nạp xong mô hình
+    /// tiến trình nền đã nạp xong
     pub warm: bool,
     pub size_mb: u64,
-    /// bản mô hình đã tải: compact | high
-    pub quality: Option<String>,
+    /// các giọng đã tải về máy
+    pub voices: Vec<String>,
 }
 
 struct Worker {
@@ -119,7 +74,6 @@ struct Worker {
 }
 
 pub struct Tts {
-    pub engine: Engine,
     pub dir: PathBuf,
     status: Mutex<Status>,
     worker: Mutex<Option<Worker>>,
@@ -135,10 +89,9 @@ fn exe(p: &Path) -> PathBuf {
 }
 
 impl Tts {
-    pub fn new(data_dir: &Path, engine: Engine) -> Arc<Self> {
+    pub fn new(data_dir: &Path) -> Arc<Self> {
         let t = Arc::new(Self {
-            engine,
-            dir: data_dir.join(engine.dir_name()),
+            dir: data_dir.join("nghitts"),
             status: Mutex::new(Status::default()),
             worker: Mutex::new(None),
             gen: Arc::new(AtomicU64::new(1)),
@@ -147,13 +100,10 @@ impl Tts {
             play_pid: Arc::new(Mutex::new(None)),
             last_spawn: Mutex::new(None),
         });
-        {
-            let mut s = t.status.lock().unwrap();
-            s.phase = if t.installed() { "ready".into() } else { "none".into() };
-        }
+        t.status.lock().unwrap().phase = if t.installed() { "ready".into() } else { "none".into() };
         let w = Arc::downgrade(&t);
         std::thread::spawn(move || loop {
-            std::thread::sleep(Duration::from_secs(60));
+            std::thread::sleep(Duration::from_secs(30));
             let Some(t) = w.upgrade() else { return };
             if t.last_used.lock().unwrap().elapsed() > IDLE_KILL {
                 t.stop_worker();
@@ -168,16 +118,26 @@ impl Tts {
     fn marker(&self) -> PathBuf {
         self.dir.join("installed.json")
     }
-    pub fn installed(&self) -> bool {
-        self.marker().exists() && self.python().exists()
+    fn voices_dir(&self) -> PathBuf {
+        self.dir.join("voices")
     }
-    /// Bản mô hình đang có trên máy ("compact" | "high")
-    pub fn installed_quality(&self) -> Option<String> {
-        if !self.installed() {
-            return None;
+    /// Đã cài bộ đọc và có ít nhất 1 giọng
+    pub fn installed(&self) -> bool {
+        self.marker().exists() && self.python().exists() && !self.downloaded().is_empty()
+    }
+    pub fn has_downloaded(&self, voice: &str) -> bool {
+        self.voices_dir().join(format!("{}.onnx", slug(voice))).exists()
+    }
+    pub fn downloaded(&self) -> Vec<String> {
+        VOICES.iter().filter(|v| self.voices_dir().join(format!("{}.onnx", v.3)).exists()).map(|v| v.0.to_string()).collect()
+    }
+    /// Giọng sẽ dùng thật: giọng đã chọn nếu đã tải, không thì giọng đầu tiên đã tải
+    pub fn usable_voice(&self, wanted: &str) -> String {
+        let w = voice_or_default(wanted);
+        if self.has_downloaded(w) {
+            return w.to_string();
         }
-        let v: serde_json::Value = std::fs::read_to_string(self.marker()).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
-        Some(v.get("quality").and_then(|q| q.as_str()).unwrap_or("high").to_string())
+        self.downloaded().into_iter().next().unwrap_or_else(|| w.to_string())
     }
 
     pub fn status(&self) -> Status {
@@ -185,7 +145,7 @@ impl Tts {
         if s.phase != "installing" {
             s.phase = if self.installed() { "ready".into() } else if s.error.is_some() { "error".into() } else { "none".into() };
         }
-        s.quality = self.installed_quality();
+        s.voices = self.downloaded();
         s.warm = self.worker.lock().unwrap().as_ref().map(|w| *w.ready.lock().unwrap()).unwrap_or(false);
         if s.phase == "ready" && s.size_mb == 0 {
             s.size_mb = dir_size(&self.dir) / 1_000_000;
@@ -201,10 +161,7 @@ impl Tts {
     }
 
     fn uv_env(&self, c: &mut Command) {
-        c.env("UV_CACHE_DIR", self.dir.join("cache"))
-            .env("UV_PYTHON_INSTALL_DIR", self.dir.join("python"))
-            .env("UV_NO_CONFIG", "1")
-            .env("HF_HOME", self.dir.join("hf"));
+        c.env("UV_CACHE_DIR", self.dir.join("cache")).env("UV_PYTHON_INSTALL_DIR", self.dir.join("python")).env("UV_NO_CONFIG", "1");
     }
 
     fn find_uv(&self) -> Option<PathBuf> {
@@ -218,9 +175,9 @@ impl Tts {
         cands.into_iter().find(|p| p.exists())
     }
 
-    /// Cài toàn bộ (chạy trên luồng riêng). `progress` được gọi mỗi khi có bước mới.
-    pub fn install(self: &Arc<Self>, quality: &str, progress: impl Fn(Status) + Send + 'static) {
-        let quality = if self.engine == Engine::Nghi { "standard".to_string() } else if QUALITIES.iter().any(|q| q.0 == quality) { quality.to_string() } else { default_quality().to_string() };
+    /// Cài bộ đọc (nếu chưa có) và tải giọng `voice` (chạy trên luồng riêng). `progress` báo từng bước.
+    pub fn install(self: &Arc<Self>, voice: &str, progress: impl Fn(Status) + Send + 'static) {
+        let voice = voice_or_default(voice).to_string();
         {
             let mut s = self.status.lock().unwrap();
             if s.phase == "installing" {
@@ -230,8 +187,7 @@ impl Tts {
         }
         let t = self.clone();
         std::thread::spawn(move || {
-            t.stop_worker();
-            let r = t.install_inner(&quality, &progress);
+            let r = t.install_inner(&voice, &progress);
             let mut s = t.status.lock().unwrap();
             match r {
                 Ok(()) => *s = Status { phase: "ready".into(), step: "Xong".into(), ..Default::default() },
@@ -240,97 +196,79 @@ impl Tts {
                     s.error = Some(e);
                 }
             }
-            let snap = s.clone();
             drop(s);
-            progress(snap);
+            progress(t.status());
         });
     }
 
-    fn install_inner(&self, quality: &str, progress: &dyn Fn(Status)) -> Result<(), String> {
-        let mb = self.engine.model_mb(quality);
-        let step4 = format!("4/4 · Tải mô hình giọng (≈ {mb} MB, chỉ 1 lần)");
+    fn install_inner(&self, voice: &str, progress: &dyn Fn(Status)) -> Result<(), String> {
         std::fs::create_dir_all(&self.dir).map_err(|e| e.to_string())?;
         let tick = |t: &Self, step: &str, detail: &str| {
             t.set(step, detail);
             progress(t.status.lock().unwrap().clone());
         };
-        // 1. uv
-        tick(self, "1/4 · Chuẩn bị trình cài Python (uv)", "");
-        let uv = match self.find_uv() {
-            Some(u) => u,
-            None => {
-                let bin = self.dir.join("bin");
-                let mut c = if cfg!(windows) {
-                    let mut c = Command::new("powershell");
-                    c.args(["-ExecutionPolicy", "ByPass", "-NoProfile", "-c", "irm https://astral.sh/uv/install.ps1 | iex"]);
-                    c
-                } else {
-                    let mut c = Command::new("sh");
-                    c.args(["-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"]);
-                    c
-                };
-                c.env("UV_UNMANAGED_INSTALL", &bin).env("INSTALLER_NO_MODIFY_PATH", "1");
-                run(c, "tải uv", |l| tick(self, "1/4 · Tải uv", l))?;
-                self.find_uv().ok_or("Không tải được uv — kiểm tra kết nối mạng")?
+        let base_ready = self.marker().exists() && self.python().exists();
+        if !base_ready {
+            // 1. uv
+            tick(self, "1/4 · Chuẩn bị", "");
+            let uv = match self.find_uv() {
+                Some(u) => u,
+                None => {
+                    let bin = self.dir.join("bin");
+                    let mut c = if cfg!(windows) {
+                        let mut c = Command::new("powershell");
+                        c.args(["-ExecutionPolicy", "ByPass", "-NoProfile", "-c", "irm https://astral.sh/uv/install.ps1 | iex"]);
+                        c
+                    } else {
+                        let mut c = Command::new("sh");
+                        c.args(["-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"]);
+                        c
+                    };
+                    c.env("UV_UNMANAGED_INSTALL", &bin).env("INSTALLER_NO_MODIFY_PATH", "1");
+                    run(c, "tải uv", |l| tick(self, "1/4 · Chuẩn bị", l))?;
+                    self.find_uv().ok_or("Không tải được bộ cài — kiểm tra kết nối mạng")?
+                }
+            };
+            // 2. Python riêng (không đụng tới Python của máy)
+            if !self.python().exists() {
+                tick(self, "2/4 · Tạo môi trường riêng", "");
+                let mut c = Command::new(&uv);
+                c.args(["venv", "--python", "3.12"]).arg(self.dir.join("venv"));
+                self.uv_env(&mut c);
+                run(c, "tạo môi trường Python", |l| tick(self, "2/4 · Tạo môi trường riêng", l))?;
             }
-        };
-        // 2. Python riêng
-        if !self.python().exists() {
-            tick(self, "2/4 · Tạo môi trường Python 3.12 riêng", "");
+            // 3. Piper (onnxruntime + eSpeak-ng đã kèm trong gói)
+            tick(self, "3/4 · Cài bộ đọc", "");
             let mut c = Command::new(&uv);
-            c.args(["venv", "--python", "3.12"]).arg(self.dir.join("venv"));
+            c.args(["pip", "install", "--python"]).arg(self.python()).arg(format!("piper-tts=={PIPER_VERSION}"));
             self.uv_env(&mut c);
-            run(c, "tạo môi trường Python", |l| tick(self, "2/4 · Tạo môi trường Python 3.12 riêng", l))?;
+            run(c, "cài piper-tts", |l| tick(self, "3/4 · Cài bộ đọc", l))?;
+            prune_python(&self.dir.join("python"));
+            let _ = std::fs::remove_dir_all(self.dir.join("cache"));
         }
-        // 3. cài gói đọc giọng tự nhiên Neural siêu nhẹ (≈ 15 MB, hoàn tất trong vài giây, không tải mô hình 500 MB)
-        let py = self.python();
-        tick(self, "3/4 · Cài bộ đọc giọng tự nhiên Neural TTS", "");
-        let mut c = Command::new(&uv);
-        c.args(["pip", "install", "--python"]).arg(&py).arg("edge-tts>=6.1.12");
-        self.uv_env(&mut c);
-        run(c, "cài bộ đọc giọng tự nhiên", |l| tick(self, "3/4 · Cài bộ đọc giọng tự nhiên", l))?;
-        prune_python(&self.dir.join("python"));
-        // 4. kiểm tra & khởi tạo giọng đọc
+        // 4. tải giọng + đọc thử
+        let step4 = format!("4/4 · Tải giọng {voice} (≈ {VOICE_MB} MB)");
         tick(self, &step4, "");
         let w = self.write_worker()?;
         let out = self.dir.join("warmup.wav");
-        let mut c = Command::new(&py);
-        c.arg(&w).arg("--warmup").arg(&out).env("TTS_VOICE", self.engine.default_voice()).env("PYTHONUNBUFFERED", "1");
-        self.worker_env(&mut c, quality);
-        let lines = run(c, "khởi tạo giọng đọc", |l| tick(self, &step4, l))?;
+        let _ = std::fs::remove_file(&out);
+        let mut c = Command::new(self.python());
+        c.arg(&w).arg("--warmup").arg(&out).env("TTS_VOICE", voice).env("PYTHONUNBUFFERED", "1").env("NGHI_DIR", self.voices_dir());
+        let lines = run(c, "tải giọng", |l| tick(self, &step4, l))?;
         if let Some(f) = lines.iter().find(|l| l.contains("\"fatal\"")) {
-            return Err(format!("{} không chạy được: {f}", self.engine.name()));
+            return Err(format!("Bộ đọc không chạy được: {f}"));
         }
         if !out.exists() {
             return Err("Đọc thử không ra âm thanh".into());
         }
-        let _ = std::fs::remove_dir_all(self.dir.join("cache"));
-        let marker = match self.engine {
-            Engine::VieNeu => serde_json::json!({ "engine": "vieneu", "vieneu": VIENEU_VERSION, "quality": quality }),
-            Engine::Nghi => serde_json::json!({ "engine": "nghi", "piper": PIPER_VERSION, "quality": "standard" }),
-        };
-        std::fs::write(self.marker(), marker.to_string()).map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(&out);
+        std::fs::write(self.marker(), serde_json::json!({ "engine": ENGINE_ID, "piper": PIPER_VERSION }).to_string()).map_err(|e| e.to_string())?;
         self.status.lock().unwrap().size_mb = 0; // tính lại dung lượng
         Ok(())
     }
 
-    /// Biến môi trường cho tiến trình đọc (chọn bộ đọc, nơi để mô hình)
-    fn worker_env(&self, c: &mut Command, quality: &str) {
-        self.uv_env(c);
-        c.env("MINI_ASI_ENGINE", self.engine.id());
-        match self.engine {
-            Engine::VieNeu => {
-                c.env("VIENEU_PRECISION", precision(quality));
-            }
-            Engine::Nghi => {
-                c.env("NGHI_DIR", self.dir.join("voices"));
-            }
-        }
-    }
-
     fn write_worker(&self) -> Result<PathBuf, String> {
         let p = self.dir.join("tts_worker.py");
-        let _ = std::fs::remove_file(self.dir.join("vieneu_worker.py")); // tên cũ (≤ 0.9)
         if std::fs::read_to_string(&p).ok().as_deref() != Some(WORKER_PY) {
             std::fs::write(&p, WORKER_PY).map_err(|e| e.to_string())?;
         }
@@ -377,9 +315,7 @@ impl Tts {
         }
         let Ok(script) = self.write_worker() else { return false };
         let mut c = Command::new(self.python());
-        let q = self.installed_quality().unwrap_or_else(|| "high".into());
-        c.arg(script).env("HF_HUB_OFFLINE", "1").env("PYTHONUNBUFFERED", "1").stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
-        self.worker_env(&mut c, &q);
+        c.arg(script).env("PYTHONUNBUFFERED", "1").env("NGHI_DIR", self.voices_dir()).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
         let Ok(mut child) = c.spawn() else { return false };
         let (Some(stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else { return false };
         let ready = Arc::new(Mutex::new(false));
@@ -432,7 +368,7 @@ impl Tts {
         tx
     }
 
-    /// Đọc bằng bộ đọc này. Gửi thẳng vào hàng đợi stdin của worker ngay cả khi worker vừa khởi động.
+    /// Đọc to. Gửi thẳng vào hàng đợi của tiến trình nền (kể cả khi nó vừa khởi động — câu sẽ đọc ngay khi nạp xong).
     pub fn speak(self: &Arc<Self>, text: &str, voice: &str) -> bool {
         if !self.installed() {
             return false;
@@ -440,7 +376,7 @@ impl Tts {
         let _ = self.ensure_worker();
         let id = self.gen.fetch_add(1, Ordering::SeqCst) + 1;
         let out = std::env::temp_dir().join("mini-asi-voice");
-        let msg = serde_json::json!({ "id": id, "text": text, "voice": voice, "dir": out });
+        let msg = serde_json::json!({ "id": id, "text": text, "voice": self.usable_voice(voice), "dir": out });
         let mut g = self.worker.lock().unwrap();
         match g.as_mut() {
             Some(w) => writeln!(w.stdin, "{msg}").and_then(|_| w.stdin.flush()).is_ok(),
@@ -460,10 +396,6 @@ impl Tts {
     }
 }
 
-fn precision(quality: &str) -> &'static str {
-    if quality == "compact" { "int8" } else { "fp32" }
-}
-
 /// Bỏ phần Python không dùng tới (bộ test, IDLE, Tk…) cho gọn ≈ 40 MB
 fn prune_python(root: &Path) {
     const DROP: &[&str] = &["test", "idlelib", "tkinter", "turtledemo", "ensurepip", "lib2to3", "pydoc_data"];
@@ -481,54 +413,6 @@ fn prune_python(root: &Path) {
         .collect();
     for d in dirs {
         let _ = std::fs::remove_dir_all(d);
-    }
-}
-
-/// Tổng hợp và phát giọng tiếng Việt tức thì qua HTTP trực tiếp từ Rust (không cần chờ cài Python/uv).
-pub fn speak_direct_http(text: &str, voice: &str, en: bool) -> Option<std::process::Child> {
-    let trimmed: String = text.trim().chars().take(200).collect();
-    if trimmed.is_empty() {
-        return None;
-    }
-    let encoded: String = trimmed
-        .bytes()
-        .map(|b| match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' => (b as char).to_string(),
-            b' ' => "%20".to_string(),
-            _ => format!("%{b:02X}"),
-        })
-        .collect();
-    let tl = if en { "en" } else { "vi" };
-    let url = format!("https://translate.googleapis.com/translate_tts?ie=UTF-8&tl={tl}&client=tw-ob&q={encoded}");
-    let resp = ureq::get(&url)
-        .set("User-Agent", "Mozilla/5.0")
-        .timeout(Duration::from_secs(6))
-        .call()
-        .ok()?;
-    let mut bytes = Vec::new();
-    resp.into_reader().take(2_000_000).read_to_end(&mut bytes).ok()?;
-    if bytes.len() < 256 {
-        return None;
-    }
-    let dir = std::env::temp_dir().join("mini-asi-voice");
-    let _ = std::fs::create_dir_all(&dir);
-    let path = dir.join(format!("instant-{}.mp3", std::process::id()));
-    std::fs::write(&path, &bytes).ok()?;
-    #[cfg(target_os = "macos")]
-    {
-        let rate = match voice {
-            "Thảo Vy" | "Ngọc Lan" => "1.08",
-            "Nam Minh" | "Minh Quân" => "0.97",
-            "Bảo Khang" => "0.93",
-            _ => "1.02",
-        };
-        let mut c = Command::new("afplay");
-        c.args(["-r", rate]).arg(&path);
-        return c.spawn().ok();
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        play_cmd(&path.to_string_lossy()).spawn().ok()
     }
 }
 
@@ -639,49 +523,30 @@ mod tests {
     }
 
     #[test]
-    fn worker_embedded() {
-        assert!(WORKER_PY.contains("split_sentences"));
-        assert!(Engine::VieNeu.has_voice(DEFAULT_VOICE) && Engine::Nghi.has_voice(Engine::Nghi.default_voice()));
+    fn voices_and_worker() {
+        assert!(WORKER_PY.contains("split_sentences") && !WORKER_PY.contains("edge_tts") && !WORKER_PY.contains("vieneu"));
+        assert!(has_voice(DEFAULT_VOICE));
+        assert_eq!(voice_or_default("Hoài My"), DEFAULT_VOICE, "giọng cũ (edge-tts) → giọng mặc định");
+        // tên file trong máy phải khớp tên file worker tải về (_slug trong tts_worker.py)
+        assert_eq!(slug("Mai Phương"), "mai-phuong");
+        assert_eq!(slug("Minh Quang"), "minh-quang");
     }
 
-    /// Giả lập môi trường đã cài: python giả + gói `vieneu` giả → kiểm tra tiến trình nền thật
-    #[cfg(unix)]
     #[test]
-    fn worker_roundtrip_with_fake_model() {
-        use std::os::unix::fs::PermissionsExt;
+    fn legacy_dir_removed() {
         let d = tempfile::tempdir().unwrap();
-        let t = Tts::new(d.path(), Engine::VieNeu);
-        let fake = d.path().join("fake/vieneu");
-        std::fs::create_dir_all(&fake).unwrap();
-        std::fs::write(fake.join("__init__.py"), "class T:\n    def list_preset_voices(self): return [('a','Trúc Ly')]\n    def infer(self, text, voice=None): return text\n    def save(self, a, p): open(p,'w').write(a)\ndef Vieneu(mode='v3turbo', **k): return T()\n").unwrap();
-        let bin = t.dir.join("venv/bin");
-        std::fs::create_dir_all(&bin).unwrap();
-        let py = bin.join("python");
-        std::fs::write(&py, format!("#!/bin/sh\nPYTHONPATH={} exec python3 \"$@\"\n", d.path().join("fake").display())).unwrap();
-        std::fs::set_permissions(&py, std::fs::Permissions::from_mode(0o755)).unwrap();
-        std::fs::write(t.marker(), "{}").unwrap();
-        assert!(t.installed());
-        assert!(!t.ensure_worker(), "lần đầu còn đang nạp");
-        let mut ok = false;
-        for _ in 0..50 {
-            std::thread::sleep(Duration::from_millis(100));
-            if t.ensure_worker() { ok = true; break; }
-        }
-        assert!(ok, "tiến trình nền phải báo sẵn sàng");
-        assert!(t.status().warm);
-        assert!(t.speak("Xin chào. Mình là Asi nè, rất vui được gặp bạn!", DEFAULT_VOICE));
-        t.stop();
-        t.stop_worker();
+        std::fs::create_dir_all(d.path().join("vieneu/venv")).unwrap();
+        remove_legacy(d.path());
+        assert!(!d.path().join("vieneu").exists());
     }
 
-    /// NghiTTS: tiến trình nền nạp `piper` (giả) và đọc ra file WAV thật
+    /// Tiến trình nền nạp `piper` (giả) và đọc ra file WAV thật
     #[cfg(unix)]
     #[test]
-    fn nghi_worker_with_fake_piper() {
+    fn worker_with_fake_piper() {
         use std::os::unix::fs::PermissionsExt;
         let d = tempfile::tempdir().unwrap();
-        let t = Tts::new(d.path(), Engine::Nghi);
-        assert!(t.dir.ends_with("nghitts"));
+        let t = Tts::new(d.path());
         let fake = d.path().join("fake/piper");
         std::fs::create_dir_all(&fake).unwrap();
         std::fs::write(
@@ -694,15 +559,25 @@ mod tests {
         let py = bin.join("python");
         std::fs::write(&py, format!("#!/bin/sh\nPYTHONPATH={} exec python3 \"$@\"\n", d.path().join("fake").display())).unwrap();
         std::fs::set_permissions(&py, std::fs::Permissions::from_mode(0o755)).unwrap();
-        std::fs::write(t.marker(), "{\"engine\":\"nghi\"}").unwrap();
-        assert!(!t.ensure_worker());
+        std::fs::write(t.marker(), "{}").unwrap();
+        assert!(!t.installed(), "chưa có giọng nào thì chưa tính là đã cài");
+        std::fs::create_dir_all(t.voices_dir()).unwrap();
+        std::fs::write(t.voices_dir().join("minh-quang.onnx"), "x").unwrap();
+        assert!(t.installed());
+        assert_eq!(t.downloaded(), vec!["Minh Quang".to_string()]);
+        assert_eq!(t.usable_voice("Mai Phương"), "Minh Quang", "giọng chưa tải → dùng giọng đã có");
+        assert!(!t.ensure_worker(), "lần đầu còn đang nạp");
         let mut ok = false;
         for _ in 0..50 {
             std::thread::sleep(Duration::from_millis(100));
-            if t.ensure_worker() { ok = true; break; }
+            if t.ensure_worker() {
+                ok = true;
+                break;
+            }
         }
-        assert!(ok, "tiến trình NghiTTS phải báo sẵn sàng");
-        assert!(t.speak("Chào bạn. Lúc 15:30 nhớ uống nước nhé!", "Mai Phương"));
+        assert!(ok, "tiến trình nền phải báo sẵn sàng");
+        assert!(t.status().warm);
+        assert!(t.speak("Chào bạn. Lúc 15:30 nhớ uống nước nhé!", "Minh Quang"));
         t.stop();
         t.stop_worker();
     }
@@ -722,7 +597,7 @@ mod tests {
     #[test]
     fn not_installed_by_default() {
         let d = tempfile::tempdir().unwrap();
-        let t = Tts::new(d.path(), Engine::VieNeu);
+        let t = Tts::new(d.path());
         assert!(!t.installed());
         assert_eq!(t.status().phase, "none");
         assert!(!t.speak("xin chào", DEFAULT_VOICE));

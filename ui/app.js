@@ -1045,6 +1045,10 @@
     try { await api("update_install"); } catch (err) { toast(String(err)); redrawBanner(); }
   });
 
+  // Apple Intelligence có sẵn không (để tab Asi gợi ý câu hỏi rộng hơn)
+  let ai = { available: false };
+  api("apple_ai_status").then((r) => { if (r) { ai = r; document.dispatchEvent(new Event("asi-status")); } }).catch(() => {});
+
   // ───────── Việc: dữ liệu dùng chung ─────────
   async function refreshTasks() {
     tasks = await api("list_tasks");
@@ -1089,6 +1093,7 @@
     updateBar, placeEmbed, hideEmbed, switchTab, threadsInline, setMode, renderView, refreshTasks, openSettings, modOn,
     get composing() { return C.composing; },
     get chat() { return chat; },
+    get aiReady() { return !!(ai.available && settings.apple_ai_enabled !== false); },
     get tab() { return tab; }, set tab(t) { tab = t; },
     get mode() { return mode; },
     get status() { return status; }, set status(s) { onStatus(s); },

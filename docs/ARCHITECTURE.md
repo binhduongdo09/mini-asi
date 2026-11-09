@@ -45,18 +45,26 @@ Mọi file JSON ghi kiểu "ghi file tạm rồi đổi tên" để không hỏn
 - `set_interactive(on)`: mở bảng → focus + (nếu cần) tạm chuyển bộ gõ sang ABC để `vnkey.js` tự gõ dấu; đóng → trả bộ gõ cũ.
 - `window_low()` hạ tầng cửa sổ khi macOS hiện hộp thoại xin quyền.
 
-## Trợ lý (commands/assistant.rs + assistant.rs)
+## Trợ lý (commands/assistant.rs + assistant.rs + apple_ai.rs)
 
-`assistant::classify(câu)` → `Intent` (+ phần nội dung) → `asi_ask` dựng `Reply { text, speak, mood, cards, actions }`.
-Nút trên thẻ gọi `asi_action(cmd, arg)` (add_task, undo_task, add_note, clean_safe, …). Chạy offline hoàn toàn.
+`asi_ask(câu)`:
+1. Lệnh rõ ràng ở đầu câu (`assistant::explicit_command`: "nhắc tôi…", "ghi chú…") hoặc lệnh ngắn ≤ 5 từ mà luật nhận ra
+   (`assistant::classify`, khớp theo từ trọn vẹn) → `rule_reply` (offline, tức thì).
+2. Còn lại, nếu bật Apple Intelligence → `apple_ai::ask(chỉ dẫn + ngữ cảnh máy, lịch sử 6 lượt + câu hỏi)` → trợ lý Swift
+   trả `{reply, action, argument}` (guided generation) → `reply_from_ai`: chữ của mô hình + thẻ/nút thật của app;
+   hành động ghi dữ liệu (thêm việc/ghi chú/tập trung) chạy qua đúng lệnh có sẵn, dọn rác vẫn cần bấm xác nhận.
+3. Lỗi / không có Apple Intelligence → luật. Mọi lượt được nhớ trong `AppState.chat_log` (xoá bằng `asi_reset`).
+Nút trên thẻ gọi `asi_action(cmd, arg)` (add_task, undo_task, add_note, clean_safe, clip_copy, copy_text).
+
+Trợ lý Swift (`resources/asi_ai.swift`): biên dịch sẵn trong `build.rs` (Xcode 26, `-D ASI_STRUCTURED`, không được thì bản
+chỉ trả lời chữ), nhúng bằng `include_bytes!`, giải nén vào thư mục dữ liệu khi chạy. Không có bản sẵn → chỉ tự biên dịch
+khi `xcode-select -p` báo có công cụ (không bật hộp thoại cài Xcode trên máy khách).
 
 ## Giọng đọc (commands/speech.rs + tts.rs + resources/tts_worker.py)
 
-- Mặc định: `say` (macOS) / `spd-say` (Linux).
-- Tải thêm: `Tts::install(engine)` → `uv` → Python 3.12 riêng → gói tối giản → tải mô hình (`--warmup`).
-  - VieNeu-TTS v3 Turbo (`vieneu/`): bản Gọn int8 ≈ 210 MB / Chất lượng cao ≈ 520 MB.
-  - NghiTTS (`nghitts/`): `piper-tts` + 2 giọng thường (≈ 60 MB/giọng), tải từ nghitts.app, kiểm SHA-256.
-- Khi đọc: tiến trình nền `tts_worker.py` (JSON qua stdin/stdout) đọc từng câu ra WAV → luồng phát `afplay`.
+- Một bộ đọc: NghiTTS (Piper) — `Tts::install(giọng)` → `uv` → Python 3.12 riêng → `piper-tts` → tải đúng giọng đã chọn
+  (kiểm SHA-256) → đọc thử. Tiến trình nền `tts_worker.py` (JSON qua stdin/stdout) đọc từng câu ra WAV → `afplay`;
+  rảnh 5 phút thì tắt. Chưa tải giọng → không đọc (không dùng giọng Linh). Câu tiếng Anh → `say -v Samantha`.
 
 ## Học từ mới (commands/vocab.rs + vocab.rs + ui/vocab.js)
 
@@ -88,7 +96,7 @@ Phiên âm/audio/ví dụ: Free Dictionary API (cache trong `vocab.json`). Chấ
 | threads | threads_get, threads_save_app, threads_login, threads_finish, threads_set_token, threads_logout, threads_replies, threads_post, threads_mark_read, threads_web, threads_embed, threads_close, threads_embed_ime, threads_embed_nav, open_link |
 | permissions | permissions_status, request_permissions |
 | backup | backup_info, backup_pick_dir, backup_set, backup_now, device_sync_now, backup_restore |
-| assistant | asi_ask, asi_action |
+| assistant | asi_ask, asi_action, asi_reset, apple_ai_status |
 | speech | asi_speak, asi_stop_speaking, tts_info, tts_install, tts_uninstall, tts_use |
 | vocab | vocab_batch, vocab_learned, vocab_check, vocab_play, vocab_play_mine |
 | status | get_status |

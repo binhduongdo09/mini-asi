@@ -10,7 +10,7 @@ Bên trong là linh vật hai mắt biết chớp, cười, lo lắng, ngáp ng�
 
 | Luôn có | |
 |---|---|
-| ✦ **Asi** | Trang đầu: lời chào, 3 việc/lịch gần nhất, gợi ý câu hỏi. Gõ hoặc nói: *"hôm nay có gì"*, *"máy mình thế nào"*, *"nhắc tôi 3h chiều gọi khách"*, *"dọn rác giúp mình"*… Có Apple Intelligence (macOS 26) thì hỏi đáp tự do ngay trên máy. Nút mic ở tai thỏ để ra lệnh không cần mở bảng. |
+| ✦ **Asi** | Trang đầu: lời chào, 3 việc/lịch gần nhất, gợi ý câu hỏi. Gõ hoặc nói: *"hôm nay có gì"*, *"máy mình thế nào"*, *"nhắc tôi 3h chiều gọi khách"*, *"dọn rác giúp mình"*… Có Apple Intelligence (macOS 26) thì hỏi gì cũng được — viết, dịch, giải thích, lên kế hoạch — và Asi tự thêm việc / ghi chú khi bạn nhờ. Nút mic ở tai thỏ để ra lệnh không cần mở bảng. |
 | ✅ **Việc** | Câu tự nhiên Việt/Anh, có dấu hay không: *"mai 9h gọi khách"*, *"thứ 6 tuần sau chốt hợp đồng"*, *"tomorrow 3pm call John"*. Nhóm Trễ hạn / Hôm nay / Sắp tới; lịch hôm nay (Lịch Apple). Đến giờ: Xong · 10 phút · 1 giờ · Mai. |
 | ✎ **Ghi chú** | Tự lưu, ghim, tìm, đọc cho Asi ghi. ⌘⇧Space mở nhanh. |
 | 📋 **Clipboard** | Nhớ chữ, ảnh, file đã chép. Bấm = chép lại, bấm đúp = dán luôn, ghim để giữ mãi. ⌃⇧V. |
@@ -26,10 +26,10 @@ Bên trong là linh vật hai mắt biết chớp, cười, lo lắng, ngáp ng�
 
 **Nhắc nhở** (Cài đặt › Nhắc nhở): nghỉ mắt, uống nước, giờ đi ngủ, Không làm phiền.
 **Đồng bộ**: Việc ⇄ Lời nhắc, Ghi chú ⇄ Ghi chú, Lịch; sao lưu Google Drive / iCloud, đồng bộ nhiều máy.
-**Giọng đọc**: giọng có sẵn của máy (offline) hoặc gói giọng tải thêm trong Cài đặt › Asi & giọng nói.
+**Giọng đọc**: một giọng tiếng Việt nhẹ chạy trên máy (Mai Phương / Minh Quang), tải trong Cài đặt › Asi & giọng nói.
 
 Việc, ghi chú, clipboard, nhật ký chỉ lưu trên máy bạn. Những thứ cần mạng: tra từ điển (Từ mới), Threads, kiểm tra cập nhật,
-và một số giọng đọc trực tuyến.
+tải giọng đọc lần đầu. Hỏi đáp với Apple Intelligence và đọc to đều chạy trên máy.
 
 ## Cài lên Mac
 
@@ -92,24 +92,25 @@ Threads chỉ cho app bên ngoài truy cập qua **Threads API** của Meta, nê
 
 Token dài hạn có hạn 60 ngày; Mini-Asi tự gia hạn khi còn dưới 10 ngày. App chưa qua duyệt của Meta chỉ dùng được với tài khoản là Threads Tester (tức là chính bạn).
 
-## Giọng đọc VieNeu-TTS — cách đóng gói
+## Giọng đọc của Asi
 
-- Mô hình **VieNeu-TTS v3 Turbo** (Apache-2.0, cho phép dùng thương mại; tác giả Phạm Nguyễn Ngọc Bảo) không nằm trong file cài để file `.dmg` vẫn nhẹ.
-- Bấm **Tải giọng VieNeu**: Mini-Asi tải `uv`, tạo Python 3.12 riêng (đã bỏ bộ test, IDLE, Tk) và gói `vieneu` bản tối giản (ONNX Runtime, không torch, không gradio), rồi tải mô hình.
-- Chỉ tải phần cần để **đọc bằng giọng dựng sẵn**: bỏ bộ khử nhiễu (43 MB) và bộ mã hoá codec (45 MB) vì chúng chỉ dùng để nhân bản giọng.
-  - Bản **Gọn**: backbone int8 165 MB + bộ giải mã codec 45 MB ≈ 210 MB. Mặc định trên chip Apple.
-  - Bản **Chất lượng cao**: backbone fp32 475 MB + codec 45 MB ≈ 520 MB. Mặc định trên máy Intel (int8 dễ méo tiếng trên CPU Intel không có VNNI).
-  - Đã so với VieNeu v3 Nano: Nano cần ≈ 280 MB, chất lượng thấp hơn và không có giọng Hải Đăng → bản Gọn của Turbo vừa nhỏ hơn vừa hay hơn. Tất cả nằm trong `~/Library/Application Support/com.miniasi.app/vieneu/`, không động vào Python của máy.
-- Khi đọc, một tiến trình nền giữ mô hình trong RAM và đọc từng câu; câu đầu xong là phát ngay. Rảnh 20 phút thì tự tắt để trả RAM. Lần đầu mở tai thỏ cần ≈ 15 giây để nạp, trong lúc đó Asi dùng giọng của máy.
-- Ghi công: VieNeu-TTS © Phạm Nguyễn Ngọc Bảo, github.com/pnnbao97/VieNeu-TTS (Apache-2.0); bộ mã âm thanh MOSS-Audio-Tokenizer-Nano (Apache-2.0).
+- **Một bộ đọc duy nhất, chạy trên máy:** NghiTTS (Piper/VITS) — mỗi giọng ≈ 60 MB, đọc gần như tức thì trên CPU,
+  RAM ≈ 100 MB khi đang đọc và tự tắt sau 5 phút rảnh. Hai giọng thường: **Mai Phương** (nữ), **Minh Quang** (nam);
+  chỉ tải giọng bạn chọn. Lần đầu tải ≈ 156 MB (Python riêng + piper + 1 giọng), nằm trong
+  `~/Library/Application Support/com.miniasi.app/nghitts/`, gỡ là xoá sạch.
+- **Không dùng nữa (0.13):** VieNeu-TTS (nặng 210–520 MB), edge-tts và Google Translate TTS (gửi chữ của bạn lên máy chủ
+  bên ngoài, điều khoản không cho dùng thương mại), giọng Linh của macOS (kém tự nhiên). Thư mục `vieneu/` cũ được tự xoá.
+- Câu trả lời bằng tiếng Anh dùng giọng tiếng Anh có sẵn của macOS (Samantha). Chưa tải giọng → Asi chỉ hiện chữ.
+- Giấy phép: thư viện `piper-tts` / eSpeak NG là GPL — được tải về máy người dùng như chương trình riêng, không gói trong app.
+  NghiTTS chưa công bố nguồn dữ liệu của từng giọng → nên xin xác nhận của tác giả trước khi bán rộng.
 
-## Các bộ đọc tiếng Việt đã đánh giá (11/2026)
+## Apple Intelligence
 
-| Bộ đọc | Dung lượng | Vì sao chưa dùng |
-|---|---|---|
-| **NghiTTS** (Piper/VITS) | ≈ 60 MB mỗi giọng, rất nhanh | **Đã thêm (0.10)** như bộ đọc tuỳ chọn, chỉ với 2 giọng thường (Mai Phương, Minh Quang). Các giọng mang tên người nổi tiếng / giọng thương mại (Mỹ Tâm, Trấn Thành, Ngọc Ngạn, Ban Mai, Viettel…) bị loại vì không có giấy phép. Lưu ý: dự án không công bố nguồn dữ liệu của từng giọng; thư viện chạy `piper-tts`/eSpeak NG là GPL — được tải về máy người dùng như một chương trình riêng, không gói trong app. |
-| **ZeroTTS** (GGUF, qua wyoming-vietnamese) | q4 ≈ 130 MB / q8 ≈ 216 MB + codec 45 MB | MIT, nhưng giọng mẫu ghi "chỉ để thử nghiệm", chưa có cách chạy gọn trên Mac ngoài tự biên dịch C++; dung lượng ngang bản Gọn của VieNeu. |
-| **VieNeu-TTS v3 Turbo – bản Gọn** (đang dùng) | ≈ 210 MB | Apache-2.0, cho phép thương mại, giọng có đồng ý theo thẻ mô hình. |
+Có macOS 26 + chip Apple + đã bật Apple Intelligence: câu hỏi tự do đi qua mô hình trên máy (FoundationModels).
+Asi nhớ 6 lượt gần nhất (30 phút), biết việc, lịch, ghi chú, mục vừa chép và tình trạng máy, và có thể tự **thêm việc,
+ghi chú, bật tập trung, mở lịch hôm nay / việc trễ / tình trạng máy / dọn rác** khi bạn nhờ. Lệnh ngắn rõ ràng
+("dọn rác", "nhắc tôi 3h…") vẫn chạy bằng luật cho nhanh. Trợ lý Swift được biên dịch sẵn lúc đóng gói (cần Xcode 26 trên
+máy build) để máy khách không phải cài công cụ gì.
 
 ## Free và Pro
 

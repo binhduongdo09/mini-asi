@@ -28,7 +28,12 @@
     }
     function suggestions() {
       const s = A.status;
-      const list = [s && s.lateness.overdue ? "Việc nào đang trễ?" : "Hôm nay có gì?", "Máy mình thế nào?", "Mục vừa chép là gì?"];
+      const late = s && s.lateness.overdue;
+      if (A.aiReady) {
+        // Có Apple Intelligence: gợi ý cho thấy Asi làm được việc của một trợ lý thật
+        return [late ? "Việc nào trễ, nên làm gì trước?" : "Hôm nay mình nên ưu tiên gì?", "Viết tin nhắn xin dời lịch họp sang chiều", "Tóm tắt mục mình vừa chép", "Máy mình có ổn không?"];
+      }
+      const list = [late ? "Việc nào đang trễ?" : "Hôm nay có gì?", "Máy mình thế nào?", "Mục vừa chép là gì?"];
       list.push(A.modOn("clean") && s && s.disk && s.disk.level !== "ok" ? "Dọn rác giúp mình" : "Nhắc tôi 3 giờ chiều gọi khách");
       return list;
     }
@@ -38,7 +43,7 @@
         <div class="asi-body" id="chatLog"></div>
         <div class="composer">
           ${micBtn("chatMic", "Nói với Asi")}
-          <input class="field" id="chatInput" placeholder="Hỏi Asi, hoặc gõ “nhắc tôi mai 9h họp”…" />
+          <input class="field" id="chatInput" placeholder="${A.aiReady ? "Hỏi Asi bất cứ điều gì…" : "Hỏi Asi, hoặc gõ “nhắc tôi mai 9h họp”…"}" />
           <button class="send" id="chatSend" title="Gửi">${I.send}</button>
         </div></div>`;
       const inp = $("#chatInput");
@@ -68,14 +73,19 @@
       log.scrollTop = log.scrollHeight;
     }
     document.addEventListener("asi-chat", () => { if (here("home")) drawChat(); });
-    document.addEventListener("asi-status", () => { if (here("home") && !A.chat.length && !typing()) drawChat(); });
+    document.addEventListener("asi-status", () => {
+      if (!here("home") || A.chat.length) return;
+      drawChat(); // chỉ vẽ lại phần trên, không đụng ô đang gõ
+      const inp = $("#chatInput");
+      if (inp && A.aiReady) inp.placeholder = "Hỏi Asi bất cứ điều gì…";
+    });
     view.addEventListener("click", (e) => {
       if (A.tab !== "home") return;
       const say = e.target.closest("[data-say]");
       if (say) return A.askAsi(say.dataset.say, false);
       const go = e.target.closest("[data-go]");
       if (go) return A.switchTab(go.dataset.go);
-      if (e.target.closest('[data-chat="clear"]')) { A.chat.length = 0; drawChat(); $("#chatInput")?.focus(); }
+      if (e.target.closest('[data-chat="clear"]')) { A.chat.length = 0; api("asi_reset").catch(() => {}); drawChat(); $("#chatInput")?.focus(); }
     });
     A.bindReplyClicks(view);
 

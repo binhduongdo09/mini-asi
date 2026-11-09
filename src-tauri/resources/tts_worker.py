@@ -1,14 +1,12 @@
-# Mini-Asi — tiến trình đọc giọng chạy nền (một file, hai bộ đọc).
-#
-#   MINI_ASI_ENGINE=vieneu  → VieNeu-TTS v3 Turbo (Apache-2.0, github.com/pnnbao97/VieNeu-TTS)
-#   MINI_ASI_ENGINE=nghi    → NghiTTS (Piper/VITS, github.com/nghimestudio/nghitts) qua thư viện piper-tts
+# Mini-Asi — tiến trình đọc giọng chạy nền: NghiTTS (Piper/VITS, github.com/nghimestudio/nghitts) qua `piper-tts`.
+# Chạy hoàn toàn trên máy. Chỉ dùng giọng "thường" (không mang tên người nổi tiếng / giọng thương mại).
 #
 # Nạp mô hình 1 lần, nhận yêu cầu đọc qua stdin (JSON mỗi dòng), đọc từng câu ra file WAV rồi báo
 # qua stdout để Mini-Asi phát ngay câu đầu trong khi câu sau đang được đọc.
 #
-#   vào : {"id": 3, "text": "...", "voice": "Trúc Ly", "dir": "/tmp/x"} | {"cancel": 3} | {"quit": true}
+#   vào : {"id": 3, "text": "...", "voice": "Mai Phương", "dir": "/tmp/x"} | {"cancel": 3} | {"quit": true}
 #   ra  : {"ready": true} | {"id": 3, "i": 0, "file": "...", "last": false} | {"id": 3, "error": "..."}
-#         {"fatal": "..."} (không nạp được) | {"warmup": "<file>"} (chạy với --warmup <file>)
+#         {"fatal": "..."} (không nạp được) | {"warmup": "<file>"} (chạy với --warmup <file>: tải giọng TTS_VOICE rồi đọc thử)
 #
 # Mọi print() của thư viện đi sang stderr; stdout chỉ dành cho giao thức ở trên.
 import hashlib
@@ -23,7 +21,6 @@ import urllib.request
 
 OUT = os.fdopen(os.dup(sys.stdout.fileno()), "w", buffering=1, encoding="utf-8")
 sys.stdout = sys.stderr
-ENGINE = os.environ.get("MINI_ASI_ENGINE", "vieneu")
 
 
 def send(obj):
@@ -52,73 +49,6 @@ def split_sentences(text, min_len=18, max_len=220):
         else:
             out.append(buf)
     return out
-
-
-# ───────────────────────────── VieNeu-TTS ─────────────────────────────
-VN_REPO = "pnnbao-ump/VieNeu-TTS-v3-Turbo"
-VN_CODEC = "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX"
-VN_GRAPHS = ["vieneu_prefill.onnx", "vieneu_decode_step.onnx", "vieneu_acoustic_cached.onnx",
-             "vieneu_backbone_shared.data", "vieneu_v3_heads.npz", "config.json", "tokenizer.json"]
-# Chỉ phần GIẢI MÃ của codec — phần mã hoá (≈ 45 MB) và bộ khử nhiễu (≈ 43 MB) chỉ để nhân bản giọng
-VN_CODEC_DEC = ["moss_audio_tokenizer_decode_full.onnx", "moss_audio_tokenizer_decode_shared.data",
-                "moss_audio_tokenizer_decode_step.onnx", "codec_browser_onnx_meta.json"]
-VN_SUB = {"int8": "onnx_int8", "fp32": "onnx_update"}
-
-
-def vieneu_prepare(precision):
-    """Tải đúng những file cần để đọc bằng giọng dựng sẵn; xoá bản mô hình còn lại để đỡ tốn chỗ."""
-    from huggingface_hub import hf_hub_download
-
-    sub = VN_SUB.get(precision, "onnx_update")
-    try:
-        hf_hub_download(VN_REPO, "config.json")
-    except Exception:
-        pass
-    for fn in VN_GRAPHS:
-        hf_hub_download(VN_REPO, fn, subfolder=sub)
-    for fn in VN_CODEC_DEC:
-        hf_hub_download(VN_CODEC, fn)
-    for other in VN_SUB.values():
-        if other == sub:
-            continue
-        for fn in VN_GRAPHS:
-            try:
-                p = hf_hub_download(VN_REPO, fn, subfolder=other, local_files_only=True)
-            except Exception:
-                continue
-            for f in {p, os.path.realpath(p)}:
-                try:
-                    os.remove(f)
-                except OSError:
-                    pass
-
-
-def vieneu_slim():
-    """Bỏ phần nhân bản giọng khỏi engine ONNX (không tải, không nạp)."""
-    try:
-        import vieneu._v3_turbo_engine.onnx_runtime_lite as L
-
-        L._CODEC_FILES = [f for f in L._CODEC_FILES if "encode" not in f]
-        L.OnnxV3LiteEngine._load_denoiser = lambda self: None
-    except Exception as e:  # SDK đổi cấu trúc → vẫn chạy được, chỉ tải nhiều hơn
-        print("vieneu_slim:", e)
-
-
-class VieNeuBackend:
-    default_voice = "Trúc Ly"
-
-    def __init__(self, warmup):
-        precision = os.environ.get("VIENEU_PRECISION", "fp32")
-        if warmup:
-            vieneu_prepare(precision)
-        vieneu_slim()
-        from vieneu import Vieneu
-
-        self.tts = Vieneu(mode="v3turbo", precision=precision)
-
-    def say(self, text, voice, out):
-        audio = self.tts.infer(text, voice=voice or self.default_voice)
-        self.tts.save(audio, out)
 
 
 # ───────────────────────────── NghiTTS (Piper) ─────────────────────────────
@@ -175,13 +105,14 @@ def nghi_files(name, root):
     return os.path.join(root, _slug(name) + ".onnx"), os.path.join(root, _slug(name) + ".onnx.json")
 
 
-def nghi_prepare(root):
+def nghi_prepare(root, name):
+    """Chỉ tải giọng được chọn (≈ 60 MB) — giọng còn lại tải khi người dùng chọn tới."""
     os.makedirs(root, exist_ok=True)
-    for name, sha in NGHI_VOICES.items():
-        model, cfg = nghi_files(name, root)
-        q = urllib.parse.quote
-        _download(NGHI_BASE + q(name + ".onnx.json", safe=""), cfg, NGHI_CONFIG_SHA)
-        _download(NGHI_BASE + q(name + ".onnx", safe=""), model, sha)
+    name = name if name in NGHI_VOICES else "Mai Phương"
+    model, cfg = nghi_files(name, root)
+    q = urllib.parse.quote
+    _download(NGHI_BASE + q(name + ".onnx.json", safe=""), cfg, NGHI_CONFIG_SHA)
+    _download(NGHI_BASE + q(name + ".onnx", safe=""), model, NGHI_VOICES[name])
 
 
 def vi_normalize(text):
@@ -203,13 +134,18 @@ class NghiBackend:
     def __init__(self, warmup):
         self.root = os.environ.get("NGHI_DIR", "voices")
         if warmup:
-            nghi_prepare(self.root)
+            nghi_prepare(self.root, os.environ.get("TTS_VOICE", self.default_voice))
         from piper import PiperVoice  # noqa: F401  (kiểm tra cài đặt ngay khi khởi động)
 
         self.voices = {}
 
+    def _available(self, name):
+        return os.path.exists(nghi_files(name, self.root)[0])
+
     def _voice(self, name):
         name = name if name in NGHI_VOICES else self.default_voice
+        if not self._available(name):  # giọng chưa tải → dùng giọng đã có
+            name = next((n for n in NGHI_VOICES if self._available(n)), name)
         if name not in self.voices:
             from piper import PiperVoice
 
@@ -250,49 +186,8 @@ def reader():
     os._exit(0)  # Mini-Asi đóng → tự thoát
 
 
-class EdgeBackend:
-    """Bộ đọc giọng Neural tiếng Việt tự nhiên 24 kHz qua edge-tts."""
-
-    VOICE_MAP = {
-        "Hoài My": ("vi-VN-HoaiMyNeural", "+0%", "+0Hz"),
-        "Nam Minh": ("vi-VN-NamMinhNeural", "+0%", "+0Hz"),
-        "Thảo Vy": ("vi-VN-HoaiMyNeural", "+7%", "+4Hz"),
-        "Bảo Khang": ("vi-VN-NamMinhNeural", "-4%", "-3Hz"),
-        "Ngọc Lan": ("vi-VN-HoaiMyNeural", "+3%", "+2Hz"),
-        "Minh Quân": ("vi-VN-NamMinhNeural", "+4%", "+0Hz"),
-        # Tương thích tên giọng cũ
-        "Trúc Ly": ("vi-VN-HoaiMyNeural", "+0%", "+0Hz"),
-        "Hải Đăng": ("vi-VN-NamMinhNeural", "+0%", "+0Hz"),
-        "Mai Phương": ("vi-VN-HoaiMyNeural", "+4%", "+2Hz"),
-        "Minh Quang": ("vi-VN-NamMinhNeural", "+2%", "-2Hz"),
-    }
-
-    def __init__(self):
-        import edge_tts  # noqa: F401
-
-    def say(self, text, voice, out):
-        import asyncio
-        import edge_tts
-
-        v_id, rate, pitch = self.VOICE_MAP.get(voice, ("vi-VN-HoaiMyNeural", "+0%", "+0Hz"))
-        norm = vi_normalize(text)
-        if not norm:
-            return
-
-        async def _run():
-            comm = edge_tts.Communicate(norm, v_id, rate=rate, pitch=pitch)
-            await comm.save(out)
-
-        asyncio.run(_run())
-
-
 def load_backend(warmup):
-    # Ưu tiên EdgeBackend (nhẹ, nhanh, không cần tải 500 MB mô hình ONNX);
-    # chỉ rơi về VieNeuBackend / NghiBackend khi môi trường không có edge_tts (như trong unit test giả lập).
-    try:
-        return EdgeBackend()
-    except Exception:
-        return NghiBackend(warmup) if ENGINE == "nghi" else VieNeuBackend(warmup)
+    return NghiBackend(warmup)
 
 
 def main():

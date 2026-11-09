@@ -7,6 +7,7 @@
 //!   • Luồng 80ms: theo dõi chuột để mở "ló ra" khi rê vào tai thỏ
 
 pub mod apple;
+pub mod apple_ai;
 pub mod assistant;
 pub mod backup;
 pub mod clipboard;
@@ -116,9 +117,12 @@ pub fn run() {
                 ime_prev: Mutex::new(None),
                 ime_last: Mutex::new(String::new()),
                 data_dir: data_dir.clone(),
-                tts: tts::Tts::new(&data_dir, tts::Engine::VieNeu),
-                nghi: tts::Tts::new(&data_dir, tts::Engine::Nghi),
+                tts: {
+                    tts::remove_legacy(&data_dir); // bỏ bộ đọc cũ (VieNeu / edge-tts) → trả lại ổ đĩa
+                    tts::Tts::new(&data_dir)
+                },
                 vocab: Mutex::new(vocab::Vocab::open(&data_dir)),
+                chat_log: Mutex::new(vec![]),
                 update: Mutex::new(updater::UpdateProgress::default()),
             });
             app.manage(st.clone());
@@ -180,7 +184,7 @@ pub fn run() {
             {
                 let d_ai = data_dir.clone();
                 std::thread::spawn(move || {
-                    let _ = assistant::ensure_apple_ai_bin(&d_ai);
+                    let _ = apple_ai::helper(&d_ai);
                 });
             }
 
@@ -209,7 +213,7 @@ pub fn run() {
             clean_scan, clean_run, clean_history, open_disk_settings,
             health_break_done, health_snooze, focus_start, focus_stop,
             get_settings, save_settings, patch_settings, license_info, activate_license, deactivate_license, quit,
-            get_status, asi_ask, asi_action, asi_speak, asi_stop_speaking, apple_ai_status,
+            get_status, asi_ask, asi_action, asi_reset, asi_speak, asi_stop_speaking, apple_ai_status,
             clip_list, clip_copy, clip_merge, clip_copy_files, clip_copy_image, clip_pin, clip_delete, clip_clear, clip_image, clip_to_note, clip_to_task,
             accessibility_status, open_privacy,
             voice_start, voice_stop, voice_cancel,

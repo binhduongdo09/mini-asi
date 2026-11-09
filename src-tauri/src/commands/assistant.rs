@@ -37,72 +37,144 @@ pub(crate) fn greet_word(en: bool) -> &'static str {
     }
 }
 
-/// Kiểm tra trạng thái Apple Intelligence (FoundationModels On-Device) trên máy
+/// Kiểm tra trạng thái Apple Intelligence (FoundationModels, chạy trên máy)
 #[tauri::command]
-pub(crate) async fn apple_ai_status(st: S<'_>) -> Result<assistant::AppleAiStatus, String> {
+pub(crate) async fn apple_ai_status(st: S<'_>) -> Result<apple_ai::AppleAiStatus, String> {
     let dir = st.data_dir.clone();
-    blocking(move || Ok(assistant::check_apple_ai(&dir))).await
+    blocking(move || Ok(apple_ai::status(&dir))).await
 }
 
-/// Tạo bản tóm tắt ngữ cảnh thực tế trên máy để Apple Intelligence trả lời sát với dữ liệu của người dùng
+/// Xoá hội thoại gần đây (nút "Cuộc trò chuyện mới")
+#[tauri::command]
+pub(crate) fn asi_reset(st: S) {
+    st.chat_log.lock().unwrap().clear();
+}
+
+fn local_fmt(ms: i64, f: &str) -> String {
+    chrono::DateTime::from_timestamp_millis(ms).map(|d| d.with_timezone(&Local).format(f).to_string()).unwrap_or_default()
+}
+fn clip_chars(s: &str, n: usize) -> String {
+    let t: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    if t.chars().count() > n { t.chars().take(n).collect::<String>() + "…" } else { t }
+}
+
+/// Ngữ cảnh thật trên máy (gọn, vì mô hình trên máy chỉ đọc được ~4.000 token)
 pub(crate) fn build_ai_context(st: &AppState) -> String {
+    use chrono::TimeZone;
     let now = now_ms();
     let lnow = Local::now();
-    let (tasks_summary, notes_summary) = {
-        let s = st.store.lock().unwrap();
-        let open: Vec<String> = s
-            .tasks
-            .iter()
-            .filter(|t| t.done_at.is_none())
-            .take(8)
-            .map(|t| {
-                let state = match t.due {
-                    Some(d) if d < now => " [OVERDUE]",
-                    Some(_) => " [scheduled]",
-                    None => "",
-                };
-                format!("- {}{}", t.title, state)
-            })
-            .collect();
-        let notes: Vec<String> = s
-            .notes
-            .iter()
-            .filter(|n| !n.text.trim().is_empty())
-            .take(3)
-            .map(|n| {
-                let snippet: String = n.text.chars().take(120).collect();
-                format!("- {}", snippet.replace('\n', " "))
-            })
-            .collect();
-        (
-            if open.is_empty() { "None".to_string() } else { open.join("\n") },
-            if notes.is_empty() { "None".to_string() } else { notes.join("\n") },
-        )
+    let wd = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"][lnow.weekday().num_days_from_sunday() as usize];
+    let end_today = {
+        let d = lnow.date_naive().and_hms_opt(23, 59, 59).unwrap();
+        Local.from_local_datetime(&d).earliest().map(|x| x.timestamp_millis()).unwrap_or(now)
     };
-    let clip_snippet = st
-        .clips
-        .lock()
-        .ok()
-        .and_then(|c| c.items.first().cloned())
-        .map(|c| {
-            if c.text.trim().is_empty() {
-                "Image / File in clipboard".to_string()
-            } else {
-                c.text.chars().take(420).collect::<String>()
-            }
-        })
-        .unwrap_or_else(|| "Empty".to_string());
-    let disk_info = asi_clean::disk::status(&home_dir())
-        .map(|d| format!("{} free ({:.0}%)", fmt_gb(d.free_bytes), d.free_percent))
-        .unwrap_or_else(|| "Unknown".into());
+    let mut out = vec![format!("Now: {wd}, {}", lnow.format("%d/%m/%Y %H:%M"))];
+    {
+        let s = st.store.lock().unwrap();
+        let mut open: Vec<&store::Task> = s.tasks.iter().filter(|t| t.done_at.is_none()).collect();
+        open.sort_by_key(|t| t.due.unwrap_or(i64::MAX));
+        let lines: Vec<String> = open
+            .iter()
+            .take(10)
+            .map(|t| match t.due {
+                Some(d) if d < now => format!("- {} (OVERDUE since {})", clip_chars(&t.title, 80), local_fmt(d, "%H:%M %d/%m")),
+                Some(d) if d <= end_today => format!("- {} (due today {})", clip_chars(&t.title, 80), local_fmt(d, "%H:%M")),
+                Some(d) => format!("- {} (due {})", clip_chars(&t.title, 80), local_fmt(d, "%a %d/%m %H:%M")),
+                None => format!("- {} (no due time)", clip_chars(&t.title, 80)),
+            })
+            .collect();
+        out.push(format!("Open tasks ({} total):\n{}", open.len(), if lines.is_empty() { "- none".into() } else { lines.join("\n") }));
+        let notes: Vec<String> = s.notes.iter().filter(|n| !n.text.trim().is_empty()).take(3).map(|n| format!("- {}", clip_chars(&n.text, 100))).collect();
+        if !notes.is_empty() {
+            out.push(format!("Recent notes:\n{}", notes.join("\n")));
+        }
+    }
+    let evs: Vec<String> = st.events.lock().unwrap().iter().filter(|e| e.end > now && e.start <= end_today).take(6).map(|e| format!("- {} {}", if e.all_day { "all day".into() } else { local_fmt(e.start, "%H:%M") }, clip_chars(&e.title, 70))).collect();
+    if !evs.is_empty() {
+        out.push(format!("Calendar today:\n{}", evs.join("\n")));
+    }
+    if let Some(c) = st.clips.lock().ok().and_then(|c| c.items.first().cloned()) {
+        out.push(format!("Last copied: {}", if c.text.trim().is_empty() { "an image or file".to_string() } else { clip_chars(&c.text, 400) }));
+    }
+    let sys = assistant::sysinfo();
+    let mut m = vec![];
+    if let Some(d) = asi_clean::disk::status(&home_dir()) {
+        m.push(format!("disk {} free ({:.0}%)", fmt_gb(d.free_bytes), d.free_percent));
+    }
+    if let Some(b) = sys.battery_pct {
+        m.push(format!("battery {b}%{}", if sys.charging.unwrap_or(false) { " charging" } else { "" }));
+    }
+    if let Some(r) = sys.mem_used_pct {
+        m.push(format!("RAM {r:.0}% used"));
+    }
+    if !m.is_empty() {
+        out.push(format!("Mac: {}", m.join(", ")));
+    }
+    out.join("\n")
+}
+
+/// Chỉ dẫn cho Apple Intelligence: vai trò, quy tắc, cách chọn hành động, ngữ cảnh máy
+pub(crate) fn ai_instructions(st: &AppState, en: bool) -> String {
+    let lang = if en { "English" } else { "Vietnamese (always with full diacritics, natural and friendly, like a capable personal assistant; address the user as \"bạn\", refer to yourself as \"Asi\" or \"mình\")" };
     format!(
-        "Current local time: {}\nDisk space: {}\nOpen tasks:\n{}\nRecent notes:\n{}\nLatest clipboard content:\n{}",
-        lnow.format("%Y-%m-%d %H:%M (%A)"),
-        disk_info,
-        tasks_summary,
-        notes_summary,
-        clip_snippet
+        "You are Asi, the user's personal assistant living in the MacBook notch (Mini-Asi app). The user is Vietnamese.\n\
+         Help with anything a smart assistant can: answer general questions, explain, advise, write and rewrite (emails, messages, posts), translate, summarize, plan the day, brainstorm, calculate, and answer questions about the user's own tasks, calendar, notes and Mac using the context below.\n\
+         Rules:\n\
+         - Reply in {lang}.\n\
+         - Be direct and useful. Usually 1-4 sentences; use short '- ' bullet lines for steps or options; for writing tasks give the full text (up to about 12 lines).\n\
+         - Use the conversation so far to understand follow-ups (\"nó\", \"cái đó\", \"dịch lại\", \"ngắn hơn\").\n\
+         - Only state facts about the user's tasks, events, notes or Mac that appear in the context. Never invent them. If you are not sure about something, say so briefly.\n\
+         - No greetings unless greeted, no disclaimers about being an AI.\n\
+         Choose action when the user wants the app to DO something, otherwise none:\n\
+         - add_task: wants a reminder or to-do. argument = the task in the user's words including time words (e.g. \"mai 9h gọi khách\").\n\
+         - add_note: wants to save something as a note. argument = the note text.\n\
+         - start_focus: wants a focus / pomodoro timer. argument = minutes as digits (default 25).\n\
+         - show_today: asks about today's plan or agenda. show_overdue: asks which tasks are late.\n\
+         - check_mac: asks about the computer's health, speed, battery, memory or storage. clean_junk: wants to free disk space.\n\
+         - open_tab: wants to open a screen. argument = one of tasks, notes, clips, journal, words, threads, clean.\n\
+         When you choose an action, reply with one short sentence; the app shows the details.\n\
+         Context right now:\n{}",
+        build_ai_context(st)
     )
+}
+
+/// Lịch sử gần đây (≤ 6 lượt, trong 30 phút) + câu hỏi hiện tại
+pub(crate) fn ai_prompt(st: &AppState, text: &str) -> String {
+    let now = now_ms();
+    let log = st.chat_log.lock().unwrap();
+    let recent: Vec<&(String, String, i64)> = log.iter().rev().take_while(|(_, _, t)| now - t < 30 * 60_000).take(6).collect();
+    let mut p = String::new();
+    if !recent.is_empty() {
+        p.push_str("Conversation so far:\n");
+        for (q, a, _) in recent.into_iter().rev() {
+            p.push_str(&format!("User: {}\nAsi: {}\n", clip_chars(q, 400), clip_chars(a, 500)));
+        }
+        p.push('\n');
+    }
+    p.push_str(&format!("User: {text}"));
+    p
+}
+
+fn remember(st: &AppState, q: &str, a: &str) {
+    let mut log = st.chat_log.lock().unwrap();
+    log.push((q.to_string(), a.to_string(), now_ms()));
+    let n = log.len();
+    if n > 12 {
+        log.drain(..n - 12);
+    }
+}
+
+/// Câu ngắn để đọc to: 1–2 câu đầu, bỏ gạch đầu dòng
+pub(crate) fn speak_summary(text: &str) -> String {
+    let flat = text.lines().map(|l| l.trim().trim_start_matches(['-', '•', '*']).trim()).filter(|l| !l.is_empty()).collect::<Vec<_>>().join(" ");
+    let mut out = String::new();
+    for (i, sent) in flat.split_inclusive(['.', '!', '?']).enumerate() {
+        if i >= 2 || out.chars().count() + sent.chars().count() > 240 {
+            break;
+        }
+        out.push_str(sent);
+    }
+    if out.trim().is_empty() { flat.chars().take(200).collect() } else { out.trim().to_string() }
 }
 
 pub(crate) fn reply_status(st: &AppState, en: bool) -> assistant::Reply {
@@ -199,170 +271,216 @@ pub(crate) fn reply_clean(st: &AppState, en: bool) -> Result<assistant::Reply, S
     Ok(r.act(if en { "See details" } else { "Xem chi tiết" }, "open_tab", "clean"))
 }
 
+/// Trả lời bằng luật (offline, tức thì) theo ý định đã nhận ra
+fn rule_reply(app2: &AppHandle, st: &AppState, intent: assistant::Intent, rest: String, text: &str, en: bool, offset: Option<i32>) -> Result<assistant::Reply, String> {
+    use assistant::{Card, Intent, Reply, TaskBrief};
+    let now = now_ms();
+    let (lnow, off) = local_now(offset);
+    let r = match intent {
+        Intent::Status => reply_status(st, en),
+        Intent::Clean => reply_clean(st, en)?,
+        Intent::Overdue => {
+            let mut items: Vec<TaskBrief> = st.store.lock().unwrap().tasks.iter().filter(|t| t.done_at.is_none() && t.due.is_some_and(|d| d < now)).map(|t| TaskBrief { id: t.id, title: t.title.clone(), due: t.due }).collect();
+            items.sort_by_key(|t| t.due);
+            let n = items.len();
+            let mut r = if n == 0 {
+                Reply::new(intent, if en { "No overdue tasks 🎉 Great job!" } else { "Không có việc nào trễ cả 🎉 Giỏi quá!" })
+            } else {
+                let mut r = Reply::new(intent, if en { format!("{n} task(s) are overdue. Oldest: “{}”.", items[0].title) } else { format!("Có {n} việc đang trễ. Lâu nhất là “{}”.", items[0].title) });
+                r.mood = "angry".into();
+                r
+            };
+            if n > 0 {
+                r.cards.push(Card::Tasks { items });
+            }
+            r
+        }
+        Intent::Today => {
+            let start = to_ms(lnow.date().and_hms_opt(0, 0, 0).unwrap(), off);
+            let end = start + 86_400_000;
+            let mut items: Vec<TaskBrief> = st.store.lock().unwrap().tasks.iter().filter(|t| t.done_at.is_none() && t.due.is_some_and(|d| d < end)).map(|t| TaskBrief { id: t.id, title: t.title.clone(), due: t.due }).collect();
+            items.sort_by_key(|t| t.due);
+            let evs: Vec<(String, i64, bool)> = st.events.lock().unwrap().iter().filter(|e| e.start < end && e.end > now).map(|e| (e.title.clone(), e.start, e.all_day)).collect();
+            let mut r = Reply::new(
+                intent,
+                if en { format!("Today: {} task(s) and {} event(s).", items.len(), evs.len()) } else { format!("Hôm nay bạn có {} việc và {} lịch hẹn.", items.len(), evs.len()) },
+            );
+            if !evs.is_empty() {
+                r.cards.push(Card::Events { items: evs });
+            }
+            if !items.is_empty() {
+                r.cards.push(Card::Tasks { items });
+            }
+            if r.cards.is_empty() {
+                r.text = if en { "Nothing scheduled today — enjoy! 🌿".into() } else { "Hôm nay thảnh thơi, không có lịch gì 🌿".into() };
+                r.speak = r.text.clone();
+            }
+            r
+        }
+        Intent::AddTask => {
+            let t = add_task(app2.clone(), app2.state::<Arc<AppState>>(), rest.clone(), offset)?;
+            let when = t.due.map(|d| chrono::DateTime::from_timestamp_millis(d + off).map(|x| x.format("%H:%M %d/%m").to_string()).unwrap_or_default());
+            let mut r = Reply::new(intent, match (&when, en) {
+                (Some(w), true) => format!("Added “{}” — I'll remind you at {w}.", t.title),
+                (Some(w), false) => format!("Đã thêm “{}” — Asi sẽ nhắc lúc {w}.", t.title),
+                (None, true) => format!("Added “{}”.", t.title),
+                (None, false) => format!("Đã thêm việc “{}”.", t.title),
+            });
+            r.cards.push(Card::Tasks { items: vec![TaskBrief { id: t.id, title: t.title, due: t.due }] });
+            r.act(if en { "Open tasks" } else { "Xem danh sách việc" }, "open_tab", "tasks").act(if en { "Undo" } else { "Hoàn tác" }, "undo_task", &t.id.to_string())
+        }
+        Intent::AddNote => {
+            if rest.trim().is_empty() {
+                Reply::new(intent, if en { "What should I note down?" } else { "Bạn muốn Asi ghi lại điều gì?" }).act(if en { "Open notes" } else { "Mở Ghi chú" }, "open_tab", "notes")
+            } else {
+                st.store.lock().unwrap().upsert_note(None, rest.clone());
+                kick_sync(&app2);
+                Reply::new(intent, if en { "Noted ✍️" } else { "Asi ghi lại rồi ✍️" }).act(if en { "Open notes" } else { "Mở Ghi chú" }, "open_tab", "notes")
+            }
+        }
+        Intent::Focus => {
+            let m: i64 = text.split(|c: char| !c.is_ascii_digit()).find_map(|x| x.parse().ok()).unwrap_or(25).clamp(5, 180);
+            st.health.lock().unwrap().focus_until = Some(Local::now().timestamp() + m * 60);
+            let mut r = Reply::new(intent, if en { format!("Focus mode for {m} minutes. I'll keep quiet 🤫") } else { format!("Bắt đầu tập trung {m} phút. Asi sẽ giữ im lặng 🤫") });
+            r.mood = "focus".into();
+            r
+        }
+        Intent::Break => Reply::new(intent, if en { "Let's rest your eyes for 20 seconds 👀" } else { "Cùng nghỉ mắt 20 giây nhé 👀" }).act(if en { "Start" } else { "Bắt đầu nghỉ" }, "rest", ""),
+        Intent::Disk => match asi_clean::disk::status(&home_dir()) {
+            Some(d) => Reply::new(intent, if en { format!("You have {} free of {} ({:.0}%).", fmt_gb(d.free_bytes), fmt_gb(d.total_bytes), d.free_percent) } else { format!("Ổ đĩa còn trống {} / {} ({:.0}%).", fmt_gb(d.free_bytes), fmt_gb(d.total_bytes), d.free_percent) }).act(if en { "Clean junk" } else { "Dọn rác" }, "ask", "dọn rác"),
+            None => Reply::new(intent, "Asi chưa đọc được ổ đĩa"),
+        },
+        Intent::Battery => match assistant::sysinfo().battery_pct {
+            Some(b) => Reply::new(intent, if en { format!("Battery at {b}%.") } else { format!("Pin còn {b}%.") }),
+            None => Reply::new(intent, if en { "This computer has no battery info." } else { "Máy này không có thông tin pin." }),
+        },
+        Intent::LastClip => {
+            let c = st.clips.lock().unwrap().items.first().cloned();
+            match c {
+                Some(c) => {
+                    let preview = if c.text.is_empty() { format!("{} file / ảnh", c.files.len().max(1)) } else { c.text.chars().take(160).collect() };
+                    let mut r = Reply::new(intent, if en { "Your latest copy:" } else { "Mục bạn vừa chép:" });
+                    r.speak = if en { "Here's what you copied last.".into() } else { "Đây là mục bạn vừa chép.".into() };
+                    r.cards.push(Card::Text { text: preview });
+                    r.act(if en { "Copy again" } else { "Chép lại" }, "clip_copy", &c.id.to_string()).act("Clipboard", "open_tab", "clips")
+                }
+                None => Reply::new(intent, if en { "Clipboard history is empty." } else { "Chưa có gì trong lịch sử clipboard." }),
+            }
+        }
+        Intent::Journal => Reply::new(intent, if en { "Let's write today's journal 📔" } else { "Cùng viết nhật ký hôm nay nhé 📔" }).act(if en { "Open journal" } else { "Mở Nhật ký" }, "open_tab", "journal"),
+        Intent::Threads => Reply::new(intent, if en { "Opening Threads…" } else { "Mở Threads cho bạn nè…" }).act("Threads", "open_tab", "threads"),
+        Intent::Time => {
+            let n = Local::now();
+            let wd = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"][n.weekday().num_days_from_sunday() as usize];
+            Reply::new(intent, if en { format!("It's {}.", n.format("%H:%M, %A %d %B")) } else { format!("Bây giờ là {}, {} ngày {}.", n.format("%H:%M"), wd, n.format("%d/%m/%Y")) })
+        }
+        Intent::Help => assistant::help(en),
+        Intent::Greet => {
+            let s = build_status(st);
+            let extra = if s.lateness.overdue > 0 {
+                if en { format!(" You have {} overdue task(s).", s.lateness.overdue) } else { format!(" Bạn đang có {} việc trễ đó nha.", s.lateness.overdue) }
+            } else {
+                String::new()
+            };
+            Reply::new(intent, format!("{} 👋 {}{}", greet_word(en), if en { "How can I help?" } else { "Asi giúp gì được cho bạn?" }, extra))
+        }
+        Intent::Thanks => Reply::new(intent, if en { "Anytime 💖" } else { "Không có gì đâu 💖" }),
+        Intent::Vocab => {
+            let words = st.vocab.lock().unwrap().batch(st.store.lock().unwrap().settings.vocab_count.clamp(1, 5) as usize, false, now);
+            Reply::new(intent, if en { format!("Today's words: {}.", words.join(", ")) } else { format!("Từ mới hôm nay: {}. Mở tab Từ mới để nghe & đọc thử nhé!", words.join(", ")) })
+                .act(if en { "Practice" } else { "Luyện phát âm" }, "open_tab", "words")
+        }
+        Intent::Unknown => {
+            let mut r = assistant::help(en);
+            r.intent = Intent::Unknown;
+            r.mood = "idle".into();
+            r.text = if en { "Hmm, I didn't get that. Try one of these:".into() } else { "Hmm, Asi chưa hiểu ý bạn. Thử một trong mấy câu này nhé:".into() };
+            r.speak = if en { "Sorry, I didn't get that.".into() } else { "Xin lỗi, Asi chưa hiểu ý bạn.".into() };
+            if !rest.trim().is_empty() {
+                // Không hiểu → cho bấm để biến ngay thành việc / ghi chú
+                r.text = if en { "Hmm, I didn't get that. Save it as a task or a note?".into() } else { "Hmm, Asi chưa hiểu lắm. Lưu câu này thành việc hay ghi chú?".into() };
+                r.actions.insert(0, assistant::Action { label: if en { "Add as task".into() } else { "Thêm thành việc".into() }, cmd: "add_task".into(), arg: rest.clone() });
+                r.actions.insert(1, assistant::Action { label: if en { "Save note".into() } else { "Lưu ghi chú".into() }, cmd: "add_note".into(), arg: rest.clone() });
+            }
+            r
+        }
+    };
+    Ok(r)
+}
+
+/// Dựng câu trả lời từ Apple Intelligence: chữ của mô hình + thẻ/nút thật của app theo hành động mô hình chọn
+fn reply_from_ai(app2: &AppHandle, st: &AppState, t: apple_ai::AiTurn, text: &str, en: bool, offset: Option<i32>) -> Result<assistant::Reply, String> {
+    use assistant::{Intent, Reply};
+    let arg = if t.argument.is_empty() { text.to_string() } else { t.argument.clone() };
+    let with_ai_text = |mut r: Reply| {
+        if !t.reply.is_empty() {
+            r.text = t.reply.clone();
+            r.speak = speak_summary(&t.reply);
+        }
+        r
+    };
+    let r = match t.action.as_str() {
+        // Việc làm thay đổi dữ liệu: dùng đúng đường của lệnh (có nút Hoàn tác), câu xác nhận do app viết
+        "add_task" => rule_reply(app2, st, Intent::AddTask, arg, text, en, offset)?,
+        "add_note" => rule_reply(app2, st, Intent::AddNote, arg, text, en, offset)?,
+        "start_focus" => rule_reply(app2, st, Intent::Focus, String::new(), &format!("{arg} {text}"), en, offset)?,
+        // Dọn rác: con số phải chính xác → dùng câu của app (vẫn cần bấm "Dọn ngay")
+        "clean_junk" => rule_reply(app2, st, Intent::Clean, String::new(), text, en, offset)?,
+        // Xem thông tin: lời của mô hình (đã có ngữ cảnh) + thẻ số liệu thật của app
+        "show_today" => with_ai_text(rule_reply(app2, st, Intent::Today, String::new(), text, en, offset)?),
+        "show_overdue" => with_ai_text(rule_reply(app2, st, Intent::Overdue, String::new(), text, en, offset)?),
+        "check_mac" => with_ai_text(reply_status(st, en)),
+        "open_tab" => {
+            let tab = ["tasks", "notes", "clips", "journal", "words", "threads", "clean"].into_iter().find(|x| arg.to_lowercase().contains(x)).unwrap_or("tasks");
+            let mut r = Reply::new(Intent::Help, if t.reply.is_empty() { (if en { "Here you go." } else { "Mở cho bạn nè." }).to_string() } else { t.reply.clone() });
+            r.speak = speak_summary(&r.text);
+            r.act(if en { "Open" } else { "Mở" }, "open_tab", tab)
+        }
+        _ => {
+            let mut r = Reply::new(Intent::Unknown, t.reply.clone());
+            r.speak = speak_summary(&t.reply);
+            r.mood = "happy".into();
+            if t.reply.chars().count() > 160 {
+                r = r.act(if en { "Copy" } else { "Chép" }, "copy_text", &t.reply).act(if en { "Save as note" } else { "Lưu ghi chú" }, "add_note", &t.reply);
+            }
+            r
+        }
+    };
+    Ok(r)
+}
+
+/// Hỏi Asi. Lệnh ngắn, rõ ràng → luật (tức thì, offline). Còn lại → Apple Intelligence (nếu bật) để hiểu rộng
+/// và trả lời như trợ lý; mô hình có thể chọn hành động cho app làm. Lỗi / chưa có Apple Intelligence → luật.
 #[tauri::command]
 pub(crate) async fn asi_ask(app: AppHandle, st: S<'_>, text: String, offset: Option<i32>) -> Result<assistant::Reply, String> {
-    use assistant::{Card, Intent, Reply, TaskBrief};
+    use assistant::Intent;
     let st2 = st.inner().clone();
     let app2 = app.clone();
     blocking(move || {
         let st = &st2;
-        let lang = st.store.lock().unwrap().settings.voice_lang.clone();
-        let en = looks_english(&text, &lang);
-        let (intent, rest) = assistant::classify(&text);
-        let now = now_ms();
-        let (lnow, off) = local_now(offset);
-        let r = match intent {
-            Intent::Status => reply_status(st, en),
-            Intent::Clean => reply_clean(st, en)?,
-            Intent::Overdue => {
-                let mut items: Vec<TaskBrief> = st.store.lock().unwrap().tasks.iter().filter(|t| t.done_at.is_none() && t.due.is_some_and(|d| d < now)).map(|t| TaskBrief { id: t.id, title: t.title.clone(), due: t.due }).collect();
-                items.sort_by_key(|t| t.due);
-                let n = items.len();
-                let mut r = if n == 0 {
-                    Reply::new(intent, if en { "No overdue tasks 🎉 Great job!" } else { "Không có việc nào trễ cả 🎉 Giỏi quá!" })
-                } else {
-                    let mut r = Reply::new(intent, if en { format!("{n} task(s) are overdue. Oldest: “{}”.", items[0].title) } else { format!("Có {n} việc đang trễ. Lâu nhất là “{}”.", items[0].title) });
-                    r.mood = "angry".into();
-                    r
-                };
-                if n > 0 {
-                    r.cards.push(Card::Tasks { items });
-                }
-                r
-            }
-            Intent::Today => {
-                let start = to_ms(lnow.date().and_hms_opt(0, 0, 0).unwrap(), off);
-                let end = start + 86_400_000;
-                let mut items: Vec<TaskBrief> = st.store.lock().unwrap().tasks.iter().filter(|t| t.done_at.is_none() && t.due.is_some_and(|d| d < end)).map(|t| TaskBrief { id: t.id, title: t.title.clone(), due: t.due }).collect();
-                items.sort_by_key(|t| t.due);
-                let evs: Vec<(String, i64, bool)> = st.events.lock().unwrap().iter().filter(|e| e.start < end && e.end > now).map(|e| (e.title.clone(), e.start, e.all_day)).collect();
-                let mut r = Reply::new(
-                    intent,
-                    if en { format!("Today: {} task(s) and {} event(s).", items.len(), evs.len()) } else { format!("Hôm nay bạn có {} việc và {} lịch hẹn.", items.len(), evs.len()) },
-                );
-                if !evs.is_empty() {
-                    r.cards.push(Card::Events { items: evs });
-                }
-                if !items.is_empty() {
-                    r.cards.push(Card::Tasks { items });
-                }
-                if r.cards.is_empty() {
-                    r.text = if en { "Nothing scheduled today — enjoy! 🌿".into() } else { "Hôm nay thảnh thơi, không có lịch gì 🌿".into() };
-                    r.speak = r.text.clone();
-                }
-                r
-            }
-            Intent::AddTask => {
-                let t = add_task(app2.clone(), app2.state::<Arc<AppState>>(), rest.clone(), offset)?;
-                let when = t.due.map(|d| chrono::DateTime::from_timestamp_millis(d + off).map(|x| x.format("%H:%M %d/%m").to_string()).unwrap_or_default());
-                let mut r = Reply::new(intent, match (&when, en) {
-                    (Some(w), true) => format!("Added “{}” — I'll remind you at {w}.", t.title),
-                    (Some(w), false) => format!("Đã thêm “{}” — Asi sẽ nhắc lúc {w}.", t.title),
-                    (None, true) => format!("Added “{}”.", t.title),
-                    (None, false) => format!("Đã thêm việc “{}”.", t.title),
-                });
-                r.cards.push(Card::Tasks { items: vec![TaskBrief { id: t.id, title: t.title, due: t.due }] });
-                r.act(if en { "Open tasks" } else { "Xem danh sách việc" }, "open_tab", "tasks").act(if en { "Undo" } else { "Hoàn tác" }, "undo_task", &t.id.to_string())
-            }
-            Intent::AddNote => {
-                if rest.trim().is_empty() {
-                    Reply::new(intent, if en { "What should I note down?" } else { "Bạn muốn Asi ghi lại điều gì?" }).act(if en { "Open notes" } else { "Mở Ghi chú" }, "open_tab", "notes")
-                } else {
-                    st.store.lock().unwrap().upsert_note(None, rest.clone());
-                    kick_sync(&app2);
-                    Reply::new(intent, if en { "Noted ✍️" } else { "Asi ghi lại rồi ✍️" }).act(if en { "Open notes" } else { "Mở Ghi chú" }, "open_tab", "notes")
-                }
-            }
-            Intent::Focus => {
-                let m: i64 = text.split(|c: char| !c.is_ascii_digit()).find_map(|x| x.parse().ok()).unwrap_or(25).clamp(5, 180);
-                st.health.lock().unwrap().focus_until = Some(Local::now().timestamp() + m * 60);
-                let mut r = Reply::new(intent, if en { format!("Focus mode for {m} minutes. I'll keep quiet 🤫") } else { format!("Bắt đầu tập trung {m} phút. Asi sẽ giữ im lặng 🤫") });
-                r.mood = "focus".into();
-                r
-            }
-            Intent::Break => Reply::new(intent, if en { "Let's rest your eyes for 20 seconds 👀" } else { "Cùng nghỉ mắt 20 giây nhé 👀" }).act(if en { "Start" } else { "Bắt đầu nghỉ" }, "rest", ""),
-            Intent::Disk => match asi_clean::disk::status(&home_dir()) {
-                Some(d) => Reply::new(intent, if en { format!("You have {} free of {} ({:.0}%).", fmt_gb(d.free_bytes), fmt_gb(d.total_bytes), d.free_percent) } else { format!("Ổ đĩa còn trống {} / {} ({:.0}%).", fmt_gb(d.free_bytes), fmt_gb(d.total_bytes), d.free_percent) }).act(if en { "Clean junk" } else { "Dọn rác" }, "ask", "dọn rác"),
-                None => Reply::new(intent, "Asi chưa đọc được ổ đĩa"),
-            },
-            Intent::Battery => match assistant::sysinfo().battery_pct {
-                Some(b) => Reply::new(intent, if en { format!("Battery at {b}%.") } else { format!("Pin còn {b}%.") }),
-                None => Reply::new(intent, if en { "This computer has no battery info." } else { "Máy này không có thông tin pin." }),
-            },
-            Intent::LastClip => {
-                let c = st.clips.lock().unwrap().items.first().cloned();
-                match c {
-                    Some(c) => {
-                        let preview = if c.text.is_empty() { format!("{} file / ảnh", c.files.len().max(1)) } else { c.text.chars().take(160).collect() };
-                        let mut r = Reply::new(intent, if en { "Your latest copy:" } else { "Mục bạn vừa chép:" });
-                        r.speak = if en { "Here's what you copied last.".into() } else { "Đây là mục bạn vừa chép.".into() };
-                        r.cards.push(Card::Text { text: preview });
-                        r.act(if en { "Copy again" } else { "Chép lại" }, "clip_copy", &c.id.to_string()).act("Clipboard", "open_tab", "clips")
-                    }
-                    None => Reply::new(intent, if en { "Clipboard history is empty." } else { "Chưa có gì trong lịch sử clipboard." }),
-                }
-            }
-            Intent::Journal => Reply::new(intent, if en { "Let's write today's journal 📔" } else { "Cùng viết nhật ký hôm nay nhé 📔" }).act(if en { "Open journal" } else { "Mở Nhật ký" }, "open_tab", "journal"),
-            Intent::Threads => Reply::new(intent, if en { "Opening Threads…" } else { "Mở Threads cho bạn nè…" }).act("Threads", "open_tab", "threads"),
-            Intent::Time => {
-                let n = Local::now();
-                let wd = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"][n.weekday().num_days_from_sunday() as usize];
-                Reply::new(intent, if en { format!("It's {}.", n.format("%H:%M, %A %d %B")) } else { format!("Bây giờ là {}, {} ngày {}.", n.format("%H:%M"), wd, n.format("%d/%m/%Y")) })
-            }
-            Intent::Help => assistant::help(en),
-            Intent::Greet => {
-                let s = build_status(st);
-                let extra = if s.lateness.overdue > 0 {
-                    if en { format!(" You have {} overdue task(s).", s.lateness.overdue) } else { format!(" Bạn đang có {} việc trễ đó nha.", s.lateness.overdue) }
-                } else {
-                    String::new()
-                };
-                Reply::new(intent, format!("{} 👋 {}{}", greet_word(en), if en { "How can I help?" } else { "Asi giúp gì được cho bạn?" }, extra))
-            }
-            Intent::Thanks => Reply::new(intent, if en { "Anytime 💖" } else { "Không có gì đâu 💖" }),
-            Intent::Vocab => {
-                let words = st.vocab.lock().unwrap().batch(st.store.lock().unwrap().settings.vocab_count.clamp(1, 5) as usize, false, now);
-                Reply::new(intent, if en { format!("Today's words: {}.", words.join(", ")) } else { format!("Từ mới hôm nay: {}. Mở tab Từ mới để nghe & đọc thử nhé!", words.join(", ")) })
-                    .act(if en { "Practice" } else { "Luyện phát âm" }, "open_tab", "words")
-            }
-            Intent::Unknown => {
-                let ai_on = st.store.lock().unwrap().settings.apple_ai_enabled;
-                if ai_on && !text.trim().is_empty() {
-                    let ctx = build_ai_context(st);
-                    if let Ok(ai_ans) = assistant::ask_apple_ai(&st.data_dir, &ctx, &text, en) {
-                        let mut r = Reply::new(Intent::Unknown, ai_ans.clone());
-                        // Chỉ đọc to câu đầu tiên nếu bật đọc giọng nói để không đọc quá dài
-                        let first_sent = ai_ans
-                            .split(['.', '!', '?', '\n'])
-                            .find(|s| !s.trim().is_empty())
-                            .unwrap_or(&ai_ans)
-                            .trim()
-                            .replace('*', "");
-                        r.speak = first_sent;
-                        r.mood = "happy".into();
-                        r = r
-                            .act(if en { "📋 Copy reply" } else { "📋 Chép câu trả lời" }, "copy_text", &ai_ans)
-                            .act(if en { "✎ Save to Notes" } else { "✎ Lưu vào Ghi chú" }, "add_note", &ai_ans);
-                        if rest.chars().count() <= 90 {
-                            r = r.act(if en { "➕ Add as task" } else { "➕ Thêm thành việc" }, "add_task", &rest);
-                        }
-                        return Ok(r);
-                    }
-                }
-                let mut r = assistant::help(en);
-                r.intent = Intent::Unknown;
-                r.mood = "idle".into();
-                r.text = if en { "Hmm, I didn't get that. Try one of these:".into() } else { "Hmm, Asi chưa hiểu ý bạn. Thử một trong mấy câu này nhé:".into() };
-                r.speak = if en { "Sorry, I didn't get that.".into() } else { "Xin lỗi, Asi chưa hiểu ý bạn.".into() };
-                if !rest.trim().is_empty() {
-                    // Nói một câu Asi không hiểu → cho bấm để biến ngay thành việc / ghi chú
-                    r.text = if en { "Hmm, I didn't get that. Save it as a task or a note?".into() } else { "Hmm, Asi chưa hiểu lắm. Lưu câu này thành việc hay ghi chú?".into() };
-                    r.actions.insert(0, assistant::Action { label: if en { "➕ Add as task".into() } else { "➕ Thêm thành việc".into() }, cmd: "add_task".into(), arg: rest.clone() });
-                    r.actions.insert(1, assistant::Action { label: if en { "✎ Save note".into() } else { "✎ Lưu ghi chú".into() }, cmd: "add_note".into(), arg: rest.clone() });
-                }
-                r
-            }
+        let text = text.trim().to_string();
+        let (lang, ai_on) = {
+            let s = st.store.lock().unwrap();
+            (s.settings.voice_lang.clone(), s.settings.apple_ai_enabled)
         };
+        let en = looks_english(&text, &lang);
+        let explicit = assistant::explicit_command(&text);
+        let (intent, rest) = assistant::classify(&text);
+        let words = text.split_whitespace().count();
+        // "thứ 6 nộp báo cáo" (có giờ hẹn, không có từ lệnh) vẫn để mô hình xem có phải câu hỏi không
+        let quick = explicit.is_some() || (!matches!(intent, Intent::Unknown | Intent::AddTask | Intent::Help) && words <= 5);
+        if ai_on && !quick {
+            match apple_ai::ask(&st.data_dir, &ai_instructions(st, en), &ai_prompt(st, &text)) {
+                Ok(turn) => {
+                    let r = reply_from_ai(&app2, st, turn, &text, en, offset)?;
+                    remember(st, &text, &r.text);
+                    return Ok(r);
+                }
+                Err(e) => eprintln!("Apple Intelligence: {e}"),
+            }
+        }
+        let r = rule_reply(&app2, st, intent, rest, &text, en, offset)?;
+        remember(st, &text, &r.text);
         Ok(r)
     })
     .await
@@ -420,4 +538,17 @@ pub(crate) async fn asi_action(app: AppHandle, st: S<'_>, cmd: String, arg: Stri
     .await?;
     push_status(&app_outer);
     Ok(r)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn speak_summary_short_and_clean() {
+        let t = "Đây là 3 bước:\n- Mở Cài đặt.\n- Chọn Pin.\n- Bật Chế độ nguồn điện thấp.";
+        assert_eq!(speak_summary(t), "Đây là 3 bước: Mở Cài đặt. Chọn Pin.");
+        let long = "Câu một rất dài. ".repeat(40);
+        assert!(speak_summary(&long).chars().count() <= 240);
+    }
 }
