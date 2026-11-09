@@ -4,104 +4,43 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Mini-Asi</title>
+  <link rel="stylesheet" href="base.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="island" class="mode-collapsed mood-idle" aria-label="Mini-Asi">
-    <!-- Thanh trên cùng: cánh trái (linh vật) · khoảng tai thỏ · cánh phải (thông tin) -->
+    <!-- Thanh trên cùng: cánh trái (linh vật) · khoảng tai thỏ · cánh phải (thông tin / nút) -->
     <div class="bar" id="bar">
       <div class="wing left">
         <div class="face" id="face">
-          <span class="eye l"><i></i></span><span class="eye r"><i></i></span>
+          <span class="eye l"></span><span class="eye r"></span>
           <span class="zzz">z</span>
-          <span class="vein">💢</span>
+          <span class="vein"></span>
           <span class="drop"></span>
         </div>
-        <span class="bar-title" id="barTitle"></span>
       </div>
-      <div class="notch-gap" id="notchGap"></div>
+      <div class="notch-gap"></div>
       <div class="wing right" id="rightWing"></div>
     </div>
 
-    <!-- Ló ra khi rê chuột -->
-    <section class="layer peek" id="peek"></section>
-
-    <!-- Báo động: nhắc việc / nghỉ mắt -->
-    <section class="layer alert" id="alert"></section>
-
-    <!-- Asi đang nghe / trả lời lệnh giọng nói -->
-    <section class="layer listenL" id="listenL"></section>
-    <section class="layer replyL" id="replyL"></section>
-
-    <!-- Nhận file khi kéo thả: nửa trái = AirDrop ngay · nửa phải = Khay File (Nén/PDF) -->
-    <section class="layer dropzone" id="dropLayer">
-      <div class="drop-split">
-        <div class="drop-box airdrop active" id="dropAirdrop" data-drop-zone="airdrop">
-          <div class="drop-ic">📡</div>
-          <b>Thả để AirDrop</b>
-          <span>Bắn nhanh sang iPhone · iPad · Mac</span>
-        </div>
-        <div class="drop-box tray" id="dropTray" data-drop-zone="files">
-          <div class="drop-ic">📦</div>
-          <b>Khay File & PDF</b>
-          <span>Nén ZIP · Giải nén · Nén/Gộp PDF</span>
-        </div>
-      </div>
+    <!-- Rê chuột: trạng thái + điều khiển nhanh -->
+    <section class="layer" id="peek"></section>
+    <!-- Nhắc việc / nghỉ mắt / lịch / nhật ký -->
+    <section class="layer" id="alert"></section>
+    <!-- Lệnh giọng nói: đang nghe / Asi trả lời -->
+    <section class="layer" id="listen"></section>
+    <section class="layer" id="reply"></section>
+    <!-- Kéo file vào: trái = AirDrop · phải = công cụ file -->
+    <section class="layer" id="drop">
+      <div class="drop-half" data-zone="airdrop"><span class="drop-ic" data-i="airdrop"></span><b>AirDrop</b><span>Thả để gửi ngay</span></div>
+      <div class="drop-half" data-zone="tools"><span class="drop-ic" data-i="zip"></span><b>Công cụ file</b><span>Nén · Giải nén · PDF</span></div>
     </section>
+    <!-- Tấm công cụ file sau khi thả -->
+    <section class="layer" id="sheet"></section>
 
-    <!-- Chia cửa sổ màn hình khi kéo cửa sổ ứng dụng vào tai thỏ -->
-    <section class="layer snapzone" id="snapLayer">
-      <div class="snap-head">
-        <span class="snap-title" id="snapTitle">🪟 Kéo thả cửa sổ vào ô để chia màn hình</span>
-        <span class="snap-sub" id="snapSub">Thả chuột vào bố cục bên dưới</span>
-      </div>
-      <div class="snap-grid" id="snapGrid">
-        <div class="snap-card" data-snap="left">
-          <span class="snap-pv pv-left"><i></i></span>
-          <b>Nửa Trái</b>
-          <span>50% trái</span>
-        </div>
-        <div class="snap-card" data-snap="right">
-          <span class="snap-pv pv-right"><i></i></span>
-          <b>Nửa Phải</b>
-          <span>50% phải</span>
-        </div>
-        <div class="snap-card" data-snap="split2">
-          <span class="snap-pv pv-split2"><i></i><b></b></span>
-          <b>Chia Đôi 2 App</b>
-          <span id="snapSplit2Sub">Trái & Phải</span>
-        </div>
-        <div class="snap-card" data-snap="max">
-          <span class="snap-pv pv-max"><i></i></span>
-          <b>Toàn Màn</b>
-          <span>Phóng tối đa</span>
-        </div>
-        <div class="snap-card" data-snap="top">
-          <span class="snap-pv pv-top"><i></i></span>
-          <b>Nửa Trên</b>
-          <span>50% trên</span>
-        </div>
-        <div class="snap-card" data-snap="bottom">
-          <span class="snap-pv pv-bottom"><i></i></span>
-          <b>Nửa Dưới</b>
-          <span>50% dưới</span>
-        </div>
-        <div class="snap-card" data-snap="center">
-          <span class="snap-pv pv-center"><i></i></span>
-          <b>Giữa Màn</b>
-          <span>Căn giữa 76%</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- Bảng điều khiển đầy đủ -->
-    <section class="layer panel" id="panel">
-      <div class="panel-nav-row" id="panelNavRow">
-        <nav class="tabs" id="tabs"></nav>
-        <button class="settings-gear-btn" id="openSettingsBtn" title="Cài đặt Mini-Asi">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
-        </button>
-      </div>
+    <!-- Bảng chính -->
+    <section class="layer" id="panel">
+      <nav class="tabs" id="tabs"></nav>
       <div class="view" id="view"></div>
     </section>
 
@@ -110,7 +49,9 @@
   </div>
   <script src="icons.js"></script>
   <script src="vnkey.js"></script>
+  <script src="common.js"></script>
   <script src="app.js"></script>
+  <script src="views.js"></script>
   <script src="extra.js"></script>
   <script src="vocab.js"></script>
 </body>

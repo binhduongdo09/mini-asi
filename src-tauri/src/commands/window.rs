@@ -311,95 +311,6 @@ pub(crate) fn needs_prompt(s: notch_native::perm::State) -> bool {
     s == notch_native::perm::State::NotAsked
 }
 
-/// Lưu 2 ứng dụng bên ngoài gần nhất (current_app, prev_app) để phục vụ tính năng kéo cửa sổ vào tai thỏ & chia đôi màn hình
-pub(crate) static LAST_EXT_APPS: std::sync::LazyLock<Mutex<((i32, String), (i32, String))>> =
-    std::sync::LazyLock::new(|| Mutex::new(((0, String::new()), (0, String::new()))));
-
-pub(crate) fn record_external_app(pid: i32, name: String) {
-    if pid <= 0 {
-        return;
-    }
-    if let Ok(mut g) = LAST_EXT_APPS.lock() {
-        if g.0 .0 != pid {
-            if g.0 .0 > 0 {
-                g.1 = g.0.clone();
-            }
-            g.0 = (pid, name);
-        }
-    }
-}
-
-pub(crate) fn current_and_prev_ext_apps() -> ((i32, String), (i32, String)) {
-    if let Some((pid, name)) = notch_native::frontmost_external_app() {
-        record_external_app(pid, name);
-    }
-    LAST_EXT_APPS.lock().map(|g| g.clone()).unwrap_or_default()
-}
-
-/// Chia / ghép cửa sổ ứng dụng trên màn hình (Nửa trái, Nửa phải, Chia đôi 2 app, Nửa trên, Nửa dưới, Toàn màn, Giữa màn, 1/3 - 2/3)
-#[tauri::command]
-pub(crate) async fn window_snap(app: AppHandle, action: String, pid: Option<i32>, prev_pid: Option<i32>) -> Result<String, String> {
-    let (cur_ext, prev_ext) = current_and_prev_ext_apps();
-    let target_pid = pid.filter(|&p| p > 0).unwrap_or(cur_ext.0);
-    let second_pid = prev_pid.filter(|&p| p > 0 && p != target_pid).unwrap_or(prev_ext.0);
-    if target_pid <= 0 {
-        return Err("Chưa tìm thấy cửa sổ ứng dụng nào đang mở để chia màn hình".into());
-    }
-    let (wx, wy, ww, wh) = on_main(&app, notch_native::work_area)
-        .flatten()
-        .unwrap_or((0.0, 33.0, 1440.0, 860.0));
-    let half_w = (ww / 2.0).floor();
-    let half_h = (wh / 2.0).floor();
-    let third_w = (ww / 3.0).floor();
-
-    let (rect1, rect2, msg) = match action.as_str() {
-        "left" => ((wx, wy, half_w, wh), None, "◧ Đã ghép cửa sổ sang Nửa Trái màn hình"),
-        "right" => ((wx + half_w, wy, ww - half_w, wh), None, "◨ Đã ghép cửa sổ sang Nửa Phải màn hình"),
-        "top" => ((wx, wy, ww, half_h), None, "⬒ Đã ghép cửa sổ lên Nửa Trên màn hình"),
-        "bottom" => ((wx, wy + half_h, ww, wh - half_h), None, "⬓ Đã ghép cửa sổ xuống Nửa Dưới màn hình"),
-        "max" => ((wx, wy, ww, wh), None, "▣ Đã phóng cửa sổ toàn vùng làm việc"),
-        "center" => {
-            let cw = (ww * 0.76).round();
-            let ch = (wh * 0.84).round();
-            (
-                (wx + ((ww - cw) / 2.0).round(), wy + ((wh - ch) / 2.0).round(), cw, ch),
-                None,
-                "◈ Đã căn cửa sổ ra chính giữa màn hình",
-            )
-        }
-        "left3" => ((wx, wy, third_w, wh), None, "◫ Đã ghép cửa sổ 1/3 Trái màn hình"),
-        "right23" => ((wx + third_w, wy, ww - third_w, wh), None, "◫ Đã ghép cửa sổ 2/3 Phải màn hình"),
-        "split2" => (
-            (wx, wy, half_w, wh),
-            if second_pid > 0 && second_pid != target_pid {
-                Some((second_pid, wx + half_w, wy, ww - half_w, wh))
-            } else {
-                None
-            },
-            "⊞ Đã chia đôi 2 cửa sổ Trái & Phải màn hình",
-        ),
-        _ => return Err("Kiểu chia cửa sổ không hợp lệ".into()),
-    };
-
-    let (x1, y1, w1, h1) = rect1;
-    notch_native::snap_app_window(target_pid, x1, y1, w1, h1)?;
-    if let Some((p2, x2, y2, w2, h2)) = rect2 {
-        let _ = notch_native::snap_app_window(p2, x2, y2, w2, h2);
-        notch_native::activate_pid(target_pid);
-    }
-
-    // Lặp lại sau 60ms để thắng vòng lặp kéo thả cửa sổ gốc của macOS vừa kết thúc khi nhả chuột
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(60));
-        if let Some((p2, x2, y2, w2, h2)) = rect2 {
-            let _ = notch_native::snap_app_window(p2, x2, y2, w2, h2);
-        }
-        let _ = notch_native::snap_app_window(target_pid, x1, y1, w1, h1);
-    });
-
-    Ok(msg.into())
-}
-
 /// Mở hoặc đưa cửa sổ Cài đặt riêng biệt ("settings") lên phía trước.
 /// Cửa sổ này là một cửa sổ macOS tiêu chuẩn (không nằm ở tầng tai thỏ 27) nên rất rộng rãi,
 /// không làm giật tai thỏ và không bao giờ che hộp thoại xin quyền của hệ thống.
@@ -440,8 +351,8 @@ pub(crate) fn open_settings_window(app: AppHandle, st: S, section: Option<String
     let y = (geo.screen_y + (geo.screen_height - h) / 2.0).max(geo.screen_y + 44.0);
 
     let url = match &section {
-        Some(sec) if !sec.is_empty() => format!("index.html?window=settings&sec={sec}"),
-        _ => "index.html?window=settings".to_string(),
+        Some(sec) if !sec.is_empty() => format!("settings.html?sec={sec}"),
+        _ => "settings.html".to_string(),
     };
 
     tauri::WebviewWindowBuilder::new(&app, "settings", tauri::WebviewUrl::App(url.into()))

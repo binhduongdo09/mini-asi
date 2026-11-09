@@ -1,38 +1,35 @@
 # Mini-Asi — trợ lý sống quanh tai thỏ
 
-Mini-Asi là một hòn đảo nhỏ màu đen ôm lấy tai thỏ của MacBook. Trên máy không có tai thỏ, app tự tạo một tai thỏ ảo ở mép trên màn hình.
-Cài đặt › **Kiểu hiển thị** cho chọn 3 kiểu: **Tai thỏ** (ôm sát tai thỏ), **Viên thuốc** (nổi giữa, ngay dưới thanh menu) hoặc **Bong bóng** (nút tròn nổi trên mọi cửa sổ, kéo đi đâu cũng được, Asi nhớ chỗ).
-Bên trong có một linh vật hai mắt biết chớp, liếc, cười, lo lắng và ngáp ngủ. Linh vật giúp bạn:
+Mini-Asi là một hòn đảo nhỏ màu đen ôm lấy tai thỏ MacBook, kiểu Dynamic Island. Máy không có tai thỏ: app tạo tai thỏ ảo,
+hoặc chọn **Viên thuốc** (nổi dưới thanh menu) / **Bong bóng** (nút tròn kéo đi đâu cũng được) trong Cài đặt › Tai thỏ.
+Bên trong là linh vật hai mắt biết chớp, cười, lo lắng, ngáp ngủ — và **giận đỏ mắt khi bạn có việc trễ**.
 
-| | Tính năng |
+**Ba trạng thái:** thu gọn (chỉ hiện điều quan trọng: số việc trễ, lịch sắp tới, đồng hồ tập trung) →
+**rê chuột** (một dòng trạng thái, nhạc đang phát, 4 nút nhanh: Micro · Camera · AirDrop · Tập trung) →
+**bấm** để mở bảng.
+
+| Luôn có | |
 |---|---|
-| 🎙 **Ra lệnh cho Asi** | Cánh phải tai thỏ luôn có nút mic: bấm và nói *"máy mình thế nào"*, *"dọn rác giúp mình"*, *"có việc nào trễ không"*, *"hôm nay có gì"*, *"nhắc tôi 3h chiều gọi khách"*, *"ghi chú: …"*, *"tập trung 25 phút"*, *"pin còn bao nhiêu"*… Asi trả lời ngay trên tai thỏ (kèm nút bấm như Dọn ngay, Xong, +1h) và **đọc to** bằng giọng Linh (tiếng Việt) / Samantha (tiếng Anh). Chạy hoàn toàn trên máy, không gửi dữ liệu ra ngoài. |
-| 🗣 **Giọng đọc VieNeu** | Cài đặt › Giọng đọc của Asi › **Tải giọng VieNeu**: Asi đọc bằng giọng tiếng Việt tự nhiên của [VieNeu-TTS](https://github.com/pnnbao97/VieNeu-TTS) — chọn **Trúc Ly** (nữ, giọng Bắc, trong trẻo) hoặc **Hải Đăng** (nam, giọng Bắc, ấm). Bản **Gọn** chỉ ≈ 210 MB mô hình (mặc định trên chip Apple), bản **Chất lượng cao** ≈ 520 MB; đổi qua lại được, bản cũ tự xoá. Chạy ngay trên máy, không gửi dữ liệu đi; gỡ là xoá sạch. Chưa tải thì dùng giọng Linh/Samantha của máy. |
-| 🎧 **Giọng đọc NghiTTS** | Bộ đọc nhẹ nhất (≈ 60 MB mỗi giọng, đọc gần như tức thì): **Mai Phương** (nữ) và **Minh Quang** (nam). Mini-Asi chỉ dùng giọng thường — không dùng các giọng mang tên người nổi tiếng hay giọng thương mại có trong NghiTTS. |
-| 📚 **Học từ mới tiếng Anh** | Mỗi lần mở tai thỏ, trang chủ hiện 2–3 từ mới kèm phiên âm. Tab **Từ mới**: nghĩa tiếng Việt, phiên âm US/UK, định nghĩa & ví dụ (tra online, có cache), nghe mẫu giọng Mỹ/Anh, **🎙 Đọc thử** để Asi chấm phát âm, nghe lại giọng mình. Đọc chuẩn 2 lần là tự đánh dấu đã thuộc. Nói "học từ mới" với Asi cũng được. |
-| 🌙 **Chế độ chờ tuỳ chọn** | Cài đặt › Chế độ chờ: chọn tai thỏ thu gọn hiện gì — đồng hồ tập trung, số việc trễ, lịch sắp tới, việc sắp đến hạn, giờ hiện tại, số việc còn lại, số ghi chú, số mục clipboard, dung lượng trống, nút mic. Chọn độ rộng hai bên (Gọn / Vừa / Rộng); Asi chỉ hiện những mục quan trọng nhất vừa chỗ, không bao giờ lấn vào tai thỏ. |
-| 💬 **Trang chủ = trò chuyện với Asi** | Mở tai thỏ là vào thẳng khung chat: gõ hoặc nói, bấm gợi ý nhanh, xem thẻ tình trạng máy (ổ đĩa, CPU, RAM, pin), danh sách việc trễ, lịch hôm nay. |
-| ⊞ **Tất cả tính năng** | Trang tổng hợp mọi tính năng (biểu tượng ⊞ trên thanh). Cài đặt › **Quản lý tính năng**: chọn tính năng nào hiện trên thanh, còn lại thu gọn vào trang này. |
-| ⌨️ **Gõ tiếng Việt** | Mini-Asi có bộ gõ Telex/VNI riêng. Khi bạn mở tai thỏ mà máy đang dùng bộ gõ tiếng Việt — của Apple hay bên thứ ba (VietTelex, OpenKey, EVKey, GoTiengViet, Unikey…) — Asi tạm chuyển bàn phím sang ABC và tự gõ dấu, đóng tai thỏ thì trả lại bộ gõ cũ. Cài đặt › **Bộ gõ đang dùng trên máy** hiện tên bộ gõ Asi thấy; nếu Asi không nhận ra, chọn **Luôn Telex / Luôn VNI**. Máy cần bật sẵn bàn phím **ABC** (hoặc U.S.) để Asi chuyển sang được. |
-| ☁️ **Sao lưu & đồng bộ** | Một nút sao lưu toàn bộ dữ liệu lên **Google Drive** (qua app Google Drive cho máy tính, không cần đăng nhập trong Mini-Asi), tự sao lưu mỗi ngày, khôi phục, và **đồng bộ giữa nhiều máy** (gộp việc, ghi chú, nhật ký, clipboard). Dùng được cả iCloud Drive, OneDrive, Dropbox. |
-| 🔐 **Cấp quyền 1 lần** | Cài đặt › “Cấp tất cả quyền”: macOS lần lượt hỏi từng quyền; danh sách hiện rõ quyền nào đã cấp. Quyền **bắt buộc** (Thông báo, Micro, Nhận dạng giọng nói) mới được tính khi báo thiếu; Lịch, Lời nhắc, Trợ năng, Full Disk Access là **tuỳ chọn**. |
-| ✅ **Việc** | Gõ hoặc **nói** câu tự nhiên bằng **tiếng Việt** (có dấu hay không dấu) hoặc **tiếng Anh**, ví dụ *"mai 9h gọi khách"*, *"thứ 6 tuần sau chốt hợp đồng"*, *"gọi chị Mai lúc 3h chiều"*, *"tomorrow 3pm call John"*, *"in 30 minutes drink water"*, *"next friday submit report"*. Đến hạn thì tai thỏ rung và hiện thông báo; bạn chọn Xong, hoãn 10 phút / 1 giờ / sang mai. |
-| 😠 **Asi tức giận** | Có việc trễ là mắt Asi chuyển đỏ, nhíu mày. Trễ càng nhiều càng giận: hiện 💢, phập phồng, thỉnh thoảng dậm chân. Xong hết việc trễ thì Asi vui trở lại kèm pháo giấy. |
-| 🔴 **Màu trễ việc** | Mặc định màu đen. Càng nhiều việc trễ, hoặc trễ càng lâu, tai thỏ càng ửng đỏ. Ở mức nặng nhất nó "thở" chậm. Làm xong việc thì nhạt dần về đen kèm pháo giấy. |
-| ✎ **Ghi chú nhanh** | Phím tắt **⌘⇧Space** ở bất kỳ đâu. Gõ hoặc **đọc cho Asi ghi** (tiếng Việt / tiếng Anh). Tự lưu, ghim, tìm kiếm, sao chép. |
-| 📋 **Clipboard** | Tự nhớ mọi thứ bạn chép: chữ, ảnh, **file từ Finder**. Bấm để chép lại, bấm đúp để dán luôn, ghim để giữ mãi, gộp nhiều đoạn thành một, biến đoạn chép thành ghi chú hoặc việc. Phím tắt **⌃⇧V**. Bỏ qua mật khẩu từ 1Password, Bitwarden… |
-| 📔 **Nhật ký** | Mỗi tối (mặc định 21h) Asi hỏi 3 câu nhỏ, thiên về cảm xúc: hôm nay bạn thấy thế nào, điều gì làm bạn mỉm cười, có gì còn trăn trở. Mỗi câu chỉ cần 2–3 câu trả lời, gõ hoặc nói. Xong Asi nói *“Mình sẽ ghi lại nhật ký ngày hôm nay của bạn nhé”* — chúc ngủ ngon nếu đã khuya (sau 21h), còn sớm thì chúc buổi tối nhẹ nhàng. Asi tự ghi kèm việc đã xong, cuộc họp, thời gian dùng máy. Đếm chuỗi ngày, xuất ra Markdown. |
-| 📱 **Lướt Threads** | Không cần Meta app: bấm **Mở Threads**, đăng nhập bằng tài khoản Instagram/Threads như trên điện thoại. Threads (bản mobile) mở trong **cửa sổ riêng** như cửa sổ thường — kéo, đổi cỡ, thu nhỏ, đóng bằng nút đỏ hoặc nút **Đóng cửa sổ Threads** / thanh menu › Đóng Threads; không đè lên app khác. Đăng nhập 1 lần, lần sau tự nhớ. (Nhúng Threads thẳng vào khung đen đang thử nghiệm: Cài đặt › Quản lý tính năng.) |
-| @ **Threads** | Kết nối tài khoản Threads (Threads API chính thức của Meta): xem bài gần đây kèm lượt xem / thích / trả lời, đọc trả lời, xem ai nhắc đến bạn, **trả lời và đăng bài** ngay trên tai thỏ (luôn hỏi xác nhận trước khi đăng). Báo khi có trả lời mới. Token lưu trong Keychain. |
-| 🍎 **Đồng bộ Apple** | Việc ⇄ **Lời nhắc**, Ghi chú ⇄ app **Ghi chú** (hai chiều, mỗi 5 phút và ngay sau khi sửa). **Lịch**: hiện lịch họp hôm nay, báo trước 10 phút, thêm việc vào Lịch. |
-| 📦 **File** | Kéo file thả vào tai thỏ để nén ZIP, giải nén (ZIP/TAR/TGZ; RAR/7z nếu máy có `unar`), nén PDF (3 mức chất lượng) hoặc gộp PDF. |
-| 🧹 **Dọn máy** | Quét cache, log, Xcode, npm/brew, cache trình duyệt (có Cốc Cốc). Bản Pro dọn thêm file .dmg cũ, `node_modules` của dự án bỏ lâu, file lớn, bản sao lưu iPhone. Cache bị xoá hẳn, còn file của bạn thì vào Thùng rác. |
-| 💙 **Sức khoẻ** | Nhắc nghỉ mắt sau 50 phút dùng máy liên tục (có đếm ngược 20 giây), nhắc uống nước, hẹn giờ tập trung 25/50/90 phút. Sau 23h linh vật ngáp ngủ. |
-| 🎨 **Hệ màu** | Đen là bình thường, đỏ là trễ việc, viền cam là ổ đĩa sắp đầy, viền xanh là đến giờ nghỉ. Khi hẹn giờ tập trung, tai thỏ chỉ hiện đồng hồ đếm ngược tím và giữ yên hoàn toàn (không đỏ, không nhấp nháy). |
+| ✦ **Asi** | Trang đầu: lời chào, 3 việc/lịch gần nhất, gợi ý câu hỏi. Gõ hoặc nói: *"hôm nay có gì"*, *"máy mình thế nào"*, *"nhắc tôi 3h chiều gọi khách"*, *"dọn rác giúp mình"*… Có Apple Intelligence (macOS 26) thì hỏi đáp tự do ngay trên máy. Nút mic ở tai thỏ để ra lệnh không cần mở bảng. |
+| ✅ **Việc** | Câu tự nhiên Việt/Anh, có dấu hay không: *"mai 9h gọi khách"*, *"thứ 6 tuần sau chốt hợp đồng"*, *"tomorrow 3pm call John"*. Nhóm Trễ hạn / Hôm nay / Sắp tới; lịch hôm nay (Lịch Apple). Đến giờ: Xong · 10 phút · 1 giờ · Mai. |
+| ✎ **Ghi chú** | Tự lưu, ghim, tìm, đọc cho Asi ghi. ⌘⇧Space mở nhanh. |
+| 📋 **Clipboard** | Nhớ chữ, ảnh, file đã chép. Bấm = chép lại, bấm đúp = dán luôn, ghim để giữ mãi. ⌃⇧V. |
+| 📦 **Kéo thả file** | Thả vào **nửa trái** tai thỏ = AirDrop ngay; **nửa phải** = Nén ZIP, giải nén, nén/gộp PDF, chép file. |
 
-Toàn bộ dữ liệu chỉ lưu trên máy, không gửi lên mạng.
+| Mô-đun (bật/tắt trong Cài đặt › Tính năng) | |
+|---|---|
+| 🧹 **Dọn máy** *(mặc định bật)* | Cache, log, Xcode, npm/brew, trình duyệt. Pro: file cài đặt cũ, `node_modules` bỏ lâu, sao lưu iPhone. Cache xoá hẳn, file của bạn vào Thùng rác. |
+| ◎ **Tập trung** *(mặc định bật)* | Nút 25 phút trên tai thỏ; Asi tạm im lặng, chỉ hiện đồng hồ tím. |
+| @ **Threads** *(mặc định bật)* | Mở Threads trong cửa sổ nhỏ riêng; nâng cao: thống kê, trả lời, đăng bài (luôn hỏi xác nhận). |
+| 📔 **Nhật ký** | Mỗi tối Asi hỏi 3 câu ngắn về ngày của bạn. |
+| 📚 **Từ mới** | 2–3 từ tiếng Anh mỗi lần mở, phiên âm, nghe mẫu, chấm phát âm. |
 
----
+**Nhắc nhở** (Cài đặt › Nhắc nhở): nghỉ mắt, uống nước, giờ đi ngủ, Không làm phiền.
+**Đồng bộ**: Việc ⇄ Lời nhắc, Ghi chú ⇄ Ghi chú, Lịch; sao lưu Google Drive / iCloud, đồng bộ nhiều máy.
+**Giọng đọc**: giọng có sẵn của máy (offline) hoặc gói giọng tải thêm trong Cài đặt › Asi & giọng nói.
+
+Việc, ghi chú, clipboard, nhật ký chỉ lưu trên máy bạn. Những thứ cần mạng: tra từ điển (Từ mới), Threads, kiểm tra cập nhật,
+và một số giọng đọc trực tuyến.
 
 ## Cài lên Mac
 
@@ -75,7 +72,7 @@ Khi macOS hiện hộp thoại xin quyền, Mini-Asi tự thu gọn và hạ xu�
 ## Sao lưu lên Google Drive
 
 1. Cài **Google Drive cho máy tính** (google.com/drive/download) và đăng nhập — thư mục “My Drive” sẽ có trong Finder.
-2. Mini-Asi tự tìm thấy thư mục đó. Vào **Cài đặt › Sao lưu & đồng bộ nhiều máy** → **Sao lưu ngay**.
+2. Mini-Asi tự tìm thấy thư mục đó. Vào **Cài đặt › Đồng bộ & sao lưu** → **Sao lưu ngay**.
 3. Dữ liệu nằm ở `My Drive/Mini-Asi/` (bản theo ngày trong `backups/`, trạng thái từng máy trong `devices/`).
 4. Máy thứ hai: cài Mini-Asi + Google Drive cùng tài khoản, bật **Đồng bộ giữa các máy** → dữ liệu hai máy tự gộp mỗi 15 phút.
 5. Khôi phục: chọn một bản trong danh sách → bấm **Khôi phục** 2 lần. Bản đang dùng được cất riêng trước khi ghi đè.
@@ -135,42 +132,27 @@ MASI_SECRET_KEY=<khoá bí mật> cargo run -p license-tool -- sign khach@email.
 
 ## Dành cho lập trình viên
 
-Tài liệu kỹ thuật đầy đủ: **[AGENTS.md](AGENTS.md)** (hướng dẫn cho người/AI tiếp tục dự án) và **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** (kiến trúc, luồng dữ liệu, danh sách lệnh).
+Tài liệu kỹ thuật: **[AGENTS.md](AGENTS.md)** (đọc trước khi sửa) và **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
 ```
 mini-asi/
-├─ ui/                      Giao diện HTML/CSS/JS thuần (không cần build)
-│  ├─ app.js                Trạng thái tai thỏ, linh vật, chế độ chờ, các tab chính, Cài đặt
-│  ├─ extra.js              Clipboard · Nhật ký · Threads
-│  ├─ vocab.js              Học từ mới tiếng Anh
+├─ ui/                      HTML/CSS/JS thuần (không cần build)
+│  ├─ index.html · app.js   Cửa sổ tai thỏ: hình học, linh vật, peek, báo động, giọng nói, kéo thả file, thanh tab
+│  ├─ views.js              Tab Asi · Việc · Ghi chú · Dọn máy
+│  ├─ extra.js · vocab.js   Tab Clipboard · Nhật ký · Threads · Từ mới
+│  ├─ settings.html/.js     Cửa sổ Cài đặt riêng
+│  ├─ common.js             Cầu nối Tauri, định dạng ngày giờ/dung lượng (dùng chung 2 cửa sổ)
+│  ├─ base.css · style.css · settings.css
 │  ├─ vnkey.js              Bộ gõ Telex/VNI riêng (+ vnkey.test.js)
 │  └─ dev-mock.js           Giả lập backend để xem UI trong trình duyệt
-├─ src-tauri/src/
-│  ├─ lib.rs                run(): khởi động, phím tắt, khay, đăng ký lệnh
-│  ├─ prelude.rs            import dùng chung cho mọi module lệnh
-│  ├─ commands/             Lệnh Tauri theo tính năng (window, tasks, notes, files, clean, health, settings,
-│  │                        clipboard, voice_input, apple_sync, journal, threads, permissions, backup,
-│  │                        assistant, speech, vocab, status, state)
-│  └─ *.rs                  Logic thuần có test: nlp, store, sync, apple, clipboard, voice, journal, threads,
-│                           backup, files, health, assistant, tts, vocab, license
+├─ src-tauri/src/           lib.rs · prelude.rs · commands/* (lệnh mỏng) · *.rs (logic thuần có test)
 ├─ crates/                  asi-clean (dọn máy) · notch-native (API macOS) · license-tool (khoá Pro)
-├─ scripts/                 build-mac.sh · dev.sh · preview-ui.sh
-└─ .github/workflows/       Đóng gói 3 hệ điều hành
+└─ scripts/                 build-mac.sh · dev.sh · preview-ui.sh
 ```
 
 ```bash
-cargo test --workspace     # ~60 bài kiểm thử Rust
-node ui/vnkey.test.js      # 59 ca kiểm thử bộ gõ
-bash scripts/dev.sh        # chạy thử app, tự nạp lại khi sửa UI
-bash scripts/preview-ui.sh # chỉ xem giao diện trong trình duyệt (?late=3, ?notch=0, ?disp=bubble…)
+cargo test --workspace     # kiểm thử Rust
+node ui/vnkey.test.js      # bộ gõ
+bash scripts/dev.sh        # chạy app thật
+bash scripts/preview-ui.sh # xem UI trong trình duyệt: ?open=peek|home|tasks|… ?late=3 ?disp=bubble ?mods=journal,words
 ```
-
-## Lộ trình tiếp theo
-
-- [ ] Ký số và notarize Apple (cần Apple Developer, 99 USD/năm) để bỏ bước "chuột phải → Open".
-- [ ] Tự động cập nhật (Tauri updater).
-- [ ] Đồng bộ Google Calendar / Google Tasks; nhận dạng giọng nói trên Windows/Linux (Whisper chạy trên máy).
-- [ ] Ẩn khi xem video toàn màn hình; chọn màn hình khi cắm màn hình rời.
-- [ ] Gỡ app kèm file sót lại; tìm file trùng (Pro).
-- [ ] Hoàn thiện cho Windows và Linux: vị trí viên thuốc, dung lượng ổ đĩa trên Windows.
-- [ ] Trợ lý AI: tóm tắt clipboard, hỏi nhanh.

@@ -9,9 +9,9 @@ Mini-Asi là trợ lý desktop sống quanh **tai thỏ** MacBook (máy không t
 Chủ dự án: Đỗ Bình Dương (người Việt). **Giao diện, chú thích code và trả lời người dùng đều bằng tiếng Việt.**
 Ưu tiên macOS, sau đó Linux & Windows. Có bản Free và Pro (khoá ký ed25519, kiểm tra offline).
 
-Tính năng chính: chat & lệnh giọng nói với Asi, Việc (hiểu câu tự nhiên Việt/Anh), Ghi chú, Clipboard, Nhật ký,
-Học từ mới tiếng Anh, Threads, dọn máy, nén/giải nén/PDF, sức khoẻ (nghỉ mắt, tập trung), đồng bộ Apple
-(Lời nhắc, Ghi chú, Lịch), sao lưu Google Drive, giọng đọc tải thêm (VieNeu-TTS, NghiTTS).
+Luôn có: Asi (chat & lệnh giọng nói), Việc (hiểu câu tự nhiên Việt/Anh), Ghi chú, Clipboard, kéo thả file (AirDrop / nén / PDF).
+Mô-đun bật/tắt (`settings.modules`): Dọn máy, Tập trung, Threads (mặc định bật) · Nhật ký, Từ mới (người dùng tự bật).
+Nền: nhắc nghỉ mắt/uống nước, đồng bộ Apple (Lời nhắc, Ghi chú, Lịch), sao lưu đám mây, giọng đọc tải thêm, tự cập nhật.
 
 ## Công nghệ
 
@@ -25,7 +25,7 @@ Học từ mới tiếng Anh, Threads, dọn máy, nén/giải nén/PDF, sức k
 ```bash
 cargo test --workspace            # kiểm thử Rust (mọi logic thuần đều có test)
 node ui/vnkey.test.js             # bộ gõ Telex/VNI
-bash scripts/preview-ui.sh        # xem UI trong trình duyệt với dev-mock.js (?late=3 ?notch=0 ?disp=bubble ?tts=ready ...)
+bash scripts/preview-ui.sh        # xem UI trong trình duyệt với dev-mock.js — xem "Xem thử UI" bên dưới
 bash scripts/dev.sh               # chạy app thật (cần Rust + Node)
 bash scripts/build-mac.sh         # ra file .dmg (Mac); "Tạo file cài đặt cho Mac.command" = bản nhấp đúp
 npx tauri build --bundles deb     # Linux
@@ -45,9 +45,17 @@ Kiểm tra biên dịch cho macOS từ Linux (không cần Mac): `RUSTC_BOOTSTRA
   vào `tauri::generate_handler![...]` trong `src-tauri/src/lib.rs` → thêm bản giả trong `ui/dev-mock.js`.
 - Thêm cài đặt mới: trường trong `store::Settings` (struct có `#[serde(default)]`, nhớ đặt giá trị mặc định trong `impl Default`)
   + giá trị trong `dev-mock.js`. UI đọc qua `get_settings`, lưu bằng `save_settings` (gửi cả object).
-- UI: tiện ích chung xuất qua `window.ASI` (cuối `ui/app.js`); file phụ (`extra.js`, `vocab.js`) đăng ký view bằng `A.views.<tab> = fn`.
-  Tab mới: thêm vào mảng `TABS` trong `app.js`.
-- Không vẽ lại cả khối khi chỉ đổi con số (người dùng ghét nhấp nháy) — xem `updateBar()` cập nhật tại chỗ.
+- UI (không framework, không build): `common.js` (cầu nối + định dạng, dùng chung) → `app.js` (vỏ hòn đảo, xuất `window.ASI`)
+  → `views.js` / `extra.js` / `vocab.js` đăng ký nội dung tab bằng `A.views.<tab> = fn`. Tab mới: thêm vào mảng `TABS` trong app.js
+  (cột thứ 4 = id mô-đun nếu bật/tắt được) + công tắc trong `secFeatures()` của settings.js.
+- Cài đặt là cửa sổ riêng `settings.html` + `settings.js`. **Lưu cài đặt bằng `patch_settings` với đúng các khoá vừa đổi**
+  (không gửi cả object bằng `save_settings` — hai cửa sổ sẽ ghi đè nhau bằng bản cũ). Backend phát `settings-changed` cho mọi cửa sổ.
+- Sự kiện nội bộ UI: `asi-ready`, `asi-status`, `asi-tasks`, `asi-chat` (document) — view tự vẽ lại phần của mình khi cần.
+- Không vẽ lại cả khối khi chỉ đổi con số (người dùng ghét nhấp nháy) — xem `updateBar()` / `renderPeek()` so sánh rồi mới đổi.
+- **Hệ thiết kế (base.css)**: nền đen `#000`, chữ trắng, chữ phụ `--text-2`, mặt nổi `--surface`/`--surface-2`; màu chỉ để báo
+  trạng thái (đỏ = trễ, cam = cảnh báo, xanh lá = xong, tím = tập trung). Nút chính `.btn.primary` (trắng chữ đen), nút phụ `.btn`,
+  nút chữ `.link`, nút biểu tượng `.ib`, ô nhập `.field`, hàng danh sách `.row` (nút phụ `.acts` chỉ hiện khi rê chuột).
+  Chữ trên nút ≤ 2 từ; không lặp thông tin đã có ở chỗ khác; không thêm emoji vào nút.
 - Cửa sổ chính luôn ở tầng cao; khi macOS hiện hộp thoại xin quyền phải gọi `window_low(app, true)` rồi trả lại.
 
 ## Ràng buộc quan trọng (đừng phá)
@@ -62,6 +70,12 @@ Kiểm tra biên dịch cho macOS từ Linux (không cần Mac): `RUSTC_BOOTSTRA
 - Đồng bộ Lời nhắc: chỉ xoá việc ở Mini-Asi khi chắc chắn bên Apple đã xoá (đã từng thấy ở lần kéo trước) — xem `sync::plan` và test.
 - Dữ liệu người dùng chỉ lưu trên máy (thư mục dữ liệu Tauri: `~/Library/Application Support/com.miniasi.app/` trên Mac).
 
+## Xem thử UI (trình duyệt, dữ liệu giả)
+
+`ui/index.html?open=peek|home|tasks|notes|clips|journal|words|threads|clean|listen|reply|sheet|drop|alert-reminder|alert-break|alert-journal`
+· `late=0|3` · `notch=0` · `disp=pill|bubble` · `mods=journal,words,clean,focus,threads` · `media=0` · `threads=1` · `update=1` · `journal=1`
+· Cửa sổ Cài đặt: `ui/settings.html?sec=general|look|features|reminders|assistant|ime|clips|sync|perms|pro`.
+
 ## Những gì chưa kiểm chứng trên Mac thật (ưu tiên test khi có máy)
 
 - Giọng VieNeu / NghiTTS (cài qua `uv`, tải mô hình) — mới test bằng mô hình giả.
@@ -71,8 +85,11 @@ Kiểm tra biên dịch cho macOS từ Linux (không cần Mac): `RUSTC_BOOTSTRA
 
 ## Lộ trình gợi ý
 
-1. Ký số + notarize Apple, Tauri updater.
+0. Rủi ro cần xử lý trước khi bán: `tts::speak_direct_http` gọi endpoint TTS không chính thức của Google Translate
+   (và gói giọng "Asi Neural Studio" dùng edge-tts trực tuyến) — gửi chữ của người dùng ra ngoài, điều khoản không cho dùng thương mại.
+   Updater đọc GitHub Releases của kho private bằng token máy dev và chưa kiểm chữ ký gói cập nhật.
+1. Ký số + notarize Apple; ký gói cập nhật.
 2. Chạy VieNeu trực tiếp trong Rust (crate `ort`) để bỏ Python (~150 MB).
 3. Nhận dạng giọng nói trên Windows/Linux (Whisper on-device).
 4. Đồng bộ Google Calendar / Tasks.
-5. Tách `ui/app.js` (≈1800 dòng) thành các file theo tab như `extra.js` / `vocab.js`.
+5. Peek: thay 4 nút cố định bằng nút người dùng tự chọn (giới hạn 4).

@@ -3,11 +3,10 @@
 ## Tổng quan
 
 ```
-┌──────────────── Cửa sổ "notch" (webview trong suốt, luôn ở trên) ────────────────┐
-│ ui/index.html + style.css                                                          │
-│ app.js  ── trạng thái hòn đảo (collapsed/peek/expanded/alert/drop/listen/reply)     │
-│         ── tab: Asi(chat) · Việc · Ghi chú · File · Dọn máy · Sức khoẻ · Cài đặt    │
-│ extra.js (Clipboard · Nhật ký · Threads) · vocab.js (Từ mới) · vnkey.js (Telex/VNI) │
+┌──── Cửa sổ "notch" (index.html, trong suốt, luôn ở trên) ────┐  ┌── Cửa sổ "settings" (settings.html) ──┐
+│ common.js · app.js: collapsed/peek/expanded/alert/listen/     │  │ common.js · settings.js               │
+│   reply/drop/sheet · views.js (Asi, Việc, Ghi chú, Dọn máy)   │  │ 10 mục, lưu bằng patch_settings       │
+│ extra.js (Clipboard, Nhật ký, Threads) · vocab.js · vnkey.js  │  └───────────────────────────────────────┘
 └───────────────┬───────────────────────────────────────────────▲────────────────────┘
                 │ invoke("lệnh", args)                           │ emit("sự kiện", dữ liệu)
 ┌───────────────▼───────────────────────────────────────────────┴────────────────────┐
@@ -23,7 +22,7 @@
 
 - `background_loop` (10 giây): nhắc việc đến hạn (thông báo + sự kiện `reminder`), điểm trễ → màu đỏ,
   nghỉ mắt / uống nước, hỏi nhật ký buổi tối, đồng bộ định kỳ, đẩy `status` lên UI.
-- `hover_loop` (80 ms): con trỏ vào/ra cửa sổ → sự kiện `hover` (để "ló ra" kể cả khi app không focus).
+- `hover_loop` (65–350 ms tuỳ khoảng cách chuột): con trỏ vào/ra cửa sổ → sự kiện `hover` (để "ló ra" kể cả khi app không focus).
 - Luồng đồng bộ Apple (`apple_sync::run_sync`) chạy khi có `kick_sync` hoặc mỗi 5 phút.
 
 ## Trạng thái & dữ liệu
@@ -31,6 +30,13 @@
 `commands/state.rs::AppState` (được `app.manage`): `store` (việc, ghi chú, cài đặt — `store.rs`, JSON trong thư mục dữ liệu),
 `clips`, `journal`, `vocab`, `threads` (cache), `health`, `geo` (hình học màn hình), `tts` / `nghi` (bộ đọc giọng), …
 Mọi file JSON ghi kiểu "ghi file tạm rồi đổi tên" để không hỏng khi tắt máy đột ngột.
+
+## Giao diện (ui/)
+
+- Trạng thái hòn đảo: `collapsed` (huy hiệu theo `idle_items`) → `peek` (dòng trạng thái, nhạc, Micro/Camera/AirDrop/Tập trung)
+  → `expanded` (thanh tab + `#view`). Lớp phụ: `alert`, `listen`/`reply` (lệnh giọng nói), `drop` → `sheet` (công cụ file).
+- Mỗi trạng thái có kích thước riêng (`SIZES` / `sizeOf` trong app.js); `setMode` nở cửa sổ trước khi chạy hoạt cảnh, thu sau.
+- Tab = `TABS` trong app.js; tab có cột mô-đun chỉ hiện khi `settings.modules` chứa id đó.
 
 ## Cửa sổ & kiểu hiển thị (commands/window.rs)
 
@@ -68,13 +74,13 @@ Phiên âm/audio/ví dụ: Free Dictionary API (cache trong `vocab.json`). Chấ
 
 | Module | Lệnh |
 |---|---|
-| window | set_display, move_bubble, get_geometry, set_frame, set_interactive, ime_info |
+| window | set_display, move_bubble, get_geometry, set_frame, set_interactive, ime_info, open_settings_window |
 | tasks | parse_task, add_task, list_tasks, toggle_task, snooze_task, rename_task, delete_task, clear_done |
 | notes | list_notes, save_note, pin_note, delete_note |
-| files | file_info, pick_files, file_zip, file_extract, file_compress_pdf, file_merge_pdf, reveal |
+| files | file_info, pick_files, file_zip, file_extract, file_compress_pdf, file_merge_pdf, file_airdrop, cursor_side, reveal |
 | clean | clean_scan, clean_run, clean_history, open_disk_settings |
 | health | health_break_done, health_snooze, focus_start, focus_stop |
-| settings | get_settings, save_settings, license_info, activate_license, deactivate_license, quit |
+| settings | get_settings, save_settings, patch_settings, license_info, activate_license, deactivate_license, quit |
 | clipboard | clip_list, clip_copy, clip_merge, clip_copy_files, clip_pin, clip_delete, clip_clear, clip_image, clip_to_note, clip_to_task, accessibility_status, open_privacy |
 | voice_input | voice_start, voice_stop(lang, keep), voice_cancel |
 | apple_sync | sync_now, sync_info, get_events, add_to_calendar |
@@ -90,4 +96,5 @@ Phiên âm/audio/ví dụ: Free Dictionary API (cache trong `vocab.json`). Chấ
 ## Sự kiện backend → UI
 
 `status`, `reminder`, `break`, `water`, `event-soon`, `focus-done`, `journal-ask`, `hover`, `toggle`, `open-tab`, `window-blur`,
-`perm-prompt`, `ime-warn`, `voice-level`, `voice-ended`, `clip`, `synced`, `threads`, `tts-progress`, `vocab-updated`.
+`perm-prompt`, `ime-warn`, `voice-level`, `voice-ended`, `clip`, `synced`, `threads`, `tts-progress`, `vocab-updated`,
+`settings-changed`, `settings-section`, `update-available`, `update-progress`.

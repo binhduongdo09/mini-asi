@@ -169,7 +169,7 @@ pub(crate) fn background_loop(app: AppHandle, st: Arc<AppState>) {
         {
             let (on, hour) = {
                 let s = st.store.lock().unwrap();
-                (s.settings.journal_enabled, s.settings.journal_hour)
+                (s.settings.journal_enabled && s.settings.module_on("journal"), s.settings.journal_hour)
             };
             let lt = Local::now();
             let today = lt.date_naive().to_string();
@@ -189,156 +189,32 @@ pub(crate) fn background_loop(app: AppHandle, st: Arc<AppState>) {
     }
 }
 
-#[derive(Serialize, Clone)]
-struct WindowDragPayload {
-    phase: &'static str, // "move" | "leave" | "drop"
-    x: f64,
-    y: f64,
-    pid: i32,
-    app_name: String,
-    prev_pid: i32,
-    prev_name: String,
-}
-
-/// Theo dõi chuột: báo UI khi con trỏ đi vào/ra khỏi cửa sổ (kể cả khi app không được focus)
-/// và phát hiện khi người dùng đang kéo một cửa sổ ứng dụng khác đưa lên tai thỏ để chia màn hình.
+/// Theo dõi chuột: báo UI khi con trỏ đi vào/ra khỏi cửa sổ (kể cả khi app không được focus).
 pub(crate) fn hover_loop(app: AppHandle) {
     let mut inside = false;
     let mut sleep_ms = 80u64;
-    let mut was_pressed = false;
-    let mut drag_origin: Option<(f64, f64)> = None;
-    let mut drag_win_rect: Option<(f64, f64, f64, f64)> = None;
-    let mut drag_confirmed = false;
-    let mut drag_active_in_notch = false;
-
     loop {
         std::thread::sleep(Duration::from_millis(sleep_ms));
-        if !inside && !was_pressed && notch_native::idle_seconds().is_some_and(|s| s > 30.0) {
+        if !inside && notch_native::idle_seconds().is_some_and(|s| s > 30.0) {
             sleep_ms = 350;
             continue;
         }
         let Some(win) = app.get_webview_window("notch") else { continue };
         let (Ok(c), Ok(p), Ok(sz)) = (app.cursor_position(), win.outer_position(), win.outer_size()) else { continue };
         let sf = win.scale_factor().unwrap_or(1.0);
-        let (cur_app, prev_app) = current_and_prev_ext_apps();
-
-        // Tránh vùng đệm bóng đổ trong suốt (MARGIN_X=18, MARGIN_B=20) khi xét điểm vào để không bị nhấp nháy
-        let pad_x = if inside || drag_active_in_notch { 2.0 * sf } else { 16.0 * sf };
-        let pad_b = if inside || drag_active_in_notch { 2.0 * sf } else { 16.0 * sf };
-        let x0 = p.x as f64 + pad_x;
+        // Bỏ vùng đệm trong suốt quanh hòn đảo (MARGIN_X=18, MARGIN_B=20) để không "ló ra" nhầm
+        let pad = if inside { 2.0 * sf } else { 16.0 * sf };
+        let x0 = p.x as f64 + pad;
         let y0 = p.y as f64 - 3.0 * sf;
-        let x1 = (p.x + sz.width as i32) as f64 - pad_x;
-        let y1 = (p.y + sz.height as i32) as f64 - pad_b;
+        let x1 = (p.x + sz.width as i32) as f64 - pad;
+        let y1 = (p.y + sz.height as i32) as f64 - pad;
         let now_in = c.x >= x0 && c.x <= x1.max(x0 + 20.0) && c.y >= y0 && c.y <= y1.max(y0 + 12.0);
-        let rel_x = (c.x - p.x as f64) / sf;
-        let rel_y = (c.y - p.y as f64) / sf;
-
-        let pressed = notch_native::mouse_left_pressed();
-        if pressed && !was_pressed {
-            // Bắt đầu nhấn chuột trái: nếu nhấn ở ngoài tai thỏ thì ghi nhận điểm xuất phát
-            if !now_in && cur_app.0 > 0 {
-                drag_origin = Some((c.x, c.y));
-                drag_win_rect = notch_native::window_rect_for_pid(cur_app.0);
-                drag_confirmed = false;
-                drag_active_in_notch = false;
-            } else {
-                drag_origin = None;
-                drag_win_rect = None;
-                drag_confirmed = false;
-                drag_active_in_notch = false;
-            }
-        } else if pressed && was_pressed {
-            if let Some((ox, oy)) = drag_origin {
-                let moved = (c.x - ox).hypot(c.y - oy) >= 18.0 * sf;
-                if moved && !drag_confirmed {
-                    if let Some((wx0, wy0, ww0, _)) = drag_win_rect {
-                        let cur_rect = notch_native::window_rect_for_pid(cur_app.0);
-                        let win_moved = cur_rect
-                            .map(|(wx1, wy1, _, _)| (wx1 - wx0).hypot(wy1 - wy0) >= 4.0)
-                            .unwrap_or(true);
-                        let lx = ox / sf;
-                        let ly = oy / sf;
-                        let on_titlebar = ly >= wy0 - 10.0 && ly <= wy0 + 60.0 && lx >= wx0 && lx <= wx0 + ww0;
-                        if win_moved || on_titlebar {
-                            drag_confirmed = true;
-                        }
-                    } else {
-                        drag_confirmed = true;
-                    }
-                }
-                if drag_confirmed {
-                    let drag_enter_hit = now_in
-                        || (!drag_active_in_notch
-                            && c.y >= y0 - 8.0 * sf
-                            && c.y <= y1 + 22.0 * sf
-                            && c.x >= p.x as f64 - 65.0 * sf
-                            && c.x <= (p.x + sz.width as i32) as f64 + 65.0 * sf);
-                    if drag_enter_hit {
-                        drag_active_in_notch = true;
-                        let _ = app.emit(
-                            "window-drag",
-                            WindowDragPayload {
-                                phase: "move",
-                                x: rel_x,
-                                y: rel_y,
-                                pid: cur_app.0,
-                                app_name: cur_app.1.clone(),
-                                prev_pid: prev_app.0,
-                                prev_name: prev_app.1.clone(),
-                            },
-                        );
-                    } else if drag_active_in_notch
-                        && (c.y > y1 + 40.0 * sf || c.x < x0 - 50.0 * sf || c.x > x1 + 50.0 * sf)
-                    {
-                        drag_active_in_notch = false;
-                        let _ = app.emit(
-                            "window-drag",
-                            WindowDragPayload {
-                                phase: "leave",
-                                x: rel_x,
-                                y: rel_y,
-                                pid: cur_app.0,
-                                app_name: cur_app.1.clone(),
-                                prev_pid: prev_app.0,
-                                prev_name: prev_app.1.clone(),
-                            },
-                        );
-                    }
-                }
-            }
-        } else if !pressed && was_pressed {
-            if drag_active_in_notch {
-                let _ = app.emit(
-                    "window-drag",
-                    WindowDragPayload {
-                        phase: "drop",
-                        x: rel_x,
-                        y: rel_y,
-                        pid: cur_app.0,
-                        app_name: cur_app.1.clone(),
-                        prev_pid: prev_app.0,
-                        prev_name: prev_app.1.clone(),
-                    },
-                );
-            }
-            drag_origin = None;
-            drag_win_rect = None;
-            drag_confirmed = false;
-            drag_active_in_notch = false;
-        }
-        was_pressed = pressed;
-
         if now_in != inside {
             inside = now_in;
-            if !drag_active_in_notch {
-                let _ = app.emit("hover", inside);
-            }
+            let _ = app.emit("hover", inside);
         }
-        // Chuột đang ở trong, đang kéo cửa sổ, hoặc tiến lại gần (< 220px) → quét nhạy 50-65ms; ở xa → giãn lên 180ms
-        let near = now_in
-            || drag_active_in_notch
-            || (pressed && drag_origin.is_some())
-            || (c.x >= x0 - 220.0 && c.x <= x1 + 220.0 && c.y >= y0 - 120.0 && c.y <= y1 + 220.0);
-        sleep_ms = if drag_active_in_notch { 45 } else if near { 65 } else { 180 };
+        // Gần tai thỏ → quét nhạy; ở xa → giãn ra cho đỡ tốn pin
+        let near = now_in || (c.x >= x0 - 220.0 && c.x <= x1 + 220.0 && c.y >= y0 - 120.0 && c.y <= y1 + 220.0);
+        sleep_ms = if near { 65 } else { 180 };
     }
 }

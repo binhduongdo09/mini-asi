@@ -24,7 +24,7 @@
   const settings = { break_enabled: true, break_minutes: 50, water_enabled: true, water_minutes: 60, sleep_hour: 23, focus_mode: false, launch_at_login: true, license_key: null, pdf_quality: "ebook", shortcut: "CmdOrCtrl+Shift+Space",
     clip_enabled: true, clip_max: 200, clip_shortcut: "Control+Shift+V", clip_autopaste: false, sync_reminders: true, reminders_list: "Mini-Asi", sync_notes: true, notes_folder: "Mini-Asi",
     show_calendar: true, event_alert_minutes: 10, voice_lang: "vi-VN", journal_enabled: true, journal_hour: 21,
-    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", notch_w: 0, notch_h: 0, icon_size: q.get("icons") || "large", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", visible_tabs: ["home", "tasks", "notes", "clips", "journal", "words", "threads"], active_widgets: ["chat", "tasks", "notes", "clips", "words", "clean", "health", "media", "snap", "files", "journal", "threads"], widget_images: {}, apple_ai_enabled: true, auto_update_check: true, update_repo: "binhduongdo09/mini-asi", voice_reply: false, tts_engine: "vieneu", tts_voice: "Hoài My" };
+    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", notch_w: 0, notch_h: 0, icon_size: q.get("icons") || "large", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", modules: q.get("mods") ? q.get("mods").split(",").filter(Boolean) : ["threads", "clean", "focus"], apple_ai_enabled: true, auto_update_check: true, update_repo: "binhduongdo09/mini-asi", voice_reply: false, tts_engine: "vieneu", tts_voice: "Hoài My" };
   const today0 = new Date(); today0.setHours(0, 0, 0, 0);
   const at = (h, m = 0) => today0.getTime() + h * H + m * 60e3;
   const events = [
@@ -88,7 +88,7 @@
   }
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const H_ = {
-    get_geometry: () => ({ has_notch: q.get("notch") !== "0", notch_width: 185, notch_height: 32, screen_x: 0, screen_y: 0, screen_width: 1512, platform: "macos" }),
+    get_geometry: () => ({ has_notch: q.get("notch") !== "0", notch_width: 185, notch_height: 32, screen_x: 0, screen_y: 0, screen_width: 1512, screen_height: 982, platform: "macos" }),
     set_frame: () => null, set_interactive: ({ on }) => (on ? (settings.viet_engine === "off" ? null : settings.viet_engine === "vni" ? "vni" : "telex") : null),
     get_status: status,
     parse_task: ({ text }) => parse(text),
@@ -111,9 +111,9 @@
     file_merge_pdf: async () => { await wait(600); return { output: "/Users/binh/Desktop/Hop-dong-Hoiana-gop.pdf", before: 12e6, after: 11e6, message: "Đã gộp 2 file" }; },
     file_airdrop: async () => { await wait(200); return null; },
     cursor_side: () => "left",
-    media_status: () => ({ playing: true, title: "Chúng Ta Của Tương Lai", artist: "Sơn Tùng M-TP", app: "Spotify", output_volume: 65, output_muted: false, mic_volume: 80, mic_muted: false, cam_granted: true }),
-    media_control: async () => ({ playing: false, title: "Chúng Ta Của Tương Lai", artist: "Sơn Tùng M-TP", app: "Spotify", output_volume: 65, output_muted: false, mic_volume: 80, mic_muted: false, cam_granted: true }),
-    toggle_mic_mute: async () => ({ playing: true, title: "Chúng Ta Của Tương Lai", artist: "Sơn Tùng M-TP", app: "Spotify", output_volume: 65, output_muted: false, mic_volume: 0, mic_muted: true, cam_granted: true }),
+    media_status: () => (q.get("media") === "0" ? { playing: false, title: "", artist: "", app: "", output_volume: 60, output_muted: false, mic_volume: 80, mic_muted: false } : { playing: true, title: "Lo-fi buổi chiều", artist: "Playlist tập trung", app: "Spotify", output_volume: 65, output_muted: false, mic_volume: 80, mic_muted: false, cam_granted: true }),
+    media_control: async () => ({ playing: false, title: "Lo-fi buổi chiều", artist: "Playlist tập trung", app: "Spotify", output_volume: 65, output_muted: false, mic_volume: 80, mic_muted: false, cam_granted: true }),
+    toggle_mic_mute: async () => ({ playing: true, title: "Lo-fi buổi chiều", artist: "Playlist tập trung", app: "Spotify", output_volume: 65, output_muted: false, mic_volume: 0, mic_muted: true, cam_granted: true }),
     ensure_camera_perm: async () => true,
     clip_copy_image: () => null,
     reveal: () => null,
@@ -122,7 +122,8 @@
     clean_history: () => [], open_disk_settings: () => null,
     health_break_done: () => { session = 0; }, health_snooze: () => null,
     focus_start: ({ minutes }) => { focusUntil = Math.floor(Date.now() / 1000) + minutes * 60; emit("status", status()); }, focus_stop: () => { focusUntil = null; },
-    get_settings: () => ({ ...settings }), save_settings: ({ settings: s }) => { Object.assign(settings, s); emit("status", status()); },
+    get_settings: () => ({ ...settings }), save_settings: ({ settings: s }) => { Object.assign(settings, s); emit("settings-changed", { ...settings }); emit("status", status()); },
+    patch_settings: ({ patch }) => { for (const k in patch) if (k in settings) settings[k] = patch[k]; emit("settings-changed", { ...settings }); emit("status", status()); return { ...settings }; },
     license_info: () => (pro ? { pro: true, email: "binh@example.vn", expires: null } : { pro: false }),
     activate_license: ({ key }) => (key.startsWith("MASI1.") ? ((pro = true), { pro: true, email: "binh@example.vn" }) : { pro: false, error: "Khoá không đúng định dạng" }),
     deactivate_license: () => { pro = false; }, quit: () => null,
@@ -161,7 +162,7 @@
       : ({ connected: false, has_app: false, app_id: "", redirect: "https://localhost/", notify: true, expires: 0, cache: { posts: [], mentions: [], unread: 0 } }),
     threads_save_app: () => null, threads_login: () => "https://threads.net/oauth/authorize?...", threads_finish: () => null, threads_set_token: () => null, threads_logout: () => null,
     threads_replies: async () => { await wait(400); return [{ id: "r1", username: "lan.content", text: "Mục 2 hay quá anh ơi, em thử ngay", timestamp: new Date(Date.now() - 2 * H).toISOString().replace("Z", "+0000") }, { id: "r2", username: "minh.ads", text: "Anh có template brief không ạ?", timestamp: new Date(Date.now() - 1 * H).toISOString().replace("Z", "+0000") }]; },
-    set_display: ({ mode }) => { settings.display_mode = mode; const u = new URL(location.href); u.searchParams.set("disp", mode); history.replaceState(null, "", u); },
+    set_display: ({ mode }) => { settings.display_mode = mode; emit("settings-changed", { ...settings }); const u = new URL(location.href); u.searchParams.set("disp", mode); history.replaceState(null, "", u); },
     move_bubble: ({ x, y, save }) => { if (save) { settings.bubble_x = x <= 0 && y <= 0 ? 0 : x; settings.bubble_y = x <= 0 && y <= 0 ? 0 : y; } }, threads_close: () => null,
     update_info: () => ({
       current_version: "0.10.0",
@@ -234,8 +235,7 @@
       devices: [{ name: "a" }, { name: "b" }] }),
     backup_pick_dir: () => null, backup_set: () => null, backup_now: async () => { await wait(600); return ["/Users/binh/Library/CloudStorage/GoogleDrive-x/My Drive/Mini-Asi/backups/a.zip", 2.4e6]; },
     device_sync_now: async () => { await wait(600); return { devices: ["iMac văn phòng"], stats: { tasks: 3, notes: 1, journal: 0, clips: 5, removed: 0 } }; }, backup_restore: async () => { await wait(500); },
-    window_snap: async ({ action }) => `Đã ghép cửa sổ (${action})`,
-    open_settings_window: async ({ section } = {}) => { window.open(`index.html?window=settings${section ? `&sec=${encodeURIComponent(section)}` : ""}`, "_blank", "width=860,height=650"); return null; },
+    open_settings_window: async ({ section } = {}) => { window.open(`settings.html${section ? `?sec=${encodeURIComponent(section)}` : ""}`, "_blank", "width=860,height=650"); return null; },
     apple_ai_status: async () => ({ available: true, engine: "Apple Intelligence (FoundationModels)", detail: "Sẵn sàng · Chạy trực tiếp trên chip Apple Silicon (Offline & Bảo mật)" }),
   };
   window.__TAURI__ = {

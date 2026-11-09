@@ -33,14 +33,11 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     use tauri::tray::TrayIconBuilder;
     let open = MenuItem::with_id(app, "open", "Mở Mini-Asi", true, Some("CmdOrCtrl+Shift+Space"))?;
     let clips = MenuItem::with_id(app, "clips", "Clipboard…", true, None::<&str>)?;
-    let journal = MenuItem::with_id(app, "journal", "Viết nhật ký…", true, None::<&str>)?;
     let thweb = MenuItem::with_id(app, "threads-web", "Lướt Threads", true, None::<&str>)?;
-    let thclose = MenuItem::with_id(app, "threads-close", "Đóng Threads", true, None::<&str>)?;
-    let clean = MenuItem::with_id(app, "clean", "Dọn máy…", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Cài đặt…", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let quit = MenuItem::with_id(app, "quit", "Thoát Mini-Asi", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &clips, &journal, &thweb, &thclose, &clean, &settings, &sep, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &clips, &thweb, &sep, &settings, &quit])?;
     let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
     TrayIconBuilder::with_id("main")
         .icon(icon)
@@ -49,7 +46,6 @@ fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .menu(&menu)
         .on_menu_event(|app, ev| match ev.id.as_ref() {
             "quit" => app.exit(0),
-            "threads-close" => threads_close(app.clone()),
             "threads-web" => {
                 let h = app.clone();
                 tauri::async_runtime::spawn(async move {
@@ -205,14 +201,14 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_geometry, set_frame, set_interactive, set_display, move_bubble, window_snap, open_settings_window, vocab_batch, vocab_learned, vocab_check, vocab_play, vocab_play_mine, tts_info, tts_install, tts_uninstall, tts_use,
+            get_geometry, set_frame, set_interactive, set_display, move_bubble, open_settings_window, vocab_batch, vocab_learned, vocab_check, vocab_play, vocab_play_mine, tts_info, tts_install, tts_uninstall, tts_use,
             parse_task, add_task, list_tasks, toggle_task, snooze_task, rename_task, delete_task, clear_done,
             list_notes, save_note, pin_note, delete_note,
             file_info, pick_files, file_zip, file_extract, file_compress_pdf, file_merge_pdf, reveal,
             file_airdrop, cursor_side, media_status, media_control, toggle_mic_mute, ensure_camera_perm,
             clean_scan, clean_run, clean_history, open_disk_settings,
             health_break_done, health_snooze, focus_start, focus_stop,
-            get_settings, save_settings, license_info, activate_license, deactivate_license, quit,
+            get_settings, save_settings, patch_settings, license_info, activate_license, deactivate_license, quit,
             get_status, asi_ask, asi_action, asi_speak, asi_stop_speaking, apple_ai_status,
             clip_list, clip_copy, clip_merge, clip_copy_files, clip_copy_image, clip_pin, clip_delete, clip_clear, clip_image, clip_to_note, clip_to_task,
             accessibility_status, open_privacy,
