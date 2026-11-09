@@ -36,16 +36,21 @@ pub mod prelude;
 #[allow(unused_imports)]
 use prelude::*;
 
-fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
+/// Menu biểu tượng khay theo ngôn ngữ giao diện (đổi ngôn ngữ → dựng lại)
+pub(crate) fn tray_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-    use tauri::tray::TrayIconBuilder;
-    let open = MenuItem::with_id(app, "open", "Mở Mini-Asi", true, Some("CmdOrCtrl+Shift+Space"))?;
+    let open = MenuItem::with_id(app, "open", tl(app, "Mở Mini-Asi", "Open Mini-Asi"), true, Some("CmdOrCtrl+Shift+Space"))?;
     let clips = MenuItem::with_id(app, "clips", "Clipboard…", true, None::<&str>)?;
-    let thweb = MenuItem::with_id(app, "threads-web", "Lướt Threads", true, None::<&str>)?;
-    let settings = MenuItem::with_id(app, "settings", "Cài đặt…", true, None::<&str>)?;
+    let thweb = MenuItem::with_id(app, "threads-web", tl(app, "Lướt Threads", "Browse Threads"), true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, "settings", tl(app, "Cài đặt…", "Settings…"), true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, "quit", "Thoát Mini-Asi", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&open, &clips, &thweb, &sep, &settings, &quit])?;
+    let quit = MenuItem::with_id(app, "quit", tl(app, "Thoát Mini-Asi", "Quit Mini-Asi"), true, None::<&str>)?;
+    Menu::with_items(app, &[&open, &clips, &thweb, &sep, &settings, &quit])
+}
+
+fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
+    use tauri::tray::TrayIconBuilder;
+    let menu = tray_menu(app)?;
     let icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))?;
     TrayIconBuilder::with_id("main")
         .icon(icon)

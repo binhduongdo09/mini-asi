@@ -58,6 +58,11 @@ Kiểm tra biên dịch cho macOS từ Linux (không cần Mac): `RUSTC_BOOTSTRA
   (cột thứ 4 = id mô-đun nếu bật/tắt được) + công tắc trong `secFeatures()` của settings.js.
 - Cài đặt là cửa sổ riêng `settings.html` + `settings.js`. **Lưu cài đặt bằng `patch_settings` với đúng các khoá vừa đổi**
   (không gửi cả object bằng `save_settings` — hai cửa sổ sẽ ghi đè nhau bằng bản cũ). Backend phát `settings-changed` cho mọi cửa sổ.
+- **Ngôn ngữ giao diện**: viết chuỗi tiếng Việt như thường; bản tiếng Anh thêm vào `ui/i18n-en.js` (`exact` cho câu cố định,
+  `patterns` cho câu có "{}" như "{} việc trễ"). Phần tử chứa nội dung người dùng phải có `translate="no"`.
+  Thông báo / menu từ Rust: dùng `tl(app, "tiếng Việt", "English")` (commands/status.rs). Cài đặt: `ui_lang` = "vi" | "en".
+- Yêu cầu ghi dữ liệu từ chat (thêm việc / ghi chú) đi bằng quy tắc: `explicit_command` (đầu câu) → `write_intent` (giữa câu);
+  thêm cách nói mới thì thêm test trong `assistant.rs`.
 - Sự kiện nội bộ UI: `asi-ready`, `asi-status`, `asi-tasks`, `asi-chat` (document) — view tự vẽ lại phần của mình khi cần.
 - Không vẽ lại cả khối khi chỉ đổi con số (người dùng ghét nhấp nháy) — xem `updateBar()` / `renderPeek()` so sánh rồi mới đổi.
 - **Hệ thiết kế (base.css)**: nền đen `#000`, chữ trắng, chữ phụ `--text-2`, mặt nổi `--surface`/`--surface-2`; màu chỉ để báo

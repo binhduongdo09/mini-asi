@@ -528,7 +528,7 @@ pub(crate) fn threads_loop(app: AppHandle, st: Arc<AppState>) {
                             notify(&app, &format!("💬 {who}"), &text.chars().take(120).collect::<String>());
                         }
                         if fresh.len() > 3 {
-                            notify(&app, "💬 Threads", &format!("và {} phản hồi mới khác", fresh.len() - 3));
+                            notify(&app, "💬 Threads", &tl(&app, &format!("và {} phản hồi mới khác", fresh.len() - 3), &format!("and {} more new replies", fresh.len() - 3)));
                         }
                     }
                     let _ = app.emit("threads", st.threads.lock().unwrap().unread);

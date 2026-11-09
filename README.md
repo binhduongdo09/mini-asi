@@ -29,6 +29,7 @@ Bên trong là linh vật hai mắt biết chớp, cười, lo lắng, ngáp ng�
 
 **Nhắc nhở** (Cài đặt › Nhắc nhở): nghỉ mắt, uống nước, giờ đi ngủ, Không làm phiền.
 **Đồng bộ**: Việc ⇄ Lời nhắc, Ghi chú ⇄ Ghi chú, Lịch; sao lưu Google Drive / iCloud, đồng bộ nhiều máy.
+**Ngôn ngữ** (Cài đặt › Chung › Ngôn ngữ · Language): giao diện tiếng Việt hoặc English; Asi trả lời theo ngôn ngữ bạn gõ.
 **Giọng đọc**: một giọng tiếng Việt nhẹ chạy trên máy (Mai Phương / Minh Quang), tải trong Cài đặt › Asi & giọng nói.
 
 Việc, ghi chú, clipboard, nhật ký chỉ lưu trên máy bạn. Những thứ cần mạng: tra từ điển (Từ mới), Threads, kiểm tra cập nhật,

@@ -27,7 +27,7 @@
     }
     function clipRow(c, auto) {
       let body = "";
-      if (c.kind === "text") body = `<div class="cl-text">${esc(c.preview)}</div>`;
+      if (c.kind === "text") body = `<div class="cl-text" translate="no">${esc(c.preview)}</div>`;
       if (c.kind === "image") body = `<img class="cl-img" data-img="${c.id}" alt="" />`;
       if (c.kind === "files") body = `<div class="cl-files">${c.files.map((f) => `<span class="fchip ${f.exists ? "" : "gone"}" title="${esc(f.path)}">${I.file}${esc(f.name)}</span>`).join("")}</div>`;
       const meta = c.pinned
@@ -35,7 +35,7 @@
         : [fmtAgo(c.used), c.kind === "text" ? `${c.chars} ký tự` : c.kind === "image" ? bytes(c.bytes) : `${c.files.length} file`].join(" · ");
       return `<div class="row clip ${c.pinned ? "pinned" : ""}" data-id="${c.id}">
         <div class="cl-body" data-cl="${auto ? "paste" : "copy"}" title="${auto ? "Bấm để dán" : "Bấm để chép · bấm đúp để dán"}">
-          ${c.label ? `<b class="cl-label">${esc(c.label)}</b>` : ""}${body}<span class="meta">${meta}</span></div>
+          ${c.label ? `<b class="cl-label" translate="no">${esc(c.label)}</b>` : ""}${body}<span class="meta">${meta}</span></div>
         <span class="acts">
           ${c.pinned ? `<button class="ib" data-cl="label" title="Đặt tên">${I.note}</button>` : c.kind === "text" ? `<button class="ib" data-cl="note" title="Lưu thành ghi chú">${I.note}</button>` : ""}
           ${c.kind !== "files" ? `<button class="ib" data-cl="cap" title="Tạo việc · lịch từ mục này">${I.cal}</button>` : ""}

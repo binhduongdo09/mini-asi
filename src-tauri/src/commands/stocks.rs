@@ -206,7 +206,7 @@ pub(crate) fn stock_alert_loop(app: AppHandle, st: Arc<AppState>) {
                 if let Some(a) = list.iter_mut().find(|a| a.id == *id && a.fired.is_none()) {
                     a.fired = Some(now_ms());
                     a.fired_price = Some(*price);
-                    let text = format!("Giá hiện tại {}", stocks::fmt_price(*price, a.index));
+                    let text = tl(&app, &format!("Giá hiện tại {}", stocks::fmt_price(*price, a.index)), &format!("Current price {}", stocks::fmt_price(*price, a.index)));
                     notify(&app, &format!("📈 {}", a.describe()), &text);
                     let _ = app.emit("stock-alert", StockAlertFired { title: format!("{} rồi", a.describe()), alert: a.clone(), price: *price, text });
                 }

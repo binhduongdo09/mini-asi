@@ -18,6 +18,7 @@
   // ───────── Hình học ─────────
   const geo = await api("get_geometry");
   let settings = await api("get_settings");
+  if (window.I18N && I18N.setLang(settings.ui_lang)) return; // đổi ngôn ngữ → cửa sổ tải lại
   const DISP = ["notch", "pill", "bubble"].includes(settings.display_mode) ? settings.display_mode : "notch";
   document.body.classList.add("disp-" + DISP);
   const ON_NOTCH = DISP === "notch" && geo.has_notch;
@@ -273,11 +274,11 @@
   // ───────── Peek: một dòng trạng thái + nhạc (nếu đang phát) + 4 nút nhanh ─────────
   function peekStatus() {
     const s = status, now = Date.now();
-    if (meet) return { go: "meet", html: `<span class="pill red"><i class="rec-dot"></i>Đang ghi ${clockOf(meet.secs)}</span><span class="t">${esc(meet.title || "Cuộc họp")}</span>` };
+    if (meet) return { go: "meet", html: `<span class="pill red"><i class="rec-dot"></i>Đang ghi ${clockOf(meet.secs)}</span><span class="t" translate="no">${esc(meet.title || "Cuộc họp")}</span>` };
     if (!s) return { html: "", go: "home" };
     if (s.lateness.overdue > 0 && !s.focus_until) {
       const t = tasks.find((x) => !x.done_at && x.due && x.due < now);
-      return { go: "tasks", html: `<span class="pill red">${s.lateness.overdue} việc trễ</span><span class="t">${esc(t ? t.title : "")}</span>` };
+      return { go: "tasks", html: `<span class="pill red">${s.lateness.overdue} việc trễ</span><span class="t" translate="no">${esc(t ? t.title : "")}</span>` };
     }
     if (s.focus_until) {
       const left = Math.max(1, Math.round((s.focus_until * 1000 - now) / 60000));
@@ -285,9 +286,9 @@
     }
     if (s.next_event && (!s.next || s.next_event.start < s.next.due)) {
       const live = s.next_event.start <= now;
-      return { go: "tasks", html: `<span class="pill blue">${live ? "Đang diễn ra" : fmtDue(s.next_event.start)}</span><span class="t">${esc(s.next_event.title)}</span>` };
+      return { go: "tasks", html: `<span class="pill blue">${live ? "Đang diễn ra" : fmtDue(s.next_event.start)}</span><span class="t" translate="no">${esc(s.next_event.title)}</span>` };
     }
-    if (s.next) return { go: "tasks", html: `<span class="pill">${fmtDue(s.next.due)}</span><span class="t">${esc(s.next.title)}</span>` };
+    if (s.next) return { go: "tasks", html: `<span class="pill">${fmtDue(s.next.due)}</span><span class="t" translate="no">${esc(s.next.title)}</span>` };
     return { go: "tasks", html: `<span class="t dim">${s.open_count ? `${s.open_count} việc chưa đặt giờ` : "Không có việc nào sắp tới"}</span>` };
   }
   function peekMediaHtml() {
@@ -708,7 +709,7 @@
     const el = $("#alert");
     const x = `<button class="x" data-a="dismiss" title="Đóng">${I.x}</button>`;
     if (a.kind === "reminder") {
-      el.innerHTML = `${x}<div class="al-title">${esc(a.task.title)}</div><div class="al-sub">Đến giờ rồi</div>
+      el.innerHTML = `${x}<div class="al-title" translate="no">${esc(a.task.title)}</div><div class="al-sub">Đến giờ rồi</div>
         <div class="al-acts"><button class="btn primary" data-a="done">${I.check}Xong</button>
         <button class="btn" data-a="s10">10 phút</button><button class="btn" data-a="s60">1 giờ</button><button class="btn" data-a="stm">Mai</button></div>`;
       flashMood("alarm", 6000);
@@ -720,7 +721,7 @@
       flashMood("tired", 8000);
     } else if (a.kind === "event") {
       const m = Math.max(1, Math.round((a.event.start - Date.now()) / 60000));
-      el.innerHTML = `${x}<div class="al-title">${esc(a.event.title)}</div><div class="al-sub">${m} phút nữa · ${hm(new Date(a.event.start))}${a.event.location ? " · " + esc(a.event.location) : ""}</div>
+      el.innerHTML = `${x}<div class="al-title" translate="no">${esc(a.event.title)}</div><div class="al-sub">${m} phút nữa · ${hm(new Date(a.event.start))}${a.event.location ? " · " + esc(a.event.location) : ""}</div>
         <div class="al-acts"><button class="btn primary" data-a="dismiss">Đã biết</button></div>`;
       flashMood("alarm", 3000);
     } else if (a.kind === "stock") {
@@ -1220,8 +1221,8 @@
     const last = chat[chat.length - 1];
     const me = [...chat].reverse().find((m) => m.who === "me");
     $("#reply").innerHTML = `<button class="x" data-ac="close" title="Đóng">${I.x}</button>
-      <div class="r-me">${esc(me ? me.text : "")}</div>
-      <div class="r-asi">${last.thinking ? '<span class="dots"><i></i><i></i><i></i></span>' : fmtMd(last.text)}</div>
+      <div class="r-me" translate="no">${esc(me ? me.text : "")}</div>
+      <div class="r-asi" translate="no">${last.thinking ? '<span class="dots"><i></i><i></i><i></i></span>' : fmtMd(last.text)}</div>
       ${last.reply ? replyHtml(last.reply) : ""}
       ${last.thinking ? "" : `<div class="r-foot"><button class="btn sm" data-ac="more_voice">${I.mic}Nói tiếp</button><button class="btn sm ghost" data-ac="open_chat">Mở Asi</button></div>`}`;
     setMode("reply", { force: mode === "reply" });
@@ -1316,6 +1317,7 @@
 
   // ───────── Cài đặt đổi (từ cửa sổ Cài đặt) ─────────
   on("settings-changed", (st) => {
+    if (st && window.I18N) I18N.setLang(st.ui_lang);
     if (!st) return;
     if ((st.display_mode || "notch") !== DISP) { setTimeout(() => location.reload(), 120); return; } // đổi kiểu hiển thị → nạp lại
     if (st.viet_engine !== settings.viet_engine && window.VNKey) {

@@ -1,5 +1,22 @@
 # Nhật ký thay đổi
 
+## 0.19.0 (11/2026) — chat thêm việc / ghi chú chắc chắn, giao diện tiếng Anh
+**Sửa lỗi: bảo Asi thêm việc / ghi chú nhưng không vào tab Việc / Ghi chú**
+- Nguyên nhân: chỉ câu *mở đầu* bằng lệnh ("nhắc tôi…", "ghi chú…") mới chạy bằng quy tắc. Câu nói tự nhiên như
+  "bạn thêm giúp mình task gửi báo giá…", "thêm vào danh sách việc: …", "lưu vào ghi chú: …", "note lại ý này: …" rơi xuống
+  mô hình AI; mô hình trả lời "Đã thêm…" nhưng không chọn hành động (hoặc bị chặn vì không nhận ra người dùng có yêu cầu).
+- `assistant::write_intent`: nhận yêu cầu thêm việc / ghi chú ở bất kỳ đâu trong câu (tiếng Việt & Anh, bỏ từ đệm
+  "giúp mình", "nhé", "được không"…), lấy đúng nội dung → chạy thẳng bằng quy tắc, không qua mô hình. Câu hỏi
+  ("hôm nay có việc gì", "làm sao để ghi chú…") không bị nhầm.
+- Lưới an toàn: mô hình nói "đã thêm / đã lưu" mà không kèm hành động → Asi tự thêm việc / ghi chú theo yêu cầu.
+- `user_asks_for` nhận thêm các cách nói tự nhiên ở trên (trước đây chặn nhầm).
+
+**Giao diện tiếng Anh** — Cài đặt › Chung › Ngôn ngữ · Language: Tiếng Việt / English
+- `ui/i18n.js` dịch giao diện khi chạy (theo dõi DOM), bản dịch ở `ui/i18n-en.js` (câu cố định + mẫu có chỗ trống "{}").
+  Nội dung của người dùng (việc, ghi chú, chat, clipboard, biên bản) đánh dấu `translate="no"` nên không bị đổi.
+- Menu thanh trạng thái và thông báo hệ thống (nhắc việc, nghỉ mắt, giờ họp, cảnh báo giá, Threads…) cũng theo ngôn ngữ đã chọn.
+- Asi trả lời theo ngôn ngữ bạn gõ; chọn English thì Asi mặc định trả lời tiếng Anh.
+
 ## 0.18.1 (11/2026) — thanh tab kiểu thanh công cụ macOS
 - Mọi tab luôn hiện đủ **biểu tượng + tên** (biểu tượng trên, tên dưới, như thanh công cụ Finder / Cài đặt hệ thống),
   mục đang chọn có nền bo góc, chia đều chiều ngang; hẹp quá mới cuộn ngang. Rê chuột hiện phím tắt ⌘1…⌘9.

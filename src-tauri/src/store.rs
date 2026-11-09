@@ -172,6 +172,8 @@ pub struct Settings {
     pub meeting_auto_summary: bool,
     /// Họp: ghi chú trong lúc họp "auto" (theo sức máy) | "live" (luôn) | "after" (chỉ sau khi họp)
     pub meeting_live: String,
+    /// Ngôn ngữ giao diện: "vi" | "en"
+    pub ui_lang: String,
 }
 
 fn default_true() -> bool {
@@ -262,6 +264,7 @@ impl Default for Settings {
             meeting_system_audio: true,
             meeting_auto_summary: true,
             meeting_live: "auto".into(),
+            ui_lang: "vi".into(),
         }
     }
 }

@@ -35,9 +35,9 @@
       const lines = live.slice(-4);
       const li = liveInfo && liveInfo.id === m.id ? liveInfo : null;
       return `<div class="mt-rec">
-          <div class="mt-rec-top"><i class="rec-dot"></i><b class="grow">${esc(m.title || "Cuộc họp")}</b><span class="mt-time" id="mtTime">${A.clockOf(m.secs)}</span></div>
+          <div class="mt-rec-top"><i class="rec-dot"></i><b class="grow" translate="no">${esc(m.title || "Cuộc họp")}</b><span class="mt-time" id="mtTime">${A.clockOf(m.secs)}</span></div>
           <div class="mt-meters"><span>Micro</span><i><b id="mtMic"></b></i>${m.system_audio ? `<span>Máy</span><i><b id="mtSys"></b></i>` : ""}</div>
-          <div class="mt-live">${lines.length ? lines.map((l) => `<div>${whoChip(l.who)}${esc(l.text)}</div>`).join("") : `<div class="dim">Chữ sẽ hiện sau mỗi ~30–45 giây…</div>`}</div>
+          <div class="mt-live">${lines.length ? lines.map((l) => `<div>${whoChip(l.who)}<span translate="no">${esc(l.text)}</span></div>`).join("") : `<div class="dim">Chữ sẽ hiện sau mỗi ~30–45 giây…</div>`}</div>
           <div class="mt-rec-foot"><span class="dim grow">${sttName(m.stt)} · ${m.system_audio ? "micro + âm thanh máy" : "chỉ micro"}${m.pending ? ` · đang chuyển ${m.pending} đoạn` : ""}
               <br>${li ? (li.live ? "Ghi chú tự động mỗi ~5 phút (Apple Intelligence trên máy)" : `Ghi chú sau khi họp${li.reason ? ` — ${esc(li.reason)}` : ""}`) : ""}</span>
             <button class="btn danger" data-mt="stop">${I.stop}Dừng ghi</button></div>
@@ -62,7 +62,7 @@
         <div class="sec">Các cuộc họp<span>${rows.length || ""}</span></div>
         ${rows.length ? rows.map((x) => `<button class="row mt-row" data-open="${esc(x.id)}">
             <span class="mt-ic">${I.wave}</span>
-            <span class="grow"><b>${esc(x.title)}</b><span class="dim">${fmtDate(x.started)} · ${dur(x.duration)}${x.summarized ? ` · ${x.actions} việc` : x.lines ? " · chưa tóm tắt" : " · chưa có chữ"}${x.has_audio ? " · có ghi âm" : ""}</span></span>
+            <span class="grow"><b translate="no">${esc(x.title)}</b><span class="dim">${fmtDate(x.started)} · ${dur(x.duration)}${x.summarized ? ` · ${x.actions} việc` : x.lines ? " · chưa tóm tắt" : " · chưa có chữ"}${x.has_audio ? " · có ghi âm" : ""}</span></span>
             ${I.chevron}</button>`).join("") : `<div class="empty sm">Chưa có cuộc họp nào. Bấm “Ghi cuộc họp” khi bắt đầu họp.</div>`}
       </div>`;
       paintLevel();
@@ -89,7 +89,7 @@
         </div>`;
     }
     function sumView(s) {
-      const sec = (t, xs, cls) => (xs.length ? `<div class="sec">${t}</div><div class="mt-items">${xs.map((x) => `<div class="mt-item ${cls}"><span class="grow">${esc(x)}</span>${convActs(x)}</div>`).join("")}</div>` : "");
+      const sec = (t, xs, cls) => (xs.length ? `<div class="sec">${t}</div><div class="mt-items">${xs.map((x) => `<div class="mt-item ${cls}"><span class="grow" translate="no">${esc(x)}</span>${convActs(x)}</div>`).join("")}</div>` : "");
       return `${s.note ? `<div class="banner warn">${esc(s.note)}</div>` : ""}
         ${sec("Tóm tắt", s.overview, "")}${sec("Quyết định", s.decisions, "dec")}
         ${s.actions.length ? `<div class="sec">Việc cần làm<span>${s.actions.length}</span><button class="link" data-mt="all">${checked.size === s.actions.length ? "Bỏ chọn" : "Chọn hết"}</button></div>
@@ -120,7 +120,7 @@
     }
     const lineHtml = (l, i) => editLine === i
       ? `<div class="mt-line editing" data-li="${i}"><span class="mt-at">${A.clockOf(l.at)}</span><input class="field grow" id="mtLineEd" value="${esc(l.text)}"><button class="ib" data-mt="line-save" title="Lưu (Enter)">${I.check}</button></div>`
-      : `<div class="mt-line" data-li="${i}" data-at="${l.at}"><span class="mt-at">${A.clockOf(l.at)}</span>${whoChip(l.who)}<span class="grow">${esc(l.text)}</span>${convActs(l.text, `<button class="ib" data-mt="line-edit" title="Sửa dòng này">${I.note}</button>`)}</div>`;
+      : `<div class="mt-line" data-li="${i}" data-at="${l.at}"><span class="mt-at">${A.clockOf(l.at)}</span>${whoChip(l.who)}<span class="grow" translate="no">${esc(l.text)}</span>${convActs(l.text, `<button class="ib" data-mt="line-edit" title="Sửa dòng này">${I.note}</button>`)}</div>`;
     function drawDetail() {
       const d = detail;
       if (!d) { view.innerHTML = `<div class="empty"><span class="spin"></span></div>`; return; }
@@ -130,7 +130,7 @@
       view.innerHTML = `<div class="mt">
         <div class="mt-dhead">
           <button class="ib" data-mt="back" title="Về danh sách">${I.chevron}</button>
-          ${editingTitle ? `<input class="field grow" id="mtTitle" value="${esc(d.title)}">` : `<b class="grow mt-title" data-mt="rename" title="Bấm để đổi tên">${esc(d.title)}</b>`}
+          ${editingTitle ? `<input class="field grow" id="mtTitle" value="${esc(d.title)}">` : `<b class="grow mt-title" data-mt="rename" title="Bấm để đổi tên" translate="no">${esc(d.title)}</b>`}
           ${d.recording ? `<span class="badge rec"><i class="rec-dot"></i>Đang ghi</span>` : ""}
         </div>
         <div class="dim mt-meta">${fmtDate(d.started)} · ${dur(d.duration)} · ${d.system_audio ? "micro + âm thanh máy" : "micro"} · ${d.stt === "on-device" ? "chuyển chữ trên máy" : "chuyển chữ qua Apple"}${d.pending ? ` · còn ${d.pending} đoạn đang chuyển` : ""}${d.failed ? ` · <span class="err">${d.failed} đoạn lỗi${d.last_error ? `: ${esc(d.last_error)}` : ""}</span>` : ""}</div>

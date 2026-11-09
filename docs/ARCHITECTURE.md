@@ -38,6 +38,12 @@ Mọi file JSON ghi kiểu "ghi file tạm rồi đổi tên" để không hỏn
 - Mỗi trạng thái có kích thước riêng (`SIZES` / `sizeOf` trong app.js); `setMode` nở cửa sổ trước khi chạy hoạt cảnh, thu sau.
 - Tab = `TABS` trong app.js; tab có cột mô-đun chỉ hiện khi `settings.modules` chứa id đó.
 
+### Ngôn ngữ giao diện (ui/i18n.js + ui/i18n-en.js)
+- UI viết bằng tiếng Việt. `ui_lang = "en"` → `i18n.js` dịch nút chữ & thuộc tính title/placeholder/aria-label khi DOM đổi
+  (MutationObserver): khớp nguyên câu (`exact`) → tách theo " · " → mẫu có "{}" (mẫu mở đầu bằng chữ cố định ưu tiên).
+  Bỏ qua `translate="no"`, ô nhập, contentEditable. Ngôn ngữ nhớ trong localStorage (`asi-ui-lang`); đổi → tải lại cửa sổ.
+- Rust: `status::tl(app, vi, en)` cho thông báo; `lib::tray_menu` dựng lại menu khi đổi ngôn ngữ.
+
 ## Cửa sổ & kiểu hiển thị (commands/window.rs)
 
 - `display_mode`: `notch` (tầng 27 – trên menu bar) · `pill` / `bubble` (tầng 3 – nổi trên cửa sổ thường).
@@ -46,6 +52,8 @@ Mọi file JSON ghi kiểu "ghi file tạm rồi đổi tên" để không hỏn
 - `window_low()` hạ tầng cửa sổ khi macOS hiện hộp thoại xin quyền.
 
 ## Trợ lý (commands/assistant.rs + assistant.rs + apple_ai.rs)
+- Thứ tự: `explicit_command` (lệnh đầu câu) → `write_intent` (yêu cầu thêm việc / ghi chú giữa câu) → `classify` → mô hình.
+  Mô hình nói "đã thêm/đã lưu" mà không có hành động → `claims_done` + `user_asks_for` tự thực hiện.
 
 `asi_ask(câu)`:
 1. Lệnh rõ ràng ở đầu câu (`assistant::explicit_command`: "nhắc tôi…", "ghi chú…") hoặc lệnh ngắn ≤ 5 từ mà luật nhận ra

@@ -11,6 +11,7 @@
   const geo = await api("get_geometry");
   const MAC = geo.platform === "macos";
   let st = await api("get_settings");
+  if (window.I18N && I18N.setLang(st.ui_lang)) return;
   let sec = (new URLSearchParams(location.search).get("sec") || "general").replace(/^sec-/, "");
 
   const SECTIONS = [
@@ -62,6 +63,8 @@
     upd = await api("update_info").catch(() => null);
     return head("Chung") +
       group("", [
+        // để nguyên 2 tên ngôn ngữ (không dịch) — người dùng luôn tìm được ngôn ngữ của mình
+        `<div class="srow"><div class="grow"><b>Ngôn ngữ · Language</b><span>Giao diện Mini-Asi · App interface</span></div><div class="seg" translate="no"><button class="${(st.ui_lang || "vi") === "vi" ? "on" : ""}" data-seg="ui_lang" data-v="vi">Tiếng Việt</button><button class="${st.ui_lang === "en" ? "on" : ""}" data-seg="ui_lang" data-v="en">English</button></div></div>`,
         row("Mở cùng máy", "Mini-Asi có mặt ngay khi bạn đăng nhập", sw("launch_at_login")),
         row("Phím tắt mở nhanh", "Mở/đóng bảng từ bất kỳ đâu", `<kbd>${MAC ? "⌘ ⇧ Space" : "Ctrl ⇧ Space"}</kbd>`),
         row("Chất lượng nén PDF", "Dùng khi kéo PDF vào tai thỏ", `<select class="field" data-txt="pdf_quality">${[["screen", "Nhỏ nhất"], ["ebook", "Cân bằng"], ["printer", "Đẹp (in ấn)"]].map(([v, n]) => `<option value="${v}" ${st.pdf_quality === v ? "selected" : ""}>${n}</option>`).join("")}</select>`),
@@ -419,7 +422,7 @@
   });
   main.addEventListener("input", (e) => { if (e.target.id === "notchH") $("#notchHVal").textContent = e.target.value + " px"; });
 
-  on("settings-changed", (n) => { if (n) st = n; });
+  on("settings-changed", (n) => { if (n) { st = n; if (window.I18N) I18N.setLang(n.ui_lang); } });
   on("settings-section", (s) => { if (s) { sec = s.replace(/^sec-/, ""); render(); } });
   on("update-progress", (u) => { upd = { ...(upd || {}), status: u.status || u }; const g = $("#updGroup"); if (g) g.innerHTML = group("Cập nhật", updateRows()); });
 

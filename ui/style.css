@@ -698,3 +698,4 @@ body.mock:not(.disp-notch)::before { display: none; }
 .mt-tools .btn.ghost { color: var(--text-2); }
 .mt-tools .btn.ghost:hover { color: #fff; }
 .mt-tools .mt-del.danger-on, .mt-tools .mt-del:hover { color: #ff6961; }
+.bubble .nt { display: contents; }

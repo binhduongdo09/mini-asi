@@ -465,7 +465,8 @@ fn ask_brain(st: &AppState, text: &str, en: bool, allow_actions: bool, history: 
 /// Dựng câu trả lời từ AI: chữ của mô hình + thẻ/nút thật của app theo hành động mô hình chọn
 fn reply_from_ai(app2: &AppHandle, st: &AppState, t: apple_ai::AiTurn, text: &str, en: bool, offset: Option<i32>) -> Result<assistant::Reply, String> {
     use assistant::{Intent, Reply};
-    let arg = if t.argument.is_empty() { text.to_string() } else { t.argument.clone() };
+    // mô hình không đưa nội dung → tự tách nội dung khỏi câu nhờ ("bạn thêm giúp mình task X nhé" → "X")
+    let arg = if t.argument.trim().is_empty() { assistant::write_intent(text).map(|x| x.1).filter(|c| !c.is_empty()).unwrap_or_else(|| text.to_string()) } else { t.argument.clone() };
     let with_ai_text = |mut r: Reply| {
         if !t.reply.is_empty() {
             r.text = t.reply.clone();
@@ -519,9 +520,16 @@ pub(crate) async fn asi_ask(app: AppHandle, st: S<'_>, text: String, offset: Opt
             let s = st.store.lock().unwrap();
             (s.settings.voice_lang.clone(), s.settings.apple_ai_enabled)
         };
-        let en = looks_english(&text, &lang);
-        let explicit = assistant::explicit_command(&text);
-        let (intent, rest) = assistant::classify(&text);
+        // giao diện tiếng Anh → câu không dấu cũng hiểu là tiếng Anh
+        let ui_english = st.store.lock().unwrap().settings.ui_lang == "en";
+        let en = looks_english(&text, if ui_english { "en-US" } else { &lang });
+        // Lệnh thêm việc / ghi chú: ở đầu câu ("nhắc tôi…") hoặc nói tự nhiên giữa câu ("bạn thêm giúp mình task…")
+        // → luôn làm bằng luật của app (chắc chắn vào tab Việc / Ghi chú), không để mô hình chỉ "nói là đã thêm"
+        let explicit = assistant::explicit_command(&text).or_else(|| assistant::write_intent(&text));
+        let (intent, rest) = match &explicit {
+            Some((i, r)) => (i.clone(), r.clone()),
+            None => assistant::classify(&text),
+        };
         let words = text.split_whitespace().count();
         let quick = explicit.is_some() || (!matches!(intent, Intent::Unknown | Intent::AddTask | Intent::Help) && words <= 4 && !assistant::looks_like_question(&text));
         let rules_label = if en { "Basic commands" } else { "Lệnh cơ bản" };
@@ -561,6 +569,16 @@ pub(crate) async fn asi_ask(app: AppHandle, st: S<'_>, text: String, offset: Opt
                     r.mood = "worried".into();
                     r.engine = label;
                     return Ok(r.act(if en { "Search the web" } else { "Tìm trên web" }, "open_url", &crate::live::search_url(&text)));
+                }
+            }
+            // Mô hình nói "đã thêm / đã ghi" mà không chọn hành động → làm thật bằng luật
+            if let Ok(t) = &mut res {
+                if t.action == "none" && assistant::claims_done(&t.reply) {
+                    if assistant::user_asks_for("add_task", &text) {
+                        t.action = "add_task".into();
+                    } else if assistant::user_asks_for("add_note", &text) {
+                        t.action = "add_note".into();
+                    }
                 }
             }
             match res {

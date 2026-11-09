@@ -88,6 +88,16 @@ pub(crate) fn push_status(app: &AppHandle) {
     }
 }
 
+/// Giao diện đang dùng tiếng Anh không
+pub(crate) fn ui_en(app: &AppHandle) -> bool {
+    app.try_state::<Arc<AppState>>().map(|st| st.store.lock().unwrap().settings.ui_lang == "en").unwrap_or(false)
+}
+
+/// Chọn câu theo ngôn ngữ giao diện (thông báo, menu khay… — những chỗ không qua giao diện web)
+pub(crate) fn tl(app: &AppHandle, vi: &str, en: &str) -> String {
+    if ui_en(app) { en.to_string() } else { vi.to_string() }
+}
+
 pub(crate) fn notify(app: &AppHandle, title: &str, body: &str) {
     use tauri_plugin_notification::NotificationExt;
     let _ = app.notification().builder().title(title).body(body).show();
@@ -113,7 +123,7 @@ pub(crate) fn background_loop(app: AppHandle, st: Arc<AppState>) {
             fired
         };
         for t in due {
-            notify(&app, "⏰ Đến giờ rồi!", &t.title);
+            notify(&app, &tl(&app, "⏰ Đến giờ rồi!", "⏰ It's time!"), &t.title);
             let _ = app.emit("reminder", &t);
         }
         // 2. Sức khoẻ
@@ -138,10 +148,10 @@ pub(crate) fn background_loop(app: AppHandle, st: Arc<AppState>) {
         for n in nudges {
             match n {
                 health::Nudge::Break { minutes } if minutes > 0 => {
-                    notify(&app, "👀 Nghỉ mắt chút nhé", &format!("Bạn đã dùng máy liên tục {minutes} phút. Nhìn xa 20 giây nào!"));
+                    notify(&app, &tl(&app, "👀 Nghỉ mắt chút nhé", "👀 Rest your eyes"), &tl(&app, &format!("Bạn đã dùng máy liên tục {minutes} phút. Nhìn xa 20 giây nào!"), &format!("You've been on the computer for {minutes} minutes. Look far away for 20 seconds!")));
                     let _ = app.emit("break", minutes);
                 }
-                health::Nudge::Break { .. } => notify(&app, "🎯 Hết giờ tập trung", "Làm tốt lắm! Nghỉ 5 phút rồi tiếp tục nhé."),
+                health::Nudge::Break { .. } => notify(&app, &tl(&app, "🎯 Hết giờ tập trung", "🎯 Focus session done"), &tl(&app, "Làm tốt lắm! Nghỉ 5 phút rồi tiếp tục nhé.", "Great job! Take a 5-minute break, then keep going.")),
                 health::Nudge::Water => {
                     let _ = app.emit("water", ());
                 }
@@ -161,7 +171,7 @@ pub(crate) fn background_loop(app: AppHandle, st: Arc<AppState>) {
             let key = format!("{}@{}", e.id, e.start);
             if st.alerted.lock().unwrap().insert(key) {
                 let mins = ((e.start - now) / 60_000).max(1);
-                notify(&app, &format!("📅 {} phút nữa: {}", mins, e.title), &e.location);
+                notify(&app, &tl(&app, &format!("📅 {} phút nữa: {}", mins, e.title), &format!("📅 In {} min: {}", mins, e.title)), &e.location);
                 let _ = app.emit("event-soon", &e);
             }
         }
@@ -179,7 +189,7 @@ pub(crate) fn background_loop(app: AppHandle, st: Arc<AppState>) {
                 if !written && ask.0 != today && now >= ask.1 {
                     *ask = (today, 0);
                     drop(ask);
-                    notify(&app, "📔 Hôm nay của bạn thế nào?", "Kể Asi nghe vài dòng để lưu vào nhật ký nhé");
+                    notify(&app, &tl(&app, "📔 Hôm nay của bạn thế nào?", "📔 How was your day?"), &tl(&app, "Kể Asi nghe vài dòng để lưu vào nhật ký nhé", "Tell Asi a few lines for your journal"));
                     let _ = app.emit("journal-ask", ());
                 }
             }

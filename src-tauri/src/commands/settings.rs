@@ -44,6 +44,7 @@ fn apply_settings(app: &AppHandle, st: &S, settings: store::Settings) -> Result<
     let mut s = st.store.lock().unwrap();
     let key = s.settings.license_key.clone(); // bản quyền chỉ đổi qua activate_license
     let autostart_changed = s.settings.launch_at_login != settings.launch_at_login;
+    let lang_changed = s.settings.ui_lang != settings.ui_lang;
     s.settings = settings;
     s.settings.license_key = key;
     s.settings.break_minutes = s.settings.break_minutes.clamp(10, 180);
@@ -55,6 +56,11 @@ fn apply_settings(app: &AppHandle, st: &S, settings: store::Settings) -> Result<
     }
     let snap = s.settings.clone();
     drop(s);
+    if lang_changed {
+        if let (Some(tray), Ok(menu)) = (app.tray_by_id("main"), crate::tray_menu(app)) {
+            let _ = tray.set_menu(Some(menu));
+        }
+    }
     let _ = app.emit("settings-changed", &snap);
     push_status(app);
     Ok(())

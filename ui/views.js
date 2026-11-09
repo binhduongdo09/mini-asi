@@ -67,8 +67,8 @@
         return;
       }
       log.innerHTML = `<div class="chat">${chat.map((m) => m.who === "me"
-        ? `<div class="bubble me">${esc(m.text)}</div>`
-        : `<div class="bubble asi">${m.thinking ? '<span class="dots"><i></i><i></i><i></i></span>' : A.fmtMd(m.text)}${m.reply ? A.replyHtml(m.reply) : ""}</div>`).join("")}</div>
+        ? `<div class="bubble me" translate="no">${esc(m.text)}</div>`
+        : `<div class="bubble asi">${m.thinking ? '<span class="dots"><i></i><i></i><i></i></span>' : `<div class="nt" translate="no">${A.fmtMd(m.text)}</div>`}${m.reply ? A.replyHtml(m.reply) : ""}</div>`).join("")}</div>
         <button class="link center" data-chat="clear">Cuộc trò chuyện mới</button>`;
       log.scrollTop = log.scrollHeight;
     }
@@ -142,7 +142,7 @@
       const late = !t.done_at && t.due && t.due < now;
       return `<div class="row task ${t.done_at ? "done" : ""}" data-id="${t.id}">
         <button class="check" data-t="toggle" title="${t.done_at ? "Bỏ đánh dấu" : "Xong"}">${I.check}</button>
-        <span class="title" data-t="title" title="Bấm đúp để sửa">${esc(t.title)}</span>
+        <span class="title" data-t="title" title="Bấm đúp để sửa" translate="no">${esc(t.title)}</span>
         ${t.notes ? `<span class="t-note" title="${esc(t.notes)}">${I.note}</span>` : ""}
         <span class="acts">${t.done_at ? "" : `<button class="ib txt" data-t="s60" title="Hoãn 1 giờ">+1h</button><button class="ib txt" data-t="stm" title="Chuyển sang mai">Mai</button>`}<button class="ib" data-t="del" title="Xoá">${I.trash}</button></span>
         ${t.due && !t.done_at ? `<span class="due ${late ? "late" : ""}">${fmtDue(t.due, now)}</span>` : ""}
@@ -273,7 +273,7 @@
       $("#noteItems").innerHTML = list.length
         ? list.map((n) => {
             const [first, ...rest] = n.text.split("\n");
-            return `<button class="n-item ${n.id === noteId ? "on" : ""}" data-n="open" data-id="${n.id}">
+            return `<button class="n-item ${n.id === noteId ? "on" : ""}" data-n="open" data-id="${n.id}" translate="no">
               <b>${n.pinned ? `<span class="pin">${I.pin}</span>` : ""}${esc(first.trim() || "Ghi chú trống")}</b>
               <span>${fmtAgo(n.updated)}${rest.join(" ").trim() ? " · " + esc(rest.join(" ").trim().slice(0, 40)) : ""}</span></button>`;
           }).join("")
