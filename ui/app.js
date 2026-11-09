@@ -43,6 +43,7 @@
   let tasks = [];
   let media = null; // trạng thái nhạc gần nhất (media_status)
   const cam = { active: false, stream: null };
+  let popupLow = false; // popup của macOS / app đang hiện (perm-prompt)
   let hovering = false, modeTimer = null, frameTimer = null, suppressHoverUntil = 0, lastFrameKey = "";
   let freshOpen = true;
 
@@ -122,6 +123,7 @@
   // ───────── Đổi trạng thái hòn đảo ─────────
   async function setMode(next, opts = {}) {
     if (next === mode && !opts.force) return;
+    if (popupLow && (next === "expanded" || next === "peek")) { popupLow = false; api("popup_done").catch(() => {}); }
     clearTimeout(modeTimer);
     clearTimeout(frameTimer);
     if (next === "collapsed" && mode !== "collapsed") suppressHoverUntil = Date.now() + 500;
@@ -582,6 +584,7 @@
   });
   window.addEventListener("keydown", (e) => {
     if (isComposing(e)) return;
+    if (e.key === "Escape" && mode === "capture") { closeCapture(); return; }
     if (e.key === "Escape" && mode !== "collapsed") { setMode("collapsed"); return; }
     // ⌘1…⌘9: chuyển tab
     if (mode === "expanded" && (e.metaKey || e.ctrlKey) && /^[1-9]$/.test(e.key)) {
@@ -600,7 +603,9 @@
     if (id !== "open" && TABS.some(([t]) => t === id)) tab = id;
     setMode("expanded", { force: true });
   });
+  // Popup của macOS / app đang hiện → tai thỏ thu gọn & hạ tầng (xem window.rs). Người dùng mở lại tai thỏ = popup xong.
   on("perm-prompt", (low) => {
+    popupLow = !!low;
     if (low && mode !== "collapsed") setMode("collapsed");
     else if (!low) { const [w, h] = sizeOf(mode); sendFrame(w, h, true); }
   });
@@ -690,8 +695,8 @@
   function showAlert(a) {
     if (mode === "expanded") {
       // đang mở bảng: không chen ngang, chỉ báo nhỏ
-      toast(a.kind === "reminder" ? `Đến giờ: ${a.task.title}` : a.kind === "event" ? `Sắp tới: ${a.event.title}` : a.kind === "break" ? "Đến giờ nghỉ mắt" : "Asi muốn hỏi chuyện hôm nay");
-      if (a.kind !== "reminder") return;
+      toast(a.kind === "reminder" ? `Đến giờ: ${a.task.title}` : a.kind === "event" ? `Sắp tới: ${a.event.title}` : a.kind === "break" ? "Đến giờ nghỉ mắt" : a.kind === "stock" ? `${a.title} · ${a.text}` : "Asi muốn hỏi chuyện hôm nay");
+      if (a.kind !== "reminder" && a.kind !== "stock") return;
     }
     alertQueue.push(a);
     if (mode !== "alert" && mode !== "expanded") nextAlert();
@@ -718,6 +723,12 @@
       el.innerHTML = `${x}<div class="al-title">${esc(a.event.title)}</div><div class="al-sub">${m} phút nữa · ${hm(new Date(a.event.start))}${a.event.location ? " · " + esc(a.event.location) : ""}</div>
         <div class="al-acts"><button class="btn primary" data-a="dismiss">Đã biết</button></div>`;
       flashMood("alarm", 3000);
+    } else if (a.kind === "stock") {
+      el.innerHTML = `${x}<div class="al-title">${esc(a.title)}</div><div class="al-sub">${esc(a.text)} · cảnh báo giá đã đặt</div>
+        <div class="al-acts"><button class="btn primary" data-a="dismiss">Đã biết</button><button class="btn" data-a="squote" data-sym="${esc(a.symbol)}">Xem giá</button></div>`;
+      flashMood("alarm", 5000);
+      island.classList.add("shake");
+      setTimeout(() => island.classList.remove("shake"), 1600);
     } else if (a.kind === "journal") {
       el.innerHTML = `<button class="x" data-a="jskip" title="Bỏ qua hôm nay">${I.x}</button><div class="al-title">Hôm nay của bạn thế nào?</div><div class="al-sub">3 câu hỏi nhỏ — Asi ghi nhật ký giúp bạn.</div>
         <div class="al-acts"><button class="btn primary" data-a="jwrite">Viết</button><button class="btn" data-a="jtalk">${I.mic}Nói</button><button class="btn" data-a="jlater">Để sau</button></div>`;
@@ -737,6 +748,7 @@
     if (a === "stm") await api("snooze_task", { id, minutes: -1 });
     if (a === "later") await api("health_snooze", { minutes: 10 });
     if (a === "rest") return restCountdown();
+    if (a === "squote") { alertQueue.length = 0; tab = "home"; await setMode("expanded", { force: true }); return askAsi(`giá ${e.target.closest("[data-sym]").dataset.sym}`, false); }
     if (a === "jwrite" || a === "jtalk") {
       alertQueue.length = 0;
       tab = "journal";
@@ -771,6 +783,10 @@
   on("break", (minutes) => showAlert({ kind: "break", minutes }));
   on("event-soon", (event) => showAlert({ kind: "event", event }));
   on("journal-ask", () => { if (modOn("journal")) showAlert({ kind: "journal" }); });
+  on("stock-alert", (s) => {
+    if (!s || !s.alert) return;
+    showAlert({ kind: "stock", symbol: s.alert.symbol, title: s.title, text: s.text });
+  });
   let syncDirty = false;
   on("synced", () => {
     if (typing()) { syncDirty = true; return; }
@@ -903,12 +919,28 @@
   const aiReady = () => (settings.ai_provider && settings.ai_provider !== "apple") || settings.apple_ai_enabled !== false;
   const ymd = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
   const engineName = (e) => (!e || e === "rule" ? "Đọc bằng quy tắc trên máy" : `Đọc bằng ${e}`);
-  async function openCapture(info) {
-    Object.assign(cap, { info, d: null, dirty: false, aiDraft: null, err: "", busy: false, aiBusy: false });
+  // opts.kind: "task" | "event" — ép loại (vd. bấm "Lịch" trên một ý của biên bản họp); opts.back: tab quay về sau khi xong
+  function forceKind(d, k) {
+    if (!k || !d) return d;
+    d.kind = k;
+    if (k === "event") { if (!d.start) { const t = new Date(); t.setMinutes(0, 0, 0); t.setHours(t.getHours() + 1); d.start = t.getTime(); } if (!d.end || d.end <= d.start) d.end = d.start + 3600000; }
+    else d.all_day = false;
+    return d;
+  }
+  async function closeCapture() {
+    const back = cap.back;
+    cap.back = null;
+    if (back) { tab = back; await setMode("expanded", { force: true }); }
+    else await setMode("collapsed");
+  }
+  async function openCapture(info, opts = {}) {
+    Object.assign(cap, { info, d: null, dirty: false, aiDraft: null, err: "", busy: false, aiBusy: false, back: opts.back || null, kind: opts.kind || null });
     renderCapture();
     await setMode("capture", { force: true });
     try { cap.d = await api("capture_analyze", { ai: false }); }
     catch (err) { cap.d = { kind: "task", title: "", start: null, end: null, all_day: false, location: "", notes: info.preview || "", engine: "rule", ocr: "" }; if (info.kind !== "image") cap.err = String(err); }
+    forceKind(cap.d, cap.kind);
+    if (cap.kind === "event") loadCals();
     renderCapture();
     loadCals();
     if (info.kind === "image" || ((info.kind === "text" || info.kind === "url") && aiReady())) runCapAi(true);
@@ -926,7 +958,7 @@
       const d = await api("capture_analyze", { ai: true });
       if (mode !== "capture") return;
       if (auto && cap.dirty) { cap.aiDraft = d; }
-      else { cap.d = { ...d, calendar_id: cap.d ? cap.d.calendar_id : "" }; cap.dirty = false; cap.aiBusy = false; renderCapture(); return; }
+      else { cap.d = forceKind({ ...d, calendar_id: cap.d ? cap.d.calendar_id : "" }, cap.kind); cap.dirty = false; cap.aiBusy = false; renderCapture(); return; }
     } catch (err) { if (!auto || !cap.d || !cap.d.title) cap.err = String(err); }
     cap.aiBusy = false;
     if (mode === "capture") renderCapFoot();
@@ -1021,7 +1053,8 @@
       const r = await api("capture_create", { d });
       if (d.kind === "event" && d.calendar_id) settings.capture_calendar = d.calendar_id;
       toast(r.message); confetti(10); flashMood("happy");
-      await setMode("collapsed");
+      if (!r.event) refreshTasks();
+      await closeCapture();
     } catch (err) { cap.err = String(err); flashMood("worried", 2500); }
     cap.busy = false;
     if (mode === "capture") renderCapFoot();
@@ -1034,13 +1067,13 @@
   $("#capture").addEventListener("keydown", (e) => {
     if (isComposing(e)) return;
     if (e.key === "Enter" && e.target.id === "cp-title") { e.preventDefault(); createCapture(); }
-    if (e.key === "Escape") setMode("collapsed");
+    if (e.key === "Escape") { e.stopPropagation(); closeCapture(); }
   });
   $("#capture").addEventListener("click", async (e) => {
     const b = e.target.closest("[data-cp]");
     if (!b || b.disabled) return;
     const a = b.dataset.cp;
-    if (a === "close") return setMode("collapsed");
+    if (a === "close") return closeCapture();
     if (a === "k-task" || a === "k-event") {
       readCap();
       const k = a === "k-task" ? "task" : "event";
@@ -1053,7 +1086,7 @@
     }
     if (a === "nodate") { readCap(); cap.d.start = null; renderCapture(); return; }
     if (a === "ai") return runCapAi(false);
-    if (a === "use-ai" && cap.aiDraft) { cap.d = { ...cap.aiDraft, calendar_id: cap.d.calendar_id }; cap.aiDraft = null; cap.dirty = false; renderCapture(); return; }
+    if (a === "use-ai" && cap.aiDraft) { cap.d = forceKind({ ...cap.aiDraft, calendar_id: cap.d.calendar_id }, cap.kind); cap.aiDraft = null; cap.dirty = false; renderCapture(); return; }
     if (a === "create") return createCapture();
   });
 
@@ -1304,7 +1337,9 @@
     get settings() { return settings; },
     get DISP() { return DISP; },
     get meet() { return meet; },
-    clockOf,
+    clockOf, openCapture,
+    /** Mở bảng tạo việc / lịch từ một đoạn chữ (vd. ý quan trọng trong biên bản họp) */
+    async captureText(text, opts = {}) { try { openCapture(await api("capture_set_text", { text }), opts); } catch (err) { toast(String(err)); } },
     saveSettings: async (patch) => { Object.assign(settings, patch); await saveSettings(Object.keys(patch)); },
     takeFreshOpen() { const f = freshOpen; freshOpen = false; return f; },
     applyMood, applyColor,
@@ -1327,6 +1362,6 @@
   else if (devOpen === "capture") openCapture(await api("drop_read", { paths: [] }));
   else if (devOpen && devOpen.startsWith("alert-")) {
     const k = devOpen.slice(6);
-    showAlert(k === "break" ? { kind: "break", minutes: 52 } : k === "journal" ? { kind: "journal" } : k === "event" ? { kind: "event", event: { title: "Họp khách hàng", start: Date.now() + 9 * 60000 } } : { kind: "reminder", task: tasks[0] });
+    showAlert(k === "break" ? { kind: "break", minutes: 52 } : k === "journal" ? { kind: "journal" } : k === "stock" ? { kind: "stock", symbol: "FPT", title: "FPT vượt 100.000đ rồi", text: "Giá hiện tại 100.200đ" } : k === "event" ? { kind: "event", event: { title: "Họp khách hàng", start: Date.now() + 9 * 60000 } } : { kind: "reminder", task: tasks[0] });
   } else if (devOpen) { tab = devOpen; await setMode("expanded", { force: true }); }
 })();

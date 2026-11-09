@@ -33,3 +33,4 @@ pub use crate::commands::updater::*;
 pub use crate::commands::capture::*;
 pub use crate::commands::live::*;
 pub use crate::commands::meeting::*;
+pub use crate::commands::stocks::*;

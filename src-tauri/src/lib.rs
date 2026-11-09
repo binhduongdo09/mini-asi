@@ -13,6 +13,7 @@ pub mod backup;
 pub mod capture;
 pub mod live;
 pub mod meeting;
+pub mod stocks;
 pub mod social;
 pub mod clipboard;
 pub mod files;
@@ -203,6 +204,8 @@ pub fn run() {
             std::thread::spawn(move || sync_loop(h, s2, sync_rx));
             let (h, s2) = (app.handle().clone(), st.clone());
             std::thread::spawn(move || update_loop(h, s2));
+            let (h, s2) = (app.handle().clone(), st.clone());
+            std::thread::spawn(move || stock_alert_loop(h, s2));
             let h = app.handle().clone();
             std::thread::spawn(move || background_loop(h, st));
             let h = app.handle().clone();
@@ -210,7 +213,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            get_geometry, set_frame, set_interactive, set_display, move_bubble, open_settings_window, vocab_batch, vocab_learned, vocab_check, vocab_play, vocab_play_mine, tts_info, tts_install, tts_uninstall, tts_use,
+            get_geometry, set_frame, set_interactive, popup_done, set_display, move_bubble, open_settings_window, vocab_batch, vocab_learned, vocab_check, vocab_play, vocab_play_mine, tts_info, tts_install, tts_uninstall, tts_use,
             parse_task, add_task, list_tasks, toggle_task, snooze_task, rename_task, delete_task, clear_done,
             list_notes, save_note, pin_note, delete_note,
             file_info, pick_files, file_zip, file_extract, file_compress_pdf, file_merge_pdf, reveal,
@@ -229,7 +232,7 @@ pub fn run() {
             backup_info, backup_pick_dir, backup_set, backup_now, device_sync_now, backup_restore,
             update_info, update_check, update_install,
             drop_read, capture_supports, capture_set_text, capture_from_clip,
-            meeting_start, meeting_stop, meeting_status, meeting_list, meeting_get, meeting_rename, meeting_delete, meeting_reveal, meeting_summarize, meeting_add_tasks, meeting_to_note, meeting_copy, capture_analyze, capture_create, calendar_list
+            meeting_start, meeting_stop, meeting_status, meeting_list, meeting_get, meeting_rename, meeting_delete, meeting_reveal, meeting_summarize, meeting_add_tasks, meeting_to_note, meeting_copy, meeting_update_summary, meeting_edit_line, meeting_item_note, stock_alerts, stock_alert_delete, capture_analyze, capture_create, calendar_list
         ])
         .run(tauri::generate_context!())
         .expect("Mini-Asi không khởi động được");

@@ -525,6 +525,13 @@ pub(crate) async fn asi_ask(app: AppHandle, st: S<'_>, text: String, offset: Opt
         let words = text.split_whitespace().count();
         let quick = explicit.is_some() || (!matches!(intent, Intent::Unknown | Intent::AddTask | Intent::Help) && words <= 4 && !assistant::looks_like_question(&text));
         let rules_label = if en { "Basic commands" } else { "Lệnh cơ bản" };
+        // Giá cổ phiếu / chỉ số và cảnh báo giá ("báo cho tôi khi FPT vượt 100k") → nguồn dữ liệu thật
+        if explicit.is_none() {
+            if let Some(r) = stock_reply(st, &text) {
+                remember(st, &text, &r.text);
+                return Ok(r);
+            }
+        }
         // Thời tiết, tin tức, tỷ giá, giá vàng… → nguồn dữ liệu thật (mô hình không có Internet, sẽ bịa số)
         let wants_write = explicit.is_some() || assistant::user_asks_for("add_task", &text) || assistant::user_asks_for("add_note", &text);
         if !wants_write {
@@ -608,7 +615,7 @@ pub(crate) fn ai_info(st: S) -> Vec<AiProviderInfo> {
         .map(|&p| AiProviderInfo {
             id: p.id().into(),
             name: p.name().into(),
-            has_key: threads::secret::get(&p.key_name(), &st.data_dir).is_some_and(|k| !k.trim().is_empty()),
+            has_key: threads::secret::exists(&p.key_name(), &st.data_dir) || threads::secret::get(&p.key_name(), &st.data_dir).is_some(), // get() chỉ hỏi Keychain 1 lần duy nhất (chuyển khoá cũ ra file)
             model: model_of(&set, p),
             default_model: p.default_model().into(),
             key_url: p.key_url().into(),
@@ -616,7 +623,7 @@ pub(crate) fn ai_info(st: S) -> Vec<AiProviderInfo> {
         .collect()
 }
 
-/// Lưu API key vào Keychain (rỗng = xoá)
+/// Lưu API key vào file riêng của app (rỗng = xoá)
 #[tauri::command]
 pub(crate) fn ai_set_key(st: S, provider: String, key: String) -> Result<(), String> {
     let p = llm::Provider::from_id(&provider).ok_or("Nhà cung cấp lạ")?;

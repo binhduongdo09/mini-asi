@@ -79,6 +79,23 @@ pub struct Meeting {
     pub failed: u32,
     #[serde(default)]
     pub last_error: String,
+    /// Ghi chú trong lúc họp (mỗi ~5 phút lời nói một mục) — máy đủ mạnh mới có
+    #[serde(default)]
+    pub live: Vec<LiveNote>,
+    /// Số dòng toàn văn đã được ghi chú trong lúc họp
+    #[serde(default)]
+    pub noted: usize,
+    /// Ghi chú "Biên bản họp" tương ứng trong tab Ghi chú
+    #[serde(default)]
+    pub note_id: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct LiveNote {
+    /// giây (từ … đến …)
+    pub from: f32,
+    pub to: f32,
+    pub summary: Summary,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -123,6 +140,58 @@ pub fn save(data_dir: &Path, m: &Meeting) -> Result<(), String> {
     std::fs::rename(&tmp, d.join("meeting.json")).map_err(|e| e.to_string())
 }
 
+/// File ghi âm: ưu tiên bản nén m4a, chưa nén thì wav
+pub fn audio_file(data_dir: &Path, id: &str) -> Option<PathBuf> {
+    if !valid_id(id) {
+        return None;
+    }
+    let d = dir_of(data_dir, id);
+    ["audio.m4a", "audio.wav"].iter().map(|f| d.join(f)).find(|p| p.metadata().map(|m| m.len() > 1024).unwrap_or(false))
+}
+
+/// Nén audio.wav → audio.m4a (AAC 32 kbps, ~14 MB/giờ thay vì ~115 MB) bằng `afconvert` có sẵn trên macOS.
+/// Thành công thì xoá wav. Máy khác / lỗi → giữ wav.
+pub fn compress_audio(data_dir: &Path, id: &str) -> Result<PathBuf, String> {
+    let d = dir_of(data_dir, id);
+    let (wav, m4a) = (d.join("audio.wav"), d.join("audio.m4a"));
+    if !wav.exists() {
+        return audio_file(data_dir, id).ok_or_else(|| "Không có file ghi âm".into());
+    }
+    if !cfg!(target_os = "macos") {
+        return Ok(wav);
+    }
+    let tmp = d.join("audio.tmp.m4a");
+    let ok = std::process::Command::new("/usr/bin/afconvert")
+        .args(["-f", "m4af", "-d", "aac", "-b", "32000"])
+        .arg(&wav)
+        .arg(&tmp)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if ok && tmp.metadata().map(|m| m.len() > 1024).unwrap_or(false) {
+        std::fs::rename(&tmp, &m4a).map_err(|e| e.to_string())?;
+        let _ = std::fs::remove_file(&wav);
+        Ok(m4a)
+    } else {
+        let _ = std::fs::remove_file(&tmp);
+        Ok(wav)
+    }
+}
+
+/// Các khúc toàn văn chưa được ghi chú trong lúc họp, đủ dài để tóm tắt (≥ `min_chars`)
+pub fn next_live_chunk(lines: &[Line], noted: usize, min_chars: usize, max_chars: usize) -> Option<(usize, usize)> {
+    let mut n = 0usize;
+    for (i, l) in lines.iter().enumerate().skip(noted) {
+        n += l.text.chars().count() + 12;
+        if n >= min_chars || n >= max_chars {
+            return Some((noted, i + 1));
+        }
+    }
+    None
+}
+
 pub fn list(data_dir: &Path) -> Vec<MeetingBrief> {
     let mut v = vec![];
     if let Ok(rd) = std::fs::read_dir(root(data_dir)) {
@@ -130,7 +199,7 @@ pub fn list(data_dir: &Path) -> Vec<MeetingBrief> {
             let id = e.file_name().to_string_lossy().to_string();
             if let Ok(m) = load(data_dir, &id) {
                 v.push(MeetingBrief {
-                    has_audio: e.path().join("audio.wav").exists(),
+                    has_audio: audio_file(data_dir, &id).is_some(),
                     id: m.id,
                     title: m.title,
                     started: m.started,
@@ -386,6 +455,45 @@ pub fn merge(parts: Vec<Summary>) -> Summary {
         }
     }
     out
+}
+
+/// Biên bản dạng chữ thường cho tab Ghi chú (dòng đầu là tiêu đề; đồng bộ sang app Ghi chú của Apple cũng gọn)
+pub fn to_note_text(m: &Meeting, with_transcript: bool) -> String {
+    let when = chrono::DateTime::from_timestamp_millis(m.started).map(|d| d.with_timezone(&chrono::Local).format("%d/%m/%Y %H:%M").to_string()).unwrap_or_default();
+    let mut o = format!("{}\nBiên bản họp · {when} · {}\n", m.title, clock(m.duration as f32));
+    if let Some(s) = &m.summary {
+        let list = |o: &mut String, t: &str, xs: &[String]| {
+            if !xs.is_empty() {
+                o.push_str(&format!("\n{t}\n"));
+                for x in xs {
+                    o.push_str(&format!("• {x}\n"));
+                }
+            }
+        };
+        list(&mut o, "Tóm tắt", &s.overview);
+        list(&mut o, "Quyết định", &s.decisions);
+        if !s.actions.is_empty() {
+            o.push_str("\nViệc cần làm\n");
+            for a in &s.actions {
+                let mut t = format!("☐ {}", a.task);
+                if !a.owner.is_empty() {
+                    t.push_str(&format!(" — {}", a.owner));
+                }
+                if !a.due.is_empty() {
+                    t.push_str(&format!(" (hạn: {})", a.due));
+                }
+                o.push_str(&t);
+                o.push('\n');
+            }
+        }
+    }
+    if with_transcript && !m.lines.is_empty() {
+        o.push_str("\nToàn văn\n");
+        o.push_str(&transcript_text(&m.lines));
+        o.push('\n');
+    }
+    o.push_str("\nNghe lại ghi âm: Mini-Asi › Họp");
+    o
 }
 
 /// Biên bản dạng Markdown (lưu vào Ghi chú / chép)
@@ -708,6 +816,14 @@ mod tests {
     }
 
     #[test]
+    fn live_chunks() {
+        let lines: Vec<Line> = (0..10).map(|i| Line { at: i as f32 * 30.0, who: "".into(), text: "x".repeat(288) }).collect();
+        assert_eq!(next_live_chunk(&lines, 0, 2200, 2600), Some((0, 8)));
+        assert_eq!(next_live_chunk(&lines, 8, 2200, 2600), None, "chưa đủ dài");
+        assert_eq!(next_live_chunk(&[], 0, 2200, 2600), None);
+    }
+
+    #[test]
     fn store_roundtrip_and_markdown() {
         let d = tempfile::tempdir().unwrap();
         let m = Meeting {
@@ -724,6 +840,9 @@ mod tests {
         assert_eq!((l.len(), l[0].actions, l[0].summarized), (1, 1, true));
         assert_eq!(load(d.path(), "20261109-1400").unwrap().title, "Họp agency");
         assert!(load(d.path(), "../etc").is_err());
+        let nt = to_note_text(&m, false);
+        assert!(nt.starts_with("Họp agency\nBiên bản họp · "));
+        assert!(nt.contains("• Ý chính") && nt.contains("☐ Gửi file — Lan (hạn: mai)") && !nt.contains("[00:01]"));
         let md = to_markdown(&m, true);
         assert!(md.starts_with("# Họp agency"));
         assert!(md.contains("- [ ] Gửi file — Lan (hạn: mai)"));

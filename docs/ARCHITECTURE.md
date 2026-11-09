@@ -12,7 +12,7 @@
 ┌───────────────▼───────────────────────────────────────────────┴────────────────────┐
 │ src-tauri/src/lib.rs  run(): plugin, phím tắt, khay, cửa sổ, luồng nền, đăng ký lệnh │
 │ commands/*.rs  lớp lệnh mỏng theo tính năng ── gọi logic thuần ↓                     │
-│ store · nlp · sync · apple · clipboard · capture · social · live · meeting · voice · journal · threads · backup · files │
+│ store · nlp · sync · apple · clipboard · capture · social · live · meeting · stocks · voice · journal · threads · backup · files │
 │ health · assistant · tts · vocab · license                                           │
 │ crates/notch-native (API macOS) · crates/asi-clean (dọn máy)                         │
 └─────────────────────────────────────────────────────────────────────────────────────┘
@@ -100,7 +100,8 @@ Phiên âm/audio/ví dụ: Free Dictionary API (cache trong `vocab.json`). Chấ
 | assistant | asi_ask, asi_action, asi_reset, apple_ai_status, ai_info, ai_set_key, ai_test |
 | speech | asi_speak, asi_stop_speaking, tts_info, tts_install, tts_uninstall, tts_use |
 | vocab | vocab_batch, vocab_learned, vocab_check, vocab_play, vocab_play_mine |
-| meeting | meeting_start, meeting_stop, meeting_status, meeting_list, meeting_get, meeting_rename, meeting_delete, meeting_reveal, meeting_summarize, meeting_add_tasks, meeting_to_note, meeting_copy (sự kiện: meeting-state, meeting-level, meeting-update, meeting-progress, meeting-done) |
+| stocks | stock_alerts, stock_alert_delete (sự kiện: stock-alert; tra giá / đặt cảnh báo qua asi_ask) |
+| meeting | meeting_start, meeting_stop, meeting_status, meeting_list, meeting_get, meeting_rename, meeting_delete, meeting_reveal, meeting_summarize, meeting_add_tasks, meeting_to_note, meeting_copy, meeting_update_summary, meeting_edit_line, meeting_item_note (sự kiện: meeting-live, meeting-live-mode, meeting-audio, meeting-state, meeting-level, meeting-update, meeting-progress, meeting-done) |
 | capture | drop_read, capture_supports, capture_set_text, capture_from_clip, capture_analyze, capture_create, calendar_list |
 | status | get_status |
 

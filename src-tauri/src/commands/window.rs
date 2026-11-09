@@ -127,7 +127,7 @@ pub(crate) fn set_display(app: AppHandle, st: S, mode: String) -> Result<(), Str
         s.save_settings()?;
         s.settings.clone()
     };
-    apply_level(&app, normal_level(&app));
+    refresh_level(&app);
     let _ = app.emit("settings-changed", &snap);
     Ok(())
 }
@@ -301,10 +301,89 @@ pub(crate) async fn ime_info(app: AppHandle, st: S<'_>) -> Result<ImeInfo, Strin
     Ok(ImeInfo { recognized: notch_native::ime::vietnamese_mode(&current).map(String::from), current, enabled })
 }
 
-/// Hạ tai thỏ xuống tầng thường trong lúc macOS hiện hộp thoại xin quyền (để không che nút "Cho phép")
+// ───────── Popup luôn nằm trên tai thỏ ─────────
+// Tai thỏ ở tầng 27 (trên thanh menu). Mọi thứ app mở ra — hộp thoại xin quyền của macOS, chọn file/thư mục, AirDrop,
+// hộp thoại "ghi âm thanh hệ thống"… — phải hiện TRÊN tai thỏ. Cách làm: trong lúc có popup, thu gọn bảng và hạ tai thỏ
+// xuống tầng thường; hết popup mới nâng lại. Có thể nhiều popup chồng nhau → đếm (`LOW_COUNT`); popup không biết lúc
+// đóng (AirDrop, hộp thoại TCC hiện bất đồng bộ) → hạ có thời hạn (`LOW_UNTIL`), người dùng chạm lại tai thỏ thì nâng ngay.
+// Cửa sổ riêng của app (Cài đặt, Social…) khi đang được chọn thì được nâng lên trên tai thỏ (`float_when_focused`).
+
+static LOW_COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+static LOW_UNTIL: std::sync::atomic::AtomicI64 = std::sync::atomic::AtomicI64::new(0);
+
+fn popup_active() -> bool {
+    use std::sync::atomic::Ordering;
+    LOW_COUNT.load(Ordering::SeqCst) > 0 || now_ms() < LOW_UNTIL.load(Ordering::SeqCst)
+}
+
+/// Đặt lại tầng tai thỏ theo trạng thái popup hiện tại
+pub(crate) fn refresh_level(app: &AppHandle) {
+    apply_level(app, if popup_active() { 0 } else { normal_level(app) });
+}
+
+/// Hạ tai thỏ trong lúc macOS / app hiện hộp thoại (gọi theo cặp true … false). Có đếm nên popup lồng nhau không
+/// làm tai thỏ nâng lên sớm.
 pub(crate) fn window_low(app: &AppHandle, low: bool) {
-    let _ = app.emit("perm-prompt", low);
-    apply_level(app, if low { 0 } else { normal_level(app) });
+    use std::sync::atomic::Ordering;
+    if low {
+        LOW_COUNT.fetch_add(1, Ordering::SeqCst);
+        let _ = app.emit("perm-prompt", true);
+    } else {
+        let _ = LOW_COUNT.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |c| Some(c.saturating_sub(1)));
+        if !popup_active() {
+            let _ = app.emit("perm-prompt", false);
+        }
+    }
+    refresh_level(app);
+}
+
+/// Hạ tai thỏ trong `secs` giây cho popup không báo lúc đóng (AirDrop, hộp thoại quyền hiện bất đồng bộ…)
+pub(crate) fn window_low_for(app: &AppHandle, secs: u64) {
+    use std::sync::atomic::Ordering;
+    let until = now_ms() + secs as i64 * 1000;
+    LOW_UNTIL.fetch_max(until, Ordering::SeqCst);
+    let _ = app.emit("perm-prompt", true);
+    refresh_level(app);
+    let h = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(secs * 1000 + 50));
+        if !popup_active() {
+            refresh_level(&h);
+            let _ = h.emit("perm-prompt", false);
+        }
+    });
+}
+
+/// Người dùng chủ động mở lại tai thỏ → bỏ hạ có thời hạn (popup kiểu AirDrop đã xong)
+#[tauri::command]
+pub(crate) fn popup_done(app: AppHandle) {
+    LOW_UNTIL.store(0, std::sync::atomic::Ordering::SeqCst);
+    refresh_level(&app);
+}
+
+/// Cửa sổ riêng của app (Cài đặt, Social…): khi đang được chọn thì nổi trên tai thỏ, bỏ chọn thì về tầng thường
+/// (không đè lên cửa sổ app khác).
+pub(crate) fn float_when_focused(win: &WebviewWindow) {
+    #[cfg(target_os = "macos")]
+    {
+        let w2 = win.clone();
+        let raise = move |on: bool| {
+            if let Ok(p) = w2.ns_window() {
+                let p = p as usize;
+                let _ = w2.run_on_main_thread(move || unsafe {
+                    notch_native::set_window_level(p as *mut std::ffi::c_void, if on { notch_native::NOTCH_LEVEL + 1 } else { 0 })
+                });
+            }
+        };
+        raise(true);
+        win.on_window_event(move |e| {
+            if let tauri::WindowEvent::Focused(f) = e {
+                raise(*f);
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = win;
 }
 
 pub(crate) fn needs_prompt(s: notch_native::perm::State) -> bool {
@@ -355,7 +434,7 @@ pub(crate) fn open_settings_window(app: AppHandle, st: S, section: Option<String
         _ => "settings.html".to_string(),
     };
 
-    tauri::WebviewWindowBuilder::new(&app, "settings", tauri::WebviewUrl::App(url.into()))
+    let w = tauri::WebviewWindowBuilder::new(&app, "settings", tauri::WebviewUrl::App(url.into()))
         .title("Cài đặt — Mini-Asi")
         .inner_size(w, h)
         .min_inner_size(680.0, 480.0)
@@ -369,6 +448,7 @@ pub(crate) fn open_settings_window(app: AppHandle, st: S, section: Option<String
         .focused(true)
         .build()
         .map_err(|e| format!("Không mở được cửa sổ Cài đặt: {e}"))?;
+    float_when_focused(&w);
 
     bring_front(&app, section);
     Ok(())

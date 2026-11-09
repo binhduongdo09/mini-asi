@@ -271,45 +271,112 @@ pub fn publish_text(token: &str, text: &str, reply_to: Option<&str>) -> Result<S
 
 // ───────────────────────── Kho bí mật ─────────────────────────
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+/// API key / token lưu trong file riêng của app (`<thư mục dữ liệu>/secrets/<tên>`, quyền 600 — chỉ tài khoản của bạn
+/// đọc được; không nằm trong bản sao lưu / đồng bộ). Trước 0.17 dùng Keychain: app tự đóng gói chưa có chữ ký cố định
+/// nên macOS hỏi quyền Keychain liên tục → chuyển sang file. Lần đầu đọc một khoá chưa có file: lấy từ Keychain
+/// đúng 1 lần (có thể hỏi lần cuối), ghi ra file, đánh dấu đã chuyển để không bao giờ hỏi Keychain nữa.
 pub mod secret {
-    const SERVICE: &str = "Mini-Asi";
-    pub fn set(key: &str, val: &str, _dir: &std::path::Path) -> Result<(), String> {
-        keyring::Entry::new(SERVICE, key).and_then(|e| e.set_password(val)).map_err(|e| format!("Không lưu được vào Keychain: {e}"))
-    }
-    pub fn get(key: &str, _dir: &std::path::Path) -> Option<String> {
-        keyring::Entry::new(SERVICE, key).ok()?.get_password().ok()
-    }
-    pub fn delete(key: &str, _dir: &std::path::Path) {
-        if let Ok(e) = keyring::Entry::new(SERVICE, key) {
-            let _ = e.delete_credential();
-        }
-    }
-}
+    use std::path::{Path, PathBuf};
 
-/// Linux: file riêng chỉ chủ máy đọc được (chmod 600)
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
-pub mod secret {
-    use std::path::Path;
-    fn file(dir: &Path, key: &str) -> std::path::PathBuf {
-        dir.join("secrets").join(key)
+    fn dir(d: &Path) -> PathBuf {
+        d.join("secrets")
     }
-    pub fn set(key: &str, val: &str, dir: &Path) -> Result<(), String> {
-        let p = file(dir, key);
+    fn file(d: &Path, key: &str) -> PathBuf {
+        dir(d).join(key)
+    }
+    fn safe(key: &str) -> bool {
+        !key.is_empty() && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    }
+
+    fn write_private(p: &Path, val: &str) -> Result<(), String> {
         std::fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
-        std::fs::write(&p, val).map_err(|e| e.to_string())?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o600));
+            let _ = std::fs::set_permissions(p.parent().unwrap(), std::fs::Permissions::from_mode(0o700));
+        }
+        std::fs::write(p, val).map_err(|e| format!("Không lưu được khoá: {e}"))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o600));
         }
         Ok(())
     }
-    pub fn get(key: &str, dir: &Path) -> Option<String> {
-        std::fs::read_to_string(file(dir, key)).ok().filter(|s| !s.is_empty())
+
+    pub fn set(key: &str, val: &str, d: &Path) -> Result<(), String> {
+        if !safe(key) {
+            return Err("Tên khoá không hợp lệ".into());
+        }
+        write_private(&file(d, key), val)?;
+        mark_migrated(d, key);
+        Ok(())
     }
-    pub fn delete(key: &str, dir: &Path) {
-        let _ = std::fs::remove_file(file(dir, key));
+
+    pub fn get(key: &str, d: &Path) -> Option<String> {
+        if !safe(key) {
+            return None;
+        }
+        if let Ok(v) = std::fs::read_to_string(file(d, key)) {
+            return Some(v).filter(|s| !s.is_empty());
+        }
+        migrate_once(key, d)
+    }
+
+    /// Chỉ kiểm tra có khoá chưa — không bao giờ đụng tới Keychain (dùng cho màn Cài đặt)
+    pub fn exists(key: &str, d: &Path) -> bool {
+        safe(key) && std::fs::metadata(file(d, key)).map(|m| m.len() > 0).unwrap_or(false)
+    }
+
+    pub fn delete(key: &str, d: &Path) {
+        if safe(key) {
+            let _ = std::fs::remove_file(file(d, key));
+            mark_migrated(d, key); // đã xoá thì không lấy lại từ Keychain
+        }
+    }
+
+    fn marker(d: &Path, key: &str) -> PathBuf {
+        dir(d).join(format!(".{key}.checked"))
+    }
+    fn mark_migrated(d: &Path, key: &str) {
+        let _ = std::fs::create_dir_all(dir(d));
+        let _ = std::fs::write(marker(d, key), b"");
+    }
+
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    fn migrate_once(key: &str, d: &Path) -> Option<String> {
+        if marker(d, key).exists() {
+            return None;
+        }
+        mark_migrated(d, key);
+        let v = keyring::Entry::new("Mini-Asi", key).ok()?.get_password().ok().filter(|s| !s.is_empty())?;
+        write_private(&file(d, key), &v).ok()?;
+        Some(v)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    fn migrate_once(_key: &str, _d: &Path) -> Option<String> {
+        None
+    }
+
+    #[cfg(test)]
+    mod tests {
+        #[test]
+        fn file_store_roundtrip() {
+            let d = tempfile::tempdir().unwrap();
+            assert!(!super::exists("ai_key_gemini", d.path()));
+            super::set("ai_key_gemini", "abc", d.path()).unwrap();
+            assert!(super::exists("ai_key_gemini", d.path()));
+            assert_eq!(super::get("ai_key_gemini", d.path()).as_deref(), Some("abc"));
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let m = std::fs::metadata(d.path().join("secrets/ai_key_gemini")).unwrap().permissions().mode();
+                assert_eq!(m & 0o777, 0o600);
+            }
+            super::delete("ai_key_gemini", d.path());
+            assert_eq!(super::get("ai_key_gemini", d.path()), None);
+            assert!(super::set("../x", "1", d.path()).is_err());
+        }
     }
 }
 

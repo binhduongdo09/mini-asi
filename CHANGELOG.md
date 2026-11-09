@@ -1,5 +1,36 @@
 # Nhật ký thay đổi
 
+## 0.17.0 (11/2026) — hết hỏi Keychain, nghe lại & sửa biên bản họp, cổ phiếu & cảnh báo giá, popup luôn nằm trên
+**Không còn bị hỏi quyền Keychain**
+- API key / token (ChatGPT, Gemini, Claude, Threads…) lưu trong file riêng của app (`secrets/`, quyền 600 — chỉ tài khoản
+  của bạn đọc được, không vào bản sao lưu). Key cũ trong Keychain được chuyển ra file **một lần duy nhất** (có thể bị hỏi lần
+  cuối), sau đó không bao giờ đụng Keychain nữa. Màn Cài đặt chỉ kiểm tra "đã có key" mà không đọc key.
+- Nguyên nhân cũ: app tự đóng gói chưa có chữ ký cố định → mỗi bản build macOS coi là app khác, hỏi lại Keychain.
+
+**Họp**
+- **Nghe lại**: trình phát (−15 / +15 giây, 1× / 1.5× / 2×, Space), bấm một dòng toàn văn để nghe đúng đoạn đó, dòng đang
+  phát được tô sáng. Sau khi họp ghi âm được nén sang m4a (~14 MB/giờ, `afconvert`). Phát qua asset protocol của Tauri.
+- **Ghi chú trong lúc họp, tuỳ sức máy** (Cài đặt › Ghi cuộc họp: Tự động / Luôn / Sau khi họp): máy có Apple Intelligence,
+  chip Apple, đủ pin → cứ ~5 phút lời nói Asi ghi chú phần đó ngay (hiện trong thẻ đang ghi); hết họp biên bản gộp từ các ghi
+  chú nên xong gần như ngay. Máy yếu / pin yếu / Apple Intelligence lỗi / chuyển chữ bị dồn → chỉ tóm tắt sau khi họp.
+- **Thư mục "Biên bản họp"** trong tab Ghi chú: biên bản tự lưu (1 ghi chú / cuộc họp, tự cập nhật khi tóm tắt lại hoặc sửa),
+  có nút **Nghe lại** mở cuộc họp; trong cuộc họp có nút mở ghi chú biên bản.
+- **Sửa** biên bản (tóm tắt / quyết định / việc cần làm, ⌘S để lưu) và từng dòng toàn văn (để trống = xoá).
+- **Chuyển ý quan trọng** (mỗi ý trong biên bản, ghi chú trong lúc họp, mỗi dòng toàn văn) thành **Việc**, **Lịch** (bảng tạo
+  sự kiện: sửa giờ, chọn lịch iCloud / Google) hoặc **Ghi chú** (thư mục Biên bản họp).
+
+**Cổ phiếu & cảnh báo giá** (`stocks.rs`, `commands/stocks.rs`)
+- Hỏi "giá FPT", "HPG với VNM thế nào", "VN-Index hôm nay" → giá khớp mới nhất, thay đổi, cao / thấp / tham chiếu / khối lượng.
+  Nguồn: DNSE Entrade (miễn phí, không cần key, nến 1 phút trong phiên). (Thư viện quantvn cần API key nên không dùng.)
+- "Báo cho tôi khi FPT vượt 100k hoặc giảm dưới 50k" → 2 cảnh báo; Asi kiểm tra mỗi phút trong giờ giao dịch (9:00–15:00,
+  thứ 2–6), chạm ngưỡng thì báo (thông báo macOS + tai thỏ, nút Xem giá), mỗi cảnh báo báo 1 lần. "Xem cảnh báo giá",
+  "Huỷ cảnh báo giá FPT".
+
+**Popup luôn nằm trên tai thỏ**
+- Quản lý tầng cửa sổ tập trung (`window.rs`): hộp thoại quyền, chọn file / thư mục, AirDrop, quyền ghi âm thanh hệ thống,
+  quyền Lịch… → tai thỏ thu gọn & hạ tầng trong lúc popup hiện (đếm lồng nhau; popup không báo lúc đóng thì hạ có thời hạn, chạm
+  lại tai thỏ là nâng ngay). Cửa sổ Cài đặt / Social khi đang được chọn thì nổi trên tai thỏ.
+
 ## 0.16.0 (11/2026) — ghi âm & biên bản cuộc họp
 **Tab Họp mới** (luôn có, sau Ghi chú)
 - Bấm "Ghi cuộc họp": thu **micro** (họp trực tiếp) + tuỳ chọn **âm thanh của máy** (giọng người khác trong Zoom / Meet /

@@ -37,6 +37,12 @@ pub struct Note {
     /// id bên app Ghi chú (Notes) của Apple
     #[serde(default)]
     pub ext_id: Option<String>,
+    /// Thư mục: "" = ghi chú thường, "meetings" = Biên bản họp
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub folder: String,
+    /// Cuộc họp gốc (để nghe lại)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub meeting: Option<String>,
 }
 
 /// Trạng thái đồng bộ với Apple
@@ -142,7 +148,7 @@ pub struct Settings {
     #[serde(default = "default_true")]
     pub apple_ai_enabled: bool,
     /// "Bộ não" của Asi khi hỏi đáp tự do: "apple" (Apple Intelligence, trên máy) | "openai" | "gemini" | "claude"
-    /// (API key của người dùng, lưu trong Keychain — xem llm.rs)
+    /// (API key của người dùng, lưu trong file riêng của app — xem threads::secret)
     pub ai_provider: String,
     /// Mô hình cho từng nhà cung cấp ("" = mặc định trong llm.rs)
     pub ai_model_openai: String,
@@ -164,6 +170,8 @@ pub struct Settings {
     /// Họp: tự tóm tắt khi dừng ghi
     #[serde(default = "default_true")]
     pub meeting_auto_summary: bool,
+    /// Họp: ghi chú trong lúc họp "auto" (theo sức máy) | "live" (luôn) | "after" (chỉ sau khi họp)
+    pub meeting_live: String,
 }
 
 fn default_true() -> bool {
@@ -253,6 +261,7 @@ impl Default for Settings {
             meeting_ai: "apple".into(),
             meeting_system_audio: true,
             meeting_auto_summary: true,
+            meeting_live: "auto".into(),
         }
     }
 }
@@ -378,7 +387,33 @@ impl Store {
                 return out;
             }
         }
-        let n = Note { id: self.id(), text, updated: now, pinned: false, ext_id: None };
+        let n = Note { id: self.id(), text, updated: now, pinned: false, ext_id: None, folder: String::new(), meeting: None };
+        self.notes.push(n.clone());
+        let _ = self.save_notes();
+        n
+    }
+
+    /// Ghi chú "Biên bản họp" của một cuộc họp: có rồi thì cập nhật, chưa có thì tạo trong thư mục meetings
+    pub fn upsert_meeting_note(&mut self, meeting: &str, id: Option<u64>, text: String) -> Note {
+        let now = now_ms();
+        if let Some(n) = self.notes.iter_mut().find(|n| Some(n.id) == id || n.meeting.as_deref() == Some(meeting) && n.folder == "meetings") {
+            n.text = text;
+            n.updated = now;
+            n.folder = "meetings".into();
+            n.meeting = Some(meeting.to_string());
+            let out = n.clone();
+            let _ = self.save_notes();
+            return out;
+        }
+        let n = Note { id: self.id(), text, updated: now, pinned: false, ext_id: None, folder: "meetings".into(), meeting: Some(meeting.to_string()) };
+        self.notes.push(n.clone());
+        let _ = self.save_notes();
+        n
+    }
+
+    /// Ghi chú mới trong thư mục Biên bản họp (một ý quan trọng lấy từ cuộc họp)
+    pub fn add_meeting_snippet(&mut self, meeting: &str, text: String) -> Note {
+        let n = Note { id: self.id(), text, updated: now_ms(), pinned: false, ext_id: None, folder: "meetings".into(), meeting: Some(meeting.to_string()) };
         self.notes.push(n.clone());
         let _ = self.save_notes();
         n

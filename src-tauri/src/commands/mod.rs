@@ -24,3 +24,4 @@ pub mod updater;
 pub mod capture;
 pub mod live;
 pub mod meeting;
+pub mod stocks;

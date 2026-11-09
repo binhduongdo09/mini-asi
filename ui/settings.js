@@ -152,7 +152,7 @@
         ? "Chạy ngay trên máy, không gửi dữ liệu đi. Mô hình trên máy nhỏ nên tiếng Việt có lúc chưa chuẩn — muốn trả lời hay hơn, chọn ChatGPT, Gemini hoặc Claude."
         : "Máy chưa dùng được Apple Intelligence (cần macOS 26, chip Apple, đã bật). Chọn ChatGPT, Gemini hoặc Claude với API key của bạn để hỏi đáp tự do.";
     } else {
-      rows.push(`<div class="srow"><div class="grow"><b>API key</b><span>${b.has_key ? "Đã lưu trong Keychain của máy" : `Chưa có — <button class="link inline-link" data-act="key-url" data-url="${esc(b.key_url)}">lấy key ${esc(b.name)}</button>`}</span></div>
+      rows.push(`<div class="srow"><div class="grow"><b>API key</b><span>${b.has_key ? "Đã lưu trên máy (chỉ tài khoản của bạn đọc được)" : `Chưa có — <button class="link inline-link" data-act="key-url" data-url="${esc(b.key_url)}">lấy key ${esc(b.name)}</button>`}</span></div>
         <input class="field" id="aiKey" type="password" style="width:200px" placeholder="${b.has_key ? "•••••••• (đã lưu)" : "Dán API key"}" />
         <button class="btn sm" data-act="key-save" data-p="${b.id}">Lưu</button>${b.has_key ? `<button class="link" data-act="key-del" data-p="${b.id}">Xoá</button>` : ""}</div>`);
       rows.push(row("Mô hình", `Mặc định ${esc(b.default_model)} · bấm Kiểm tra để tự chọn bản mới nhất`, `${txt("ai_model_" + b.id, 170).replace(`value="${esc(st["ai_model_" + b.id])}"`, `value="${esc(st["ai_model_" + b.id] || b.model)}"`)}<button class="btn sm" data-act="ai-test" data-p="${b.id}" ${b.has_key ? "" : "disabled"}>Kiểm tra</button>`));
@@ -167,15 +167,16 @@
       row("Tóm tắt biên bản bằng", "Apple Intelligence chạy trên máy, dùng được khi không có mạng. Gemini đọc trọn cuộc họp một lần (nội dung họp được gửi tới Google); Gemini lỗi thì tự dùng Apple", seg("meeting_ai", [["apple", "Apple Intelligence"], ["gemini", "Gemini"]], st.meeting_ai || "apple")),
     ];
     if (st.meeting_ai === "gemini" && g && (st.ai_provider || "apple") !== "gemini") {
-      rows.push(`<div class="srow"><div class="grow"><b>API key Gemini</b><span>${g.has_key ? "Đã lưu trong Keychain của máy" : `Chưa có — <button class="link inline-link" data-act="key-url" data-url="${esc(g.key_url)}">lấy key Gemini</button>`}</span></div>
+      rows.push(`<div class="srow"><div class="grow"><b>API key Gemini</b><span>${g.has_key ? "Đã lưu trên máy (chỉ tài khoản của bạn đọc được)" : `Chưa có — <button class="link inline-link" data-act="key-url" data-url="${esc(g.key_url)}">lấy key Gemini</button>`}</span></div>
         <input class="field" type="password" style="width:200px" placeholder="${g.has_key ? "•••••••• (đã lưu)" : "Dán API key"}" />
         <button class="btn sm" data-act="key-save" data-p="gemini">Lưu</button>${g.has_key ? `<button class="btn sm" data-act="ai-test" data-p="gemini">Kiểm tra</button>` : ""}</div>`);
     }
     rows.push(
-      row("Tự tóm tắt khi dừng ghi", "Tắt thì bấm Tóm tắt trong từng cuộc họp", sw("meeting_auto_summary", st.meeting_auto_summary !== false)),
+      row("Ghi chú trong lúc họp", "Tự động: máy có Apple Intelligence, chip Apple, đủ pin → mỗi ~5 phút ghi chú phần vừa nói; máy yếu → chỉ tóm tắt sau khi họp", seg("meeting_live", [["auto", "Tự động"], ["live", "Luôn"], ["after", "Sau khi họp"]], st.meeting_live || "auto")),
+      row("Tự tóm tắt khi dừng ghi", "Biên bản tự lưu vào Ghi chú › Biên bản họp. Tắt thì bấm Tóm tắt trong từng cuộc họp", sw("meeting_auto_summary", st.meeting_auto_summary !== false)),
       row("Thu cả âm thanh máy", "Giọng người khác trong Zoom / Meet / Teams, kể cả khi đeo tai nghe (macOS 14.6+, cần quyền Ghi âm thanh hệ thống)", sw("meeting_system_audio", st.meeting_system_audio !== false)),
     );
-    return group("Ghi cuộc họp", rows, "Chuyển chữ bằng nhận dạng giọng nói của Apple (ngay trên máy nếu máy hỗ trợ tiếng Việt, không thì qua máy chủ Apple). File ghi âm và biên bản chỉ lưu trên máy bạn.");
+    return group("Ghi cuộc họp", rows, "Chuyển chữ bằng nhận dạng giọng nói của Apple (ngay trên máy nếu máy hỗ trợ tiếng Việt, không thì qua máy chủ Apple). Ghi âm được nén sau khi họp (~14 MB/giờ) để nghe lại; mọi thứ chỉ lưu trên máy bạn.");
   }
   async function secAssistant() {
     [tts, ai, brains] = await Promise.all([api("tts_info").catch(() => null), api("apple_ai_status").catch(() => null), api("ai_info").catch(() => [])]);

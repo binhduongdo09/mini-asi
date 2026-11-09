@@ -274,14 +274,23 @@ pub(crate) struct CalendarView {
 
 /// Các lịch ghi được trên máy (iCloud, Google, Exchange…) + lịch đã chọn lần trước
 #[tauri::command]
-pub(crate) async fn calendar_list() -> Result<Vec<CalendarView>, String> {
-    blocking(|| {
+pub(crate) async fn calendar_list(app: AppHandle) -> Result<Vec<CalendarView>, String> {
+    // lần đầu macOS hỏi quyền Lịch → hạ tai thỏ để hộp thoại không bị che
+    let ask = needs_prompt(notch_native::perm::calendar());
+    if ask {
+        window_low(&app, true);
+    }
+    let r = blocking(|| {
         Ok(notch_native::calendar::calendars()?
             .into_iter()
             .map(|c| CalendarView { id: c.id, title: c.title, source: c.source, default: c.default })
             .collect())
     })
-    .await
+    .await;
+    if ask {
+        window_low(&app, false);
+    }
+    r
 }
 
 #[derive(Serialize)]
@@ -319,12 +328,20 @@ pub(crate) async fn capture_create(app: AppHandle, st: S<'_>, d: DraftView) -> R
             notes: d.notes.trim().to_string(),
             calendar_id: d.calendar_id.clone(),
         };
-        blocking(move || {
+        let ask = needs_prompt(notch_native::perm::calendar());
+        if ask {
+            window_low(&app, true);
+        }
+        let r = blocking(move || {
             notch_native::calendar::create_event_full(&ev)?;
             let _ = refresh_events(&st2);
             Ok(())
         })
-        .await?;
+        .await;
+        if ask {
+            window_low(&app, false);
+        }
+        r?;
         push_status(&app);
         return Ok(CaptureResult { task_id: None, event: true, message: format!("Đã thêm vào lịch: {title}") });
     }

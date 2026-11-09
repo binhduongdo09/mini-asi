@@ -37,7 +37,7 @@ pub(crate) fn file_info(paths: Vec<String>) -> Vec<FileInfo> {
 #[tauri::command]
 pub(crate) async fn pick_files(app: AppHandle) -> Vec<String> {
     use tauri_plugin_dialog::DialogExt;
-    apply_level(&app, 0);
+    window_low(&app, true);
     let a2 = app.clone();
     let res = tauri::async_runtime::spawn_blocking(move || {
         a2.dialog()
@@ -51,7 +51,7 @@ pub(crate) async fn pick_files(app: AppHandle) -> Vec<String> {
     })
     .await
     .unwrap_or_default();
-    apply_level(&app, normal_level(&app));
+    window_low(&app, false);
     res
 }
 
@@ -91,12 +91,7 @@ pub(crate) fn file_airdrop(app: AppHandle, paths: Vec<String>) -> Result<(), Str
         return Err("Chưa có file nào để gửi AirDrop".into());
     }
     // Hạ tạm tầng cửa sổ tai thỏ xuống mức nổi thường để hộp thoại AirDrop của macOS hiện lên trên cùng
-    apply_level(&app, 3);
-    let h = app.clone();
-    std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_secs(12));
-        apply_level(&h, normal_level(&h));
-    });
+    window_low_for(&app, 45); // bấm lại vào tai thỏ thì nâng lên ngay (popup_done)
     on_main(&app, move || notch_native::airdrop_files(&paths)).unwrap_or_else(|| Err("Không mở được AirDrop".into()))
 }
 

@@ -1,5 +1,5 @@
 //! "Bộ não" đám mây tuỳ chọn cho Asi: ChatGPT (OpenAI), Gemini (Google), Claude (Anthropic) — dùng API key
-//! của chính người dùng (lưu trong Keychain, không nằm trong file cài đặt / bản sao lưu).
+//! của chính người dùng (lưu trong file riêng của app, quyền 600 — không nằm trong file cài đặt / bản sao lưu).
 //!
 //! Mỗi lượt: gửi chỉ dẫn + lịch sử + câu hỏi, yêu cầu trả về JSON `{reply, action, argument}` (cùng dạng với
 //! Apple Intelligence — xem apple_ai.rs) để app biết có cần thêm việc / ghi chú… hay chỉ trả lời.
@@ -51,7 +51,7 @@ impl Provider {
             Self::Claude => "claude-haiku-4-5",
         }
     }
-    /// Tên mục trong Keychain
+    /// Tên file khoá (threads::secret)
     pub fn key_name(self) -> String {
         format!("ai_key_{}", self.id())
     }

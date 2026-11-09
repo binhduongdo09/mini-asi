@@ -643,3 +643,45 @@ body.mock:not(.disp-notch)::before { display: none; }
 .b-rec { position: absolute; top: 4px; right: 4px; width: 10px; height: 10px; box-shadow: 0 0 0 2px #000; }
 #rightWing .badge.rec { background: var(--red); color: #fff; animation: recglow 2s ease-in-out infinite; }
 @keyframes recglow { 50% { opacity: 0.75; } }
+
+/* Họp: nghe lại, ghi chú trong lúc họp, sửa & chuyển thành việc / lịch / ghi chú */
+.mt-player { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 14px; background: var(--surface); margin: 2px 0; }
+.mt-play { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: #fff; color: #000; flex: none; }
+.mt-play svg { width: 15px; height: 15px; }
+.mt-player .ib { font-size: 11px; font-weight: 700; color: var(--text-2); width: auto; padding: 0 5px; }
+.mt-player input[type="range"] { flex: 1; min-width: 60px; accent-color: #fff; }
+.mt-cur, .mt-dur { font-size: 11.5px; font-variant-numeric: tabular-nums; color: var(--text-2); flex: none; }
+.mt-player .seg button { padding: 0 7px; }
+.mt-items { display: flex; flex-direction: column; gap: 1px; }
+.mt-item { position: relative; display: flex; align-items: flex-start; gap: 8px; padding: 5px 8px 5px 22px; border-radius: 10px; font-size: 13px; line-height: 1.45; }
+.mt-item::before { content: ""; position: absolute; left: 10px; top: 12px; width: 4px; height: 4px; border-radius: 50%; background: var(--text-3); }
+.mt-item.act { padding-left: 8px; }
+.mt-item.act::before { display: none; }
+.mt-item:hover, .mt-line:hover, .mt-li:hover { background: var(--surface); }
+.mt-actl { display: flex; gap: 8px; align-items: flex-start; flex: 1; cursor: pointer; min-width: 0; }
+.mt-actl input { margin-top: 3px; accent-color: #fff; flex: none; }
+.mt-actl .grow { display: flex; flex-direction: column; gap: 1px; }
+.mt-actl .dim { font-size: 11.5px; }
+.mt-conv { display: none; gap: 2px; flex: none; align-items: center; }
+.mt-item:hover .mt-conv, .mt-line:hover .mt-conv, .mt-li:hover .mt-conv { display: inline-flex; }
+.mt-conv .ib.txt { font-size: 11px; height: 22px; padding: 0 6px; border-radius: 6px; background: var(--surface-2); color: var(--text); width: auto; }
+.mt-conv .ib.txt:hover { background: #fff; color: #000; }
+.mt-conv .ib:not(.txt) { width: 22px; height: 22px; }
+.mt-line { padding: 3px 6px; border-radius: 8px; cursor: pointer; }
+.mt-line.now { background: rgba(10, 132, 255, 0.16); }
+.mt-line.now .mt-at { color: #64b5ff; }
+.mt-line.editing { cursor: default; align-items: center; }
+.mt-line.editing .field { height: 28px; font-size: 12.5px; }
+.mt-livenote { display: flex; gap: 8px; padding: 2px 0; }
+.mt-livenote .grow { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.mt-li { display: flex; gap: 6px; align-items: flex-start; font-size: 12.5px; line-height: 1.45; padding: 2px 6px; border-radius: 8px; }
+.mt-li > .mt-conv { margin-left: auto; }
+.mt-li.dec { color: #d48cff; }
+.mt-li.act { color: #64b5ff; }
+.mt-edit { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+.mt-ed { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.mt-ed b { font-size: 12.5px; }
+.mt-ed .dim { font-size: 11px; }
+.mt-ed textarea.field { resize: vertical; font-size: 13px; line-height: 1.45; padding: 8px 10px; height: auto; }
+.n-folders { display: flex; width: 100%; margin-bottom: 6px; }
+.n-folders button { flex: 1; }

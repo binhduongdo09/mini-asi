@@ -116,7 +116,17 @@ pub(crate) async fn meeting_start(app: AppHandle, st: S<'_>, system: Option<bool
         let (app, dir, id, pending, locale) = (app.clone(), dir.clone(), id.clone(), pending.clone(), locale.clone());
         let st2 = st.inner().clone();
         let on_device = stt == "on-device";
-        std::thread::spawn(move || transcribe_loop(app, st2, dir, id, rx, pending, locale, on_device));
+        std::thread::spawn(move || {
+            // Máy đủ sức (Apple Intelligence sẵn sàng, chip Apple, đủ pin) → ghi chú ngay trong lúc họp
+            let live = live_capable(&st2).is_ok();
+            transcribe_loop(app, st2, dir, id, rx, pending, locale, on_device, live)
+        });
+    }
+    // Lần đầu thu âm thanh máy: macOS hỏi quyền "Ghi âm thanh hệ thống" (bất đồng bộ) → hạ tai thỏ một lúc
+    let sys_mark = dir.join(".system-audio-asked");
+    if system && !sys_mark.exists() {
+        let _ = std::fs::write(&sys_mark, b"");
+        window_low_for(&app, 25);
     }
     let audio = meeting::dir_of(&dir, &id).join("audio.wav");
     let (a1, s1) = (app.clone(), secs.clone());
@@ -150,8 +160,9 @@ pub(crate) async fn meeting_start(app: AppHandle, st: S<'_>, system: Option<bool
 }
 
 #[allow(clippy::too_many_arguments)]
-fn transcribe_loop(app: AppHandle, st: Arc<AppState>, dir: PathBuf, id: String, rx: mpsc::Receiver<Job>, pending: Arc<AtomicU32>, locale: String, on_device: bool) {
+fn transcribe_loop(app: AppHandle, st: Arc<AppState>, dir: PathBuf, id: String, rx: mpsc::Receiver<Job>, pending: Arc<AtomicU32>, locale: String, on_device: bool, mut live: bool) {
     let mdir = meeting::dir_of(&dir, &id);
+    let _ = app.emit("meeting-live-mode", serde_json::json!({ "id": id, "live": live }));
     while let Ok(job) = rx.recv() {
         match job {
             Job::Seg(seg) => {
@@ -200,15 +211,28 @@ fn transcribe_loop(app: AppHandle, st: Arc<AppState>, dir: PathBuf, id: String, 
                     }
                 });
                 let _ = app.emit("meeting-update", serde_json::json!({ "id": id, "lines": new_lines, "pending": left, "error": if failed { Some(err) } else { None } }));
+                // Ghi chú trong lúc họp: đủ ~5 phút lời nói chưa ghi chú + không bị dồn việc chuyển chữ
+                if live && left <= 1 {
+                    live = live_note_step(&app, &st, &dir, &id);
+                }
             }
             Job::Done => {
                 let _ = update(&dir, &id, |m| m.pending = 0);
+                // Nén file ghi âm (song song với tóm tắt) để nghe lại nhẹ hơn
+                {
+                    let (dir, id, app) = (dir.clone(), id.clone(), app.clone());
+                    std::thread::spawn(move || {
+                        if meeting::compress_audio(&dir, &id).is_ok() {
+                            let _ = app.emit("meeting-audio", &id);
+                        }
+                    });
+                }
                 let (auto, has_lines) = (st.store.lock().unwrap().settings.meeting_auto_summary, meeting::load(&dir, &id).map(|m| !m.lines.is_empty()).unwrap_or(false));
                 if auto && has_lines {
                     let _ = app.emit("meeting-progress", serde_json::json!({ "id": id, "text": "Đang tóm tắt…" }));
                     let a2 = app.clone();
                     let id2 = id.clone();
-                    let r = summarize(&st, &id, None, move |t| {
+                    let r = summarize(&app, &st, &id, None, true, move |t| {
                         let _ = a2.emit("meeting-progress", serde_json::json!({ "id": id2, "text": t }));
                     });
                     if let Err(e) = r {
@@ -258,15 +282,25 @@ pub(crate) struct MeetingFull {
     #[serde(flatten)]
     m: Meeting,
     has_audio: bool,
+    /// đường dẫn file ghi âm để giao diện phát lại (qua asset protocol); trống khi đang ghi
+    audio_path: Option<String>,
     recording: bool,
+    /// ghi chú trong lúc họp: có chạy được trên máy này không, và vì sao
+    live_ok: bool,
+    live_reason: String,
 }
 
 #[tauri::command]
-pub(crate) fn meeting_get(st: S, id: String) -> Result<MeetingFull, String> {
-    let m = meeting::load(&st.data_dir, &id)?;
-    let has_audio = meeting::dir_of(&st.data_dir, &id).join("audio.wav").exists();
-    let recording = session().lock().unwrap().as_ref().is_some_and(|s| s.id == id);
-    Ok(MeetingFull { m, has_audio, recording })
+pub(crate) async fn meeting_get(st: S<'_>, id: String) -> Result<MeetingFull, String> {
+    let st2 = st.inner().clone();
+    blocking(move || {
+        let m = meeting::load(&st2.data_dir, &id)?;
+        let recording = session().lock().unwrap().as_ref().is_some_and(|s| s.id == id);
+        let audio = if recording { None } else { meeting::audio_file(&st2.data_dir, &id) };
+        let (live_ok, live_reason) = if recording { match live_capable(&st2) { Ok(()) => (true, String::new()), Err(e) => (false, e) } } else { (!m.live.is_empty(), String::new()) };
+        Ok(MeetingFull { has_audio: audio.is_some(), audio_path: audio.map(|p| p.to_string_lossy().to_string()), m, recording, live_ok, live_reason })
+    })
+    .await
 }
 
 #[tauri::command]
@@ -294,7 +328,9 @@ pub(crate) fn meeting_delete(st: S, id: String, audio_only: Option<bool>) -> Res
     let d = meeting::dir_of(&st.data_dir, &id);
     let _g = file_lock().lock().unwrap();
     if audio_only.unwrap_or(false) {
-        std::fs::remove_file(d.join("audio.wav")).map_err(|e| e.to_string())
+        let _ = std::fs::remove_file(d.join("audio.m4a"));
+        let _ = std::fs::remove_file(d.join("audio.wav"));
+        Ok(())
     } else {
         std::fs::remove_dir_all(d).map_err(|e| e.to_string())
     }
@@ -305,10 +341,7 @@ pub(crate) fn meeting_reveal(st: S, id: String) -> Result<(), String> {
     if !meeting::valid_id(&id) {
         return Err("Mã cuộc họp không hợp lệ".into());
     }
-    let p = meeting::dir_of(&st.data_dir, &id).join("audio.wav");
-    if !p.exists() {
-        return Err("Không còn file ghi âm".into());
-    }
+    let p = meeting::audio_file(&st.data_dir, &id).ok_or("Không còn file ghi âm")?;
     files::reveal(&p);
     Ok(())
 }
@@ -332,7 +365,7 @@ const GEMINI_SYSTEM: &str = "Bạn là thư ký cuộc họp. Đầu vào là to
 Chỉ dựa vào nội dung cuộc họp, không bịa tên người, ngày tháng, con số.";
 
 /// Tóm tắt cuộc họp. `engine`: "apple" | "gemini" (None = theo Cài đặt). Gemini lỗi / chưa có key → tự dùng Apple Intelligence.
-pub(crate) fn summarize(st: &AppState, id: &str, engine: Option<&str>, progress: impl Fn(String)) -> Result<Summary, String> {
+pub(crate) fn summarize(app: &AppHandle, st: &AppState, id: &str, engine: Option<&str>, use_live: bool, progress: impl Fn(String)) -> Result<Summary, String> {
     let m = meeting::load(&st.data_dir, id)?;
     if m.lines.is_empty() {
         return Err("Chưa có nội dung để tóm tắt".into());
@@ -364,23 +397,96 @@ pub(crate) fn summarize(st: &AppState, id: &str, engine: Option<&str>, progress:
     }
     let mut s = match result {
         Some(s) => s,
-        None => summarize_apple(st, &m.lines, &progress).map_err(|e| if note.is_empty() { e } else { format!("{note} Apple Intelligence cũng lỗi: {e}") })?,
+        None => {
+            // Đã ghi chú trong lúc họp → chỉ tóm tắt phần còn lại rồi gộp (xong gần như ngay)
+            let (done, from): (Vec<Summary>, usize) = if use_live && m.noted <= m.lines.len() { (m.live.iter().map(|l| l.summary.clone()).collect(), m.noted) } else { (vec![], 0) };
+            summarize_apple(st, &m.lines[from..], done, &progress).map_err(|e| if note.is_empty() { e } else { format!("{note} Apple Intelligence cũng lỗi: {e}") })?
+        }
     };
     s.note = note;
     s.at = now_ms();
     let out = s.clone();
-    update(&st.data_dir, id, move |m| m.summary = Some(s))?;
+    let m = update(&st.data_dir, id, move |m| m.summary = Some(s))?;
+    save_meeting_note(app, st, &m);
     Ok(out)
 }
 
+/// Lưu / cập nhật biên bản vào thư mục "Biên bản họp" của tab Ghi chú
+pub(crate) fn save_meeting_note(app: &AppHandle, st: &AppState, m: &Meeting) {
+    if m.summary.is_none() {
+        return;
+    }
+    let text = meeting::to_note_text(m, false);
+    let n = st.store.lock().unwrap().upsert_meeting_note(&m.id, m.note_id, text);
+    if m.note_id != Some(n.id) {
+        let _ = update(&st.data_dir, &m.id, |x| x.note_id = Some(n.id));
+    }
+    kick_sync(app);
+    let _ = app.emit("notes-changed", ());
+}
+
+/// Máy có đủ sức ghi chú trong lúc họp không (Ok) hoặc lý do (Err)
+pub(crate) fn live_capable(st: &AppState) -> Result<(), String> {
+    let mode = st.store.lock().unwrap().settings.meeting_live.clone();
+    if mode == "after" {
+        return Err("Đã chọn chỉ tóm tắt sau khi họp".into());
+    }
+    if !apple_ai::status(&st.data_dir).available {
+        return Err("Máy chưa dùng được Apple Intelligence".into());
+    }
+    if mode == "live" {
+        return Ok(());
+    }
+    if !cfg!(target_arch = "aarch64") {
+        return Err("Máy chip Intel — ghi chú sau khi họp cho nhẹ máy".into());
+    }
+    let sys = assistant::sysinfo();
+    if sys.battery_pct.is_some_and(|b| b < 25) && sys.charging != Some(true) {
+        return Err("Pin yếu — ghi chú sau khi họp".into());
+    }
+    Ok(())
+}
+
+/// Một bước ghi chú trong lúc họp. Trả về false nếu nên ngừng ghi chú trực tiếp (máy yếu / Apple Intelligence lỗi).
+fn live_note_step(app: &AppHandle, st: &AppState, dir: &std::path::Path, id: &str) -> bool {
+    let Ok(m) = meeting::load(dir, id) else { return true };
+    let Some((a, b)) = meeting::next_live_chunk(&m.lines, m.noted, 2200, 2600) else { return true };
+    let sys = assistant::sysinfo();
+    if st.store.lock().unwrap().settings.meeting_live == "auto" && sys.battery_pct.is_some_and(|p| p < 20) && sys.charging != Some(true) {
+        let _ = app.emit("meeting-live-mode", serde_json::json!({ "id": id, "live": false, "reason": "Pin yếu — phần còn lại sẽ tóm tắt sau khi họp" }));
+        return false;
+    }
+    let text = meeting::transcript_text(&m.lines[a..b]);
+    match apple_ai::ask(&st.data_dir, APPLE_SYSTEM, &format!("Đoạn ghi chép:\n{text}"), false) {
+        Ok(t) => {
+            let s = meeting::parse_summary_text(&t.reply);
+            if s.overview.is_empty() && s.actions.is_empty() && s.decisions.is_empty() {
+                return true; // lần sau thử lại cùng khúc (dài hơn)
+            }
+            let note = meeting::LiveNote { from: m.lines[a].at, to: m.lines[b - 1].at, summary: s };
+            let n2 = note.clone();
+            let _ = update(dir, id, move |m| {
+                m.live.push(n2);
+                m.noted = b;
+            });
+            let _ = app.emit("meeting-live", serde_json::json!({ "id": id, "note": note }));
+            true
+        }
+        Err(e) => {
+            let _ = app.emit("meeting-live-mode", serde_json::json!({ "id": id, "live": false, "reason": format!("Apple Intelligence: {e} — sẽ tóm tắt sau khi họp") }));
+            false
+        }
+    }
+}
+
 /// Apple Intelligence chỉ đọc được ~4096 token mỗi lần → tóm tắt từng khúc ~2200 ký tự rồi gộp
-fn summarize_apple(st: &AppState, lines: &[Line], progress: &impl Fn(String)) -> Result<Summary, String> {
+fn summarize_apple(st: &AppState, lines: &[Line], done: Vec<Summary>, progress: &impl Fn(String)) -> Result<Summary, String> {
     let parts = meeting::chunks(lines, 2200);
-    let n = parts.len();
-    let mut got = vec![];
+    let n = parts.len() + done.len();
+    let mut got = done;
     let mut last_err = String::new();
     for (i, c) in parts.iter().enumerate() {
-        progress(if n > 1 { format!("Apple Intelligence đang tóm tắt phần {}/{n}…", i + 1) } else { "Apple Intelligence đang tóm tắt…".into() });
+        progress(if parts.len() > 1 { format!("Apple Intelligence đang tóm tắt phần {}/{}…", i + 1, parts.len()) } else { "Apple Intelligence đang tóm tắt…".into() });
         match apple_ai::ask(&st.data_dir, APPLE_SYSTEM, &format!("Đoạn ghi chép:\n{c}"), false) {
             Ok(t) => {
                 let s = meeting::parse_summary_text(&t.reply);
@@ -414,7 +520,8 @@ pub(crate) async fn meeting_summarize(app: AppHandle, st: S<'_>, id: String, eng
     let st2 = st.inner().clone();
     blocking(move || {
         let (a, i) = (app.clone(), id.clone());
-        summarize(&st2, &id, engine.as_deref(), move |t| {
+        let app = app.clone();
+        summarize(&app, &st2, &id, engine.as_deref(), false, move |t| {
             let _ = a.emit("meeting-progress", serde_json::json!({ "id": i, "text": t }));
         })
     })
@@ -454,13 +561,71 @@ pub(crate) fn meeting_add_tasks(app: AppHandle, st: S, id: String, items: Vec<us
     Ok(n)
 }
 
-/// Lưu biên bản (kèm toàn văn) vào Ghi chú
+/// Mở ghi chú biên bản của cuộc họp (tạo nếu chưa có) — trả về id ghi chú để tab Ghi chú mở ra
 #[tauri::command]
-pub(crate) fn meeting_to_note(app: AppHandle, st: S, id: String) -> Result<store::Note, String> {
+pub(crate) fn meeting_to_note(app: AppHandle, st: S, id: String) -> Result<u64, String> {
     let m = meeting::load(&st.data_dir, &id)?;
-    let n = st.store.lock().unwrap().upsert_note(None, meeting::to_markdown(&m, true));
+    if m.summary.is_none() {
+        // chưa có biên bản → lưu toàn văn
+        let text = meeting::to_note_text(&m, true);
+        let n = st.store.lock().unwrap().upsert_meeting_note(&m.id, m.note_id, text);
+        let _ = update(&st.data_dir, &id, |x| x.note_id = Some(n.id));
+        kick_sync(&app);
+        return Ok(n.id);
+    }
+    save_meeting_note(&app, &st, &m);
+    meeting::load(&st.data_dir, &id)?.note_id.ok_or_else(|| "Không tạo được ghi chú".into())
+}
+
+/// Sửa biên bản (tóm tắt / quyết định / việc cần làm) — cập nhật luôn ghi chú biên bản
+#[tauri::command]
+pub(crate) fn meeting_update_summary(app: AppHandle, st: S, id: String, summary: Summary) -> Result<Summary, String> {
+    let clean = |v: Vec<String>| v.into_iter().map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect::<Vec<_>>();
+    let m = update(&st.data_dir, &id, |m| {
+        let old = m.summary.take().unwrap_or_default();
+        m.summary = Some(Summary {
+            overview: clean(summary.overview.clone()),
+            decisions: clean(summary.decisions.clone()),
+            actions: summary.actions.iter().filter(|a| !a.task.trim().is_empty()).map(|a| meeting::ActionItem { task: a.task.trim().into(), owner: a.owner.trim().into(), due: a.due.trim().into() }).collect(),
+            engine: if old.engine.is_empty() { "Bạn tự viết".into() } else if old.engine.ends_with("· đã sửa") { old.engine } else { format!("{} · đã sửa", old.engine) },
+            at: now_ms(),
+            note: String::new(),
+        });
+    })?;
+    save_meeting_note(&app, &st, &m);
+    Ok(m.summary.unwrap_or_default())
+}
+
+/// Sửa một dòng toàn văn (nhận dạng sai chính tả…); để trống = xoá dòng
+#[tauri::command]
+pub(crate) fn meeting_edit_line(st: S, id: String, index: usize, text: String) -> Result<(), String> {
+    update(&st.data_dir, &id, |m| {
+        if index < m.lines.len() {
+            if text.trim().is_empty() {
+                m.lines.remove(index);
+                if m.noted > index {
+                    m.noted -= 1;
+                }
+            } else {
+                m.lines[index].text = text.trim().to_string();
+            }
+        }
+    })
+    .map(|_| ())
+}
+
+/// Lưu một ý quan trọng của cuộc họp thành ghi chú riêng (thư mục Biên bản họp)
+#[tauri::command]
+pub(crate) fn meeting_item_note(app: AppHandle, st: S, id: String, text: String) -> Result<u64, String> {
+    let t = text.trim();
+    if t.is_empty() {
+        return Err("Nội dung trống".into());
+    }
+    let m = meeting::load(&st.data_dir, &id)?;
+    let n = st.store.lock().unwrap().add_meeting_snippet(&id, format!("{t}\n\nTừ cuộc họp: {}", m.title));
     kick_sync(&app);
-    Ok(n)
+    let _ = app.emit("notes-changed", ());
+    Ok(n.id)
 }
 
 /// Chép biên bản vào clipboard (Markdown)

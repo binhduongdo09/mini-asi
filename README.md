@@ -15,7 +15,8 @@ Bên trong là linh vật hai mắt biết chớp, cười, lo lắng, ngáp ng�
 | ✎ **Ghi chú** | Tự lưu, ghim, tìm, đọc cho Asi ghi. ⌘⇧Space mở nhanh. |
 | 📋 **Clipboard** | Nhớ chữ, ảnh, file đã chép. Bấm = chép lại, bấm đúp = dán luôn. Ghim = giữ mãi ở đầu danh sách (đặt tên được). ⌃⇧V. |
 | 📦 **Kéo thả file** | Thả vào **nửa trái** tai thỏ = AirDrop ngay; **nửa phải** = Nén ZIP, giải nén, nén/gộp PDF, chép file. |
-| 🎙 **Họp** | Ghi cuộc họp trực tiếp hoặc online (micro + âm thanh máy), chuyển chữ bằng Apple ngay trên máy, biên bản tóm tắt · quyết định · việc cần làm bằng Apple Intelligence (hoặc Gemini). |
+| 🎙 **Họp** | Ghi cuộc họp trực tiếp hoặc online (micro + âm thanh máy), chuyển chữ bằng Apple ngay trên máy, ghi chú trong lúc họp (máy đủ sức), biên bản sửa được, chuyển ý quan trọng thành việc / lịch / ghi chú, nghe lại ghi âm. |
+| 📈 **Cổ phiếu** | "Giá FPT", "VN-Index hôm nay"; "báo cho tôi khi FPT vượt 100k hoặc giảm dưới 50k" — Asi báo khi chạm ngưỡng trong giờ giao dịch. |
 | 🗓 **Thả → việc / lịch** | Kéo chữ, tin nhắn, link, ảnh, ảnh chụp màn hình, danh bạ vào tai thỏ → Asi đề xuất việc hoặc sự kiện (đọc cả chữ trong ảnh). Sự kiện vào lịch iCloud hoặc Google (tài khoản Google thêm trong Cài đặt hệ thống › Tài khoản Internet). |
 
 | Mô-đun (bật/tắt trong Cài đặt › Tính năng) | |
@@ -109,7 +110,7 @@ Token dài hạn có hạn 60 ngày; Mini-Asi tự gia hạn khi còn dưới 10
 ## Bộ não của Asi: Apple Intelligence, ChatGPT, Gemini, Claude
 
 Cài đặt › Asi & giọng nói › **Bộ não của Asi**: chọn Apple Intelligence (chạy trên máy, miễn phí) hoặc ChatGPT / Gemini /
-Claude bằng API key của bạn (lưu trong Keychain; phí tính vào tài khoản của bạn; tiếng Việt tốt hơn mô hình trên máy).
+Claude bằng API key của bạn (lưu trong file riêng của app trên máy bạn; phí tính vào tài khoản của bạn; tiếng Việt tốt hơn mô hình trên máy).
 Dưới mỗi câu trả lời có ghi nhỏ ai đã trả lời. Có thể tắt "Gửi kèm ngữ cảnh" để không gửi việc / ghi chú / clipboard lên mạng.
 
 Với Apple Intelligence (macOS 26 + chip Apple + đã bật): câu hỏi tự do đi qua mô hình trên máy (FoundationModels).

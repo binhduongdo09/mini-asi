@@ -22,7 +22,7 @@ Nền: nhắc nghỉ mắt/uống nước, đồng bộ Apple (Lời nhắc, Ghi
 - Giọng đọc: MỘT bộ đọc Piper (NghiTTS) chạy bằng Python riêng (cài qua `uv`) trong thư mục dữ liệu app — `src-tauri/src/tts.rs`.
   **Không** thêm lại giọng trực tuyến (edge-tts, Google Translate TTS…) hay giọng Linh của macOS cho tiếng Việt.
 - "Bộ não" của Asi (`settings.ai_provider`): Apple Intelligence (`apple_ai.rs` + `resources/asi_ai.swift`, biên dịch sẵn trong
-  `build.rs`) hoặc ChatGPT / Gemini / Claude (`llm.rs`, API key trong Keychain qua `threads::secret`, tên mục `ai_key_<id>`).
+  `build.rs`) hoặc ChatGPT / Gemini / Claude (`llm.rs`, API key trong file `secrets/<tên>` (quyền 600) qua `threads::secret` — **không** dùng Keychain, app chưa ký cố định nên macOS hỏi liên tục).
   **Không** để mô hình tự ghi dữ liệu khi người dùng chỉ hỏi — mọi hành động ghi phải qua `assistant::user_asks_for`.
   Luồng hỏi đáp: `commands/assistant.rs::asi_ask` — lệnh ngắn rõ ràng → luật (`assistant.rs`), còn lại → mô hình trả
   `{reply, action, argument}` → `reply_from_ai` thực hiện hành động bằng lệnh có sẵn. Thêm hành động mới: thêm vào
@@ -64,7 +64,9 @@ Kiểm tra biên dịch cho macOS từ Linux (không cần Mac): `RUSTC_BOOTSTRA
   trạng thái (đỏ = trễ, cam = cảnh báo, xanh lá = xong, tím = tập trung). Nút chính `.btn.primary` (trắng chữ đen), nút phụ `.btn`,
   nút chữ `.link`, nút biểu tượng `.ib`, ô nhập `.field`, hàng danh sách `.row` (nút phụ `.acts` chỉ hiện khi rê chuột).
   Chữ trên nút ≤ 2 từ; không lặp thông tin đã có ở chỗ khác; không thêm emoji vào nút.
-- Cửa sổ chính luôn ở tầng cao; khi macOS hiện hộp thoại xin quyền phải gọi `window_low(app, true)` rồi trả lại.
+- Cửa sổ chính luôn ở tầng cao. Mọi popup (hộp thoại quyền, chọn file, AirDrop…) phải nằm TRÊN tai thỏ: bọc bằng
+  `window_low(app, true)` … `window_low(app, false)` (có đếm), popup không biết lúc đóng dùng `window_low_for(app, giây)`;
+  cửa sổ riêng mới của app gọi `float_when_focused(&win)`.
 
 ## Ràng buộc quan trọng (đừng phá)
 
@@ -76,6 +78,8 @@ Kiểm tra biên dịch cho macOS từ Linux (không cần Mac): `RUSTC_BOOTSTRA
 - Thông tin trực tiếp (thời tiết, tin tức, tỷ giá, giá vàng, chứng khoán…) **không bao giờ** hỏi mô hình — đi qua `live.rs`
   (nguồn thật hoặc nút "Xem trên web"). Apple Intelligence chỉ nhận lịch sử khi `assistant::is_follow_up`; câu trả lời lặp
   bị chặn bằng `assistant::is_repeat`.
+- Giá cổ phiếu / chỉ số: chỉ từ nguồn thật (`stocks.rs`, DNSE Entrade), không hỏi mô hình. Cảnh báo giá chỉ đặt khi người
+  dùng nói rõ ("báo cho tôi khi…"), báo 1 lần rồi thôi.
 - Ghi cuộc họp: chỉ ghi khi người dùng bấm (không tự ghi); biên bản/âm thanh chỉ lưu trên máy; chỉ gửi toàn văn lên Gemini
   khi người dùng chọn Gemini. Việc cần làm trong biên bản chỉ vào tab Việc khi người dùng tick & bấm thêm.
 - Thả nội dung → việc/lịch: luôn để người dùng xem & bấm tạo, không tự tạo. Ảnh chỉ đọc bằng Vision trên máy; chỉ chữ đọc được

@@ -154,7 +154,7 @@ pub(crate) fn threads_view(st: &AppState) -> ThreadsView {
     let s = st.store.lock().unwrap();
     ThreadsView {
         connected: threads_token(st).is_some(),
-        has_app: !s.settings.threads_app_id.is_empty() && threads::secret::get(SECRET_KEY, &st.data_dir).is_some(),
+        has_app: !s.settings.threads_app_id.is_empty() && threads::secret::exists(SECRET_KEY, &st.data_dir),
         app_id: s.settings.threads_app_id.clone(),
         redirect: s.settings.threads_redirect.clone(),
         notify: s.settings.threads_notify,
@@ -392,7 +392,7 @@ pub(crate) fn open_mobile_window(app: &AppHandle, st: &AppState, n: &'static cra
         }
         _ => geo.screen_x + (geo.screen_width - w) / 2.0,
     };
-    tauri::WebviewWindowBuilder::new(app, &label, tauri::WebviewUrl::External(target.parse().map_err(|e| format!("{e}"))?))
+    let win = tauri::WebviewWindowBuilder::new(app, &label, tauri::WebviewUrl::External(target.parse().map_err(|e| format!("{e}"))?))
         .title(format!("{} · Mini-Asi", n.name))
         .inner_size(w, h)
         .min_inner_size(360.0, 480.0)
@@ -414,6 +414,7 @@ pub(crate) fn open_mobile_window(app: &AppHandle, st: &AppState, n: &'static cra
         })
         .build()
         .map_err(|e| format!("Không mở được cửa sổ {}: {e}", n.name))?;
+    float_when_focused(&win);
     bring_front(app, label);
     Ok(())
 }

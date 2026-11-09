@@ -212,13 +212,17 @@
     });
 
     // ═════════ GHI CHÚ ═════════
-    let notes = [], noteId = null, noteQuery = "";
+    let notes = [], noteId = null, noteQuery = "", noteFolder = "";
+    const inFolder = (n) => (n.folder || "") === noteFolder;
     async function viewNotes() {
       notes = await api("list_notes");
-      if (noteId == null && notes.length) noteId = notes[0].id;
+      if (noteId != null && !notes.some((n) => n.id === noteId && inFolder(n))) noteId = null;
+      if (noteId == null) { const first = notes.find(inFolder); if (first) noteId = first.id; }
       const cur = notes.find((n) => n.id === noteId);
+      const nMeet = notes.filter((n) => n.folder === "meetings").length;
       view.innerHTML = `<div class="notes">
         <aside class="n-side">
+          ${nMeet || noteFolder ? `<div class="seg n-folders"><button data-nf="" class="${noteFolder ? "" : "on"}">Ghi chú</button><button data-nf="meetings" class="${noteFolder === "meetings" ? "on" : ""}">Biên bản họp${nMeet ? ` ${nMeet}` : ""}</button></div>` : ""}
           <div class="n-search">${I.search}<input class="field" id="noteSearch" placeholder="Tìm" value="${esc(noteQuery)}" /><button class="ib" data-n="new" title="Ghi chú mới (⌘N)">${I.plus}</button></div>
           <div class="n-list" id="noteItems"></div>
         </aside>
@@ -227,6 +231,7 @@
           <div class="n-foot">
             ${micBtn("noteMic", "Nói để ghi")}
             <span class="dim grow" id="noteState">${cur ? "Đã lưu " + fmtAgo(cur.updated) : ""}</span>
+            ${cur && cur.meeting ? `<button class="btn sm" data-n="meet" title="Mở cuộc họp: nghe lại ghi âm, xem toàn văn">${I.play}Nghe lại</button>` : ""}
             <span id="noteActs" class="${cur ? "" : "hide"}">
               <button class="ib ${cur && cur.pinned ? "on" : ""}" data-n="pin" title="Ghim lên đầu">${I.pin}</button>
               <button class="ib" data-n="copy" title="Sao chép">${I.copy}</button>
@@ -264,7 +269,7 @@
     }
     function drawNoteItems() {
       const q = noteQuery.trim().toLowerCase();
-      const list = notes.filter((n) => !q || n.text.toLowerCase().includes(q));
+      const list = notes.filter((n) => inFolder(n) && (!q || n.text.toLowerCase().includes(q)));
       $("#noteItems").innerHTML = list.length
         ? list.map((n) => {
             const [first, ...rest] = n.text.split("\n");
@@ -272,7 +277,7 @@
               <b>${n.pinned ? `<span class="pin">${I.pin}</span>` : ""}${esc(first.trim() || "Ghi chú trống")}</b>
               <span>${fmtAgo(n.updated)}${rest.join(" ").trim() ? " · " + esc(rest.join(" ").trim().slice(0, 40)) : ""}</span></button>`;
           }).join("")
-        : `<div class="empty sm">${q ? "Không tìm thấy" : "Chưa có ghi chú"}</div>`;
+        : `<div class="empty sm">${q ? "Không tìm thấy" : noteFolder === "meetings" ? "Chưa có biên bản họp — ghi cuộc họp ở tab Họp" : "Chưa có ghi chú"}</div>`;
     }
     function newNote() {
       noteId = null;
@@ -285,10 +290,13 @@
     }
     view.addEventListener("click", async (e) => {
       if (A.tab !== "notes") return;
+      const f = e.target.closest("[data-nf]");
+      if (f) { noteFolder = f.dataset.nf; noteId = null; return viewNotes(); }
       const b = e.target.closest("[data-n]");
       if (!b) return;
       const a = b.dataset.n;
       if (a === "open") { noteId = Number(b.dataset.id); viewNotes(); }
+      if (a === "meet") { const n = notes.find((x) => x.id === noteId); if (n && n.meeting && A.openMeeting) A.openMeeting(n.meeting); }
       if (a === "new") newNote();
       if (a === "pin") { await api("pin_note", { id: noteId }); viewNotes(); }
       if (a === "copy") { try { await navigator.clipboard.writeText($("#noteText").value); toast("Đã sao chép"); } catch { toast("Không sao chép được"); } }
@@ -417,6 +425,17 @@
     });
 
     Object.assign(A.views, { home: viewHome, tasks: viewTasks, notes: viewNotes, clean: viewClean });
+    /** Mở một ghi chú (vd. biên bản họp) ở tab Ghi chú */
+    A.openNote = async (id) => {
+      const all = await api("list_notes");
+      const n = all.find((x) => x.id === id);
+      noteFolder = n ? n.folder || "" : "";
+      noteId = id;
+      A.tab = "notes";
+      await A.setMode("expanded", { force: true });
+      viewNotes();
+    };
+    on("notes-changed", () => { if (A.tab === "notes" && A.mode === "expanded" && !A.typing()) viewNotes(); });
   }
   if (window.ASI) boot();
   else document.addEventListener("asi-ready", boot, { once: true });

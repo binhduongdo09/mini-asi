@@ -141,7 +141,7 @@ pub(crate) fn live_reply(st: &AppState, t: Topic, text: &str) -> Reply {
             _ => web_reply("Asi chưa lấy được bảng tỷ giá lúc này.".into(), "tỷ giá vietcombank hôm nay", "Vietcombank"),
         },
         Topic::Gold => web_reply("Asi chưa có nguồn giá vàng trực tiếp nên không đoán con số — bấm để xem giá SJC / nhẫn mới nhất.".into(), "giá vàng hôm nay", "Không có dữ liệu trực tiếp"),
-        Topic::Stock => web_reply("Asi chưa có dữ liệu chứng khoán trực tiếp nên không đoán con số — bấm để xem VN-Index mới nhất.".into(), "VN-Index hôm nay", "Không có dữ liệu trực tiếp"),
+        Topic::Stock => stock_reply(st, text).unwrap_or_else(|| web_reply("Asi chưa lấy được giá chứng khoán lúc này — bấm để xem VN-Index mới nhất.".into(), "VN-Index hôm nay", "DNSE Entrade")),
         Topic::Fuel => web_reply("Asi chưa có nguồn giá xăng dầu trực tiếp — bấm để xem giá mới nhất.".into(), "giá xăng hôm nay", "Không có dữ liệu trực tiếp"),
         Topic::Crypto => web_reply("Asi chưa có dữ liệu tiền số trực tiếp — bấm để xem giá mới nhất.".into(), &format!("{text} giá"), "Không có dữ liệu trực tiếp"),
         Topic::Market => {
@@ -149,7 +149,7 @@ pub(crate) fn live_reply(st: &AppState, t: Topic, text: &str) -> Reply {
             r.engine = "Lệnh cơ bản".into();
             r.act("Tỷ giá", "ask", "tỷ giá hôm nay")
                 .act("Giá vàng", "open_url", &live::search_url("giá vàng hôm nay"))
-                .act("Chứng khoán", "open_url", &live::search_url("VN-Index hôm nay"))
+                .act("Chứng khoán", "ask", "VN-Index hôm nay")
                 .act("Tin kinh doanh", "ask", "tin kinh doanh hôm nay")
         }
     }
