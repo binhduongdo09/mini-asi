@@ -2,323 +2,208 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mini-Asi — Trợ lý cho tai thỏ MacBook</title>
-  <meta name="description" content="Trợ lý desktop sống quanh tai thỏ MacBook: ghi âm và biên bản cuộc họp, quản lý công việc câu tự nhiên, trí tuệ nhân tạo on-device và dọn máy.">
-  
-  <meta property="og:type" content="website">
-  <meta property="og:url" content="https://binhduongdo09.github.io/mini-asi-web/">
-  <meta property="og:title" content="Mini-Asi — Trợ lý cho tai thỏ MacBook">
-  <meta property="og:description" content="Biên bản cuộc họp, quản lý công việc và trí tuệ nhân tạo ngay tại camera. Nhanh, bảo mật và thuần tiếng Việt.">
-  <meta property="og:image" content="assets/icon-1024.png">
-
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mini-Asi, trợ lý sống quanh tai thỏ MacBook</title>
+  <meta name="description" content="Mini-Asi đặt việc cần làm, biên bản họp, clipboard và trợ lý AI ngay dưới camera MacBook, chạy trên máy, nói tiếng Việt.">
+  <meta property="og:title" content="Mini-Asi, trợ lý sống quanh tai thỏ MacBook">
+  <meta property="og:description" content="Việc, họp, ghi chú và AI ngay dưới camera MacBook.">
+  <meta property="og:image" content="https://binhduongdo09.github.io/mini-asi-web/assets/icon-1024.png">
   <link rel="icon" type="image/png" href="assets/favicon.png">
   <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Wix+Madefor+Display:wght@500&family=Wix+Madefor+Text:wght@400;500;600&display=swap&subset=vietnamese" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- Navigation -->
-  <nav class="site-nav">
-    <div class="container nav-wrapper">
-      <a href="#" class="nav-brand" aria-label="Trang chủ Mini-Asi">
-        <img src="assets/icon.png" alt="" width="24" height="24" class="brand-icon">
+  <header class="nav" id="top">
+    <div class="container nav__row">
+      <a href="#top" class="wordmark" aria-label="Mini-Asi, về đầu trang">
+        <img src="assets/icon.png" alt="" width="28" height="28">
         <span>Mini-Asi</span>
       </a>
-
-      <div class="nav-menu">
-        <a href="#meeting" class="nav-link">Cuộc họp</a>
-        <a href="#tasks" class="nav-link">Công việc</a>
-        <a href="#intelligence" class="nav-link">Trí tuệ nhân tạo</a>
-        <a href="#specs" class="nav-link">Kỹ thuật</a>
-        <a href="#download" class="nav-link">Tải về</a>
-      </div>
-
-      <div class="nav-actions">
-        <a href="https://github.com/binhduongdo09/mini-asi" target="_blank" rel="noopener" class="btn btn-subtle">
-          GitHub
-        </a>
-        <a href="#download" class="btn btn-primary">
-          Tải về
-        </a>
-      </div>
-    </div>
-  </nav>
-
-  <!-- Hero Section -->
-  <header class="hero container">
-    <h1 class="hero-title">Trợ lý cho tai thỏ MacBook</h1>
-    <p class="hero-description">
-      Biên bản cuộc họp, quản lý công việc và trí tuệ nhân tạo ngay tại camera. Nhanh, bảo mật và thuần tiếng Việt.
-    </p>
-
-    <div class="hero-cta">
-      <a href="https://github.com/binhduongdo09/mini-asi/releases/latest" class="btn btn-primary hero-action-main">
-        Tải cho macOS (Universal)
-      </a>
-      <a href="#meeting" class="btn btn-subtle hero-action-main">
-        Xem tính năng
-      </a>
-    </div>
-
-    <div class="hero-meta">
-      <span>Phiên bản v0.17.0</span>
-      <span>Dung lượng 7.8 MB</span>
-      <span>Apple Silicon & Intel</span>
+      <nav class="nav__links" aria-label="Mục chính">
+        <a href="#tour">Tính năng</a>
+        <a href="#meet">Họp</a>
+        <a href="#needs">Yêu cầu</a>
+      </nav>
+      <a href="#download" class="btn btn--sm">Tải về</a>
     </div>
   </header>
 
-  <!-- Hardware Notch Showcase -->
-  <section class="container" aria-label="Giao diện mô phỏng">
-    <div class="notch-display-frame">
-      <div class="camera-hole"></div>
-
-      <!-- Menubar -->
-      <div class="frame-topbar">
-        <div class="menubar-left">
-          <span class="apple-mark"></span>
-          <span class="menubar-app">Mini-Asi</span>
-          <span>Tệp</span>
-          <span>Sửa</span>
-          <span>Xem</span>
-        </div>
-        <div>
-          <span>Th 2, 9 Th 11 &nbsp; 14:30</span>
-        </div>
+  <main>
+    <!-- Hero: ảnh sương chiều, chữ trên vùng sáng, sản phẩm trong kính -->
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero__bg" data-slot="hero" data-alt="phong cảnh lúc chạng vạng">
+        <img src="assets/vallee-brouillard-1920.jpg" width="1920" height="1254" alt="" fetchpriority="high">
       </div>
+      <div class="hero__scrim" aria-hidden="true"></div>
 
-      <!-- Notch Body -->
-      <div class="notch-element" id="notchElement">
-
-        <!-- Panel 1: Standby / Peek -->
-        <div class="notch-panel active" id="panelStandby">
-          <div class="notch-standby">
-            <div class="standby-left">
-              <div class="standby-mascot">
-                <span class="mascot-eye"></span>
-                <span class="mascot-eye"></span>
-              </div>
-              <span>Hôm nay còn 2 việc cần hoàn thành</span>
-            </div>
-            <div class="standby-right">
-              <span class="tag-urgent">15:00 Họp kế hoạch</span>
-            </div>
+      <div class="container hero__grid">
+        <div class="hero__text">
+          <h1 id="hero-title">Tai thỏ MacBook, giờ biết làm việc.</h1>
+          <p class="lead hero__lead">Việc, họp, clipboard và AI nằm ngay dưới camera.</p>
+          <div class="hero__actions">
+            <a href="https://github.com/binhduongdo09/mini-asi/releases/latest" class="btn">Tải cho Mac</a>
+            <a href="https://github.com/binhduongdo09/mini-asi" class="btn btn--ghost">Mã nguồn</a>
           </div>
+          <p class="hero__note">Miễn phí, macOS 13 trở lên, chip Apple và Intel.</p>
         </div>
 
-        <!-- Panel 2: Meeting Rec -->
-        <div class="notch-panel" id="panelMeeting">
-          <div class="meeting-ui">
-            <div class="meeting-bar">
-              <div class="meeting-rec">
-                <span class="rec-pulse"></span>
-                <span>Ghi âm cuộc họp</span>
-                <span class="rec-time" id="recTimer">04:38</span>
-              </div>
-              <span style="font-size: 10px; color: var(--ink-tertiary);">Micro + Zoom</span>
-            </div>
-            <div class="meeting-snippet">
-              <p><span class="snippet-speaker">Bạn:</span> Tiến độ bản build v0.17.0 đang đi đúng kế hoạch.</p>
-              <p><span class="snippet-speaker">Người khác:</span> Giao diện tối giản đã giải quyết hoàn toàn vấn đề thị giác.</p>
-            </div>
-            <div class="meeting-actions-list">
-              <div class="actions-label">Việc cần làm sau cuộc họp:</div>
-              <div>• Xuất bản website mới lên GitHub Pages trước 17:00</div>
-            </div>
+        <figure class="hero__shot glass">
+          <div class="shot" data-slot="peek" data-kind="product" data-alt="tai thỏ Mini-Asi khi rê chuột">
+            <img src="assets/screens/peek.png" width="920" height="448" alt="Tai thỏ Mini-Asi khi rê chuột: hai việc trễ, nhạc đang phát và bốn nút nhanh">
           </div>
-        </div>
-
-        <!-- Panel 3: Chat AI -->
-        <div class="notch-panel" id="panelChat">
-          <div class="chat-ui">
-            <div class="chat-bubble-user">
-              Chiều nay ở Hà Nội có mưa không và tôi có lịch gì tiếp theo?
-            </div>
-            <div class="chat-bubble-bot">
-              <p>Hà Nội chiều nay 26°C, trời tạnh ráo. Lịch tiếp theo là <strong>15:00: Họp kế hoạch</strong> và có 2 việc chưa hoàn thành.</p>
-              <span class="source-label">Apple Intelligence on-device & Lịch Apple</span>
-            </div>
-          </div>
-        </div>
-
+          <figcaption>Rê chuột lên tai thỏ: việc trễ, nhạc, micro, AirDrop.</figcaption>
+        </figure>
       </div>
+    </section>
 
-      <!-- Frame Body Switcher -->
-      <div class="frame-body">
-        <div class="switcher-pills" role="tablist" aria-label="Chế độ hiển thị tai thỏ">
-          <button class="pill-switch active" data-target="panelStandby" role="tab">Thu gọn</button>
-          <button class="pill-switch" data-target="panelMeeting" role="tab">Ghi âm cuộc họp</button>
-          <button class="pill-switch" data-target="panelChat" role="tab">Trợ lý on-device</button>
-        </div>
-      </div>
-    </div>
-  </section>
+    <!-- Switcher: danh sách có chấm bên trái, một khung sản phẩm đổi theo -->
+    <section class="tour" id="tour" aria-labelledby="tour-title">
+      <div class="container tour__grid">
+        <div class="tour__side">
+          <h2 id="tour-title">Bấm vào, mở ra.</h2>
+          <p class="lead muted">Một hòn đảo đen, mỗi tab một việc.</p>
 
-  <!-- Section 1: Meeting Intelligence -->
-  <section class="section container" id="meeting">
-    <h2 class="section-title">Ghi âm và lập biên bản cuộc họp</h2>
-    <p class="section-lead">
-      Thu âm thanh song song từ micro của bạn và ứng dụng đàm thoại trực tuyến. 
-      Tự động bóc tách hội thoại, tóm tắt ý chính và trích xuất danh sách công việc.
-    </p>
-
-    <div class="split-grid">
-      <div class="showcase-visual">
-        <div class="visual-header">
-          <span>Biên bản cuộc họp gần nhất</span>
-          <span>14 MB/giờ • m4a</span>
-        </div>
-
-        <div class="transcription-block">
-          <p><span class="speaker-tag">14:02 · Bạn:</span> Đã hoàn tất việc chuyển secret key ra file bảo mật 600 để tránh hỏi lại Keychain.</p>
-          <p><span class="speaker-tag">14:04 · Người khác:</span> Tính năng tra cứu cổ phiếu DNSE Entrade phản hồi rất nhanh.</p>
-        </div>
-
-        <div class="task-extract-card">
-          <h4>Việc cần làm được AI phát hiện:</h4>
-          <ul class="task-checklist">
-            <li class="checklist-row">
-              <span class="check-box checked">✓</span>
-              <span>Kiểm tra bản build Universal trên máy Intel (Đã xong)</span>
+          <ul class="tabs" role="tablist" aria-label="Các tab của Mini-Asi">
+            <li role="presentation">
+              <button type="button" class="tab" role="tab" aria-selected="true" aria-controls="pane" data-shot="asi">
+                <span class="tab__name">Hỏi Asi</span>
+                <span class="tab__line">Giá cổ phiếu, thời tiết, tin tức từ nguồn thật; còn lại hỏi Apple Intelligence.</span>
+              </button>
             </li>
-            <li class="checklist-row">
-              <span class="check-box"></span>
-              <span>Cập nhật tài liệu hướng dẫn phím tắt tai thỏ</span>
+            <li role="presentation">
+              <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="pane" data-shot="tasks">
+                <span class="tab__name">Việc</span>
+                <span class="tab__line">Gõ “mai 9h gọi khách”, Asi tự hiểu giờ và nhắc đúng lúc.</span>
+              </button>
+            </li>
+            <li role="presentation">
+              <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="pane" data-shot="capture">
+                <span class="tab__name">Thả vào tai thỏ</span>
+                <span class="tab__line">Kéo ảnh vé máy bay vào, Asi đọc chữ và đề xuất sự kiện lịch.</span>
+              </button>
+            </li>
+            <li role="presentation">
+              <button type="button" class="tab" role="tab" aria-selected="false" aria-controls="pane" data-shot="clips">
+                <span class="tab__name">Clipboard</span>
+                <span class="tab__line">Mục ghim giữ mãi, đặt tên được, ⌃⇧V để mở.</span>
+              </button>
             </li>
           </ul>
         </div>
-      </div>
 
-      <div class="capability-list">
-        <div class="capability-item">
-          <h3>Thu âm thanh hệ thống trực tiếp</h3>
-          <p>Ghi lại giọng người khác qua Zoom, Google Meet hoặc Microsoft Teams kể cả khi bạn đang đeo tai nghe.</p>
+        <figure class="pane glass" id="pane" role="tabpanel" aria-live="polite">
+          <div class="shot shot--tall" data-slot="tour" data-kind="product" data-alt="tab Mini-Asi đang chọn">
+            <img id="paneImg" src="assets/screens/asi.png" width="1400" height="1040" alt="Tab Asi trả lời giá cổ phiếu FPT từ DNSE Entrade" loading="lazy">
+          </div>
+        </figure>
+      </div>
+    </section>
+
+    <!-- Showcase: biên bản họp lớn, các dòng sự thật bên dưới -->
+    <section class="meet" id="meet" aria-labelledby="meet-title">
+      <div class="container">
+        <div class="meet__head">
+          <h2 id="meet-title">Họp xong, biên bản xong.</h2>
+          <p class="lead muted">Ghi micro và âm thanh Zoom, Meet, Teams. Chuyển chữ tiếng Việt ngay trên máy.</p>
         </div>
 
-        <div class="capability-item">
-          <h3>Nhận dạng tiếng Việt trên thiết bị</h3>
-          <p>Xử lý qua Apple Speech Engine ngay trên máy, không gửi âm thanh ra ngoài và tự động cắt đoạn ở các khoảng lặng.</p>
-        </div>
+        <div class="meet__stage">
+          <figure class="meet__main glass">
+            <div class="shot" data-slot="meet" data-kind="product" data-alt="biên bản cuộc họp">
+              <img src="assets/screens/meet.png" width="1400" height="1040" alt="Biên bản cuộc họp: trình phát, tóm tắt, quyết định và việc cần làm" loading="lazy">
+            </div>
+          </figure>
 
-        <div class="capability-item">
-          <h3>Trình phát nghe lại và biên tập</h3>
-          <p>Nghe lại âm thanh cuộc họp ở tốc độ 1×, 1.5× hoặc 2×. Bấm vào bất kỳ dòng nào để phát đúng thời điểm đó.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Section 2: Tasks & Natural Language -->
-  <section class="section container" id="tasks">
-    <h2 class="section-title">Quản lý việc bằng ngôn ngữ tự nhiên</h2>
-    <p class="section-lead">
-      Gõ câu tự nhiên không cần tuân theo cấu trúc cứng nhắc. Mini-Asi tự động trích xuất ngày, giờ, mức độ ưu tiên và đưa vào danh sách.
-    </p>
-
-    <div class="feature-matrix">
-      <div class="matrix-card">
-        <h3>Hiểu câu tiếng Việt</h3>
-        <p>Nhập "mai 15h gọi đối tác" hoặc "thứ 6 nộp báo cáo", ứng dụng tự đặt lịch nhắc chuẩn xác và đồng bộ hai chiều với Apple Reminders.</p>
-      </div>
-
-      <div class="matrix-card">
-        <h3>Kéo thả vào tai thỏ</h3>
-        <p>Thả ảnh chụp màn hình, liên kết hoặc đoạn văn bản vào tai thỏ. Apple Vision OCR trích xuất chữ và đề xuất tạo sự kiện lịch ngay.</p>
-      </div>
-
-      <div class="matrix-card">
-        <h3>Clipboard ghim vĩnh viễn</h3>
-        <p>Lưu lịch sử sao chép cả chữ lẫn ảnh. Mục ghim giữ nguyên vị trí ở đầu danh sách, hỗ trợ đặt tên gợi nhớ và tìm kiếm nhanh.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- Section 3: Technical Specifications & Privacy -->
-  <section class="section container" id="specs">
-    <h2 class="section-title">Kiến trúc và quyền riêng tư</h2>
-    <p class="section-lead">
-      Thiết kế theo nguyên tắc Local-First. Tất cả dữ liệu cá nhân, ghi chú và lịch sử âm thanh được lưu trữ hoàn toàn trên ổ đĩa máy tính của bạn.
-    </p>
-
-    <table class="specs-table">
-      <thead>
-        <tr>
-          <th>Hạng mục</th>
-          <th>Chi tiết kỹ thuật</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Nền tảng hỗ trợ</td>
-          <td>macOS 13 Ventura, macOS 14 Sonoma, macOS 15 Sequoia (Apple Silicon & Intel)</td>
-        </tr>
-        <tr>
-          <td>Dung lượng bộ nhớ</td>
-          <td>~7.8 MB bản tải về, chiếm dưới 40 MB RAM khi chạy nền</td>
-        </tr>
-        <tr>
-          <td>Bộ não trí tuệ nhân tạo</td>
-          <td>Apple Intelligence on-device (FoundationModels). Tùy chọn ChatGPT, Claude, Gemini qua API Key riêng</td>
-        </tr>
-        <tr>
-          <td>Bộ đọc giọng nói</td>
-          <td>Piper NghiTTS offline (giọng Mai Phương & Minh Quang), tự tắt tiến trình sau 5 phút rảnh</td>
-        </tr>
-        <tr>
-          <td>Vị trí lưu trữ dữ liệu</td>
-          <td><code>~/Library/Application Support/com.miniasi.app/</code> (không gửi lên máy chủ trung gian)</td>
-        </tr>
-      </tbody>
-    </table>
-  </section>
-
-  <!-- Section 4: Download Box -->
-  <section class="section container" id="download">
-    <div class="download-box">
-      <div class="download-info">
-        <h3>Tải Mini-Asi cho máy tính</h3>
-        <p>Miễn phí, không cần tài khoản, cài đặt trong 30 giây bằng cách kéo vào thư mục Applications.</p>
-
-        <div class="download-actions">
-          <a href="https://github.com/binhduongdo09/mini-asi/releases/latest" class="btn btn-primary" style="padding: 12px 24px; font-size: 14px;">
-            Tải bản macOS Universal (.dmg)
-          </a>
-          <span class="download-note">
-            Lần đầu mở ứng dụng: chuột phải vào Mini-Asi chọn Mở (Open), hoặc vào Cài đặt hệ thống › Quyền riêng tư & Bảo mật › Mở dù sao.
-          </span>
+          <dl class="facts">
+            <div class="fact">
+              <dt>Nghe lại</dt>
+              <dd>Bấm một dòng để phát đúng đoạn đó, 1×, 1,5× hoặc 2×.</dd>
+            </div>
+            <div class="fact">
+              <dt>Việc cần làm</dt>
+              <dd>Tick rồi thêm vào tab Việc, kèm người phụ trách và hạn.</dd>
+            </div>
+            <div class="fact">
+              <dt>Chỉ trên máy</dt>
+              <dd>Ghi âm nén m4a khoảng 14 MB mỗi giờ, không gửi đi đâu.</dd>
+            </div>
+          </dl>
         </div>
       </div>
+    </section>
 
-      <div class="other-builds">
-        <h4>Các phiên bản khác</h4>
-        <div class="build-link-row">
-          <span>Windows (x64)</span>
-          <a href="https://github.com/binhduongdo09/mini-asi/releases/latest">Tải .exe / .msi</a>
-        </div>
-        <div class="build-link-row">
-          <span>Linux</span>
-          <a href="https://github.com/binhduongdo09/mini-asi/releases/latest">Tải .deb / .AppImage</a>
-        </div>
-        <div class="build-link-row">
-          <span>Mã nguồn</span>
-          <a href="https://github.com/binhduongdo09/mini-asi" target="_blank" rel="noopener">GitHub Repository</a>
-        </div>
+    <!-- Trước và sau: bảng có hàng kẻ -->
+    <section class="compare" aria-labelledby="compare-title">
+      <div class="container">
+        <h2 id="compare-title">Bớt mở app, bớt chuyển cửa sổ.</h2>
+        <table class="table">
+          <thead>
+            <tr><th scope="col">Bạn cần</th><th scope="col">Trước đây</th><th scope="col">Với Mini-Asi</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Nhớ một việc</th><td>Mở Lời nhắc, chọn ngày, chọn giờ</td><td>Gõ một câu lên tai thỏ</td></tr>
+            <tr><th scope="row">Biên bản họp</th><td>Ghi tay trong lúc nghe</td><td>Bấm ghi, dừng, có tóm tắt</td></tr>
+            <tr><th scope="row">Dán lại số tài khoản</th><td>Tìm trong tin nhắn cũ</td><td>Mục ghim trong Clipboard</td></tr>
+            <tr><th scope="row">Gửi file sang iPhone</th><td>Mở Finder, chuột phải, Chia sẻ</td><td>Thả vào nửa trái tai thỏ</td></tr>
+          </tbody>
+        </table>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <!-- Footer -->
-  <footer class="site-footer">
-    <div class="container footer-content">
-      <span>Mini-Asi — Phát triển bởi Đỗ Bình Dương.</span>
-      <div class="footer-links">
-        <a href="https://github.com/binhduongdo09/mini-asi" target="_blank" rel="noopener">Mã nguồn</a>
-        <a href="https://github.com/binhduongdo09/mini-asi/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Nhật ký thay đổi</a>
-        <a href="https://github.com/binhduongdo09/mini-asi/issues" target="_blank" rel="noopener">Báo lỗi</a>
+    <!-- Yêu cầu: danh sách định nghĩa -->
+    <section class="needs" id="needs" aria-labelledby="needs-title">
+      <div class="container needs__grid">
+        <h2 id="needs-title">Cần gì để chạy.</h2>
+        <dl class="spec">
+          <div><dt>Máy</dt><dd>macOS 13 trở lên, chip Apple hoặc Intel. Máy không tai thỏ dùng tai thỏ ảo hoặc bong bóng.</dd></div>
+          <div><dt>Bộ não</dt><dd>Apple Intelligence trên macOS 26. Hoặc ChatGPT, Gemini, Claude bằng key của bạn.</dd></div>
+          <div><dt>Giọng đọc</dt><dd>Mai Phương hoặc Minh Quang, chạy trên máy, tải thêm khoảng 60 MB.</dd></div>
+          <div><dt>Dữ liệu</dt><dd>Lưu trong thư mục của app trên máy bạn. Sao lưu tuỳ chọn qua Google Drive hoặc iCloud.</dd></div>
+        </dl>
       </div>
+    </section>
+
+    <!-- Kết: tải về bên cạnh một màn hình cuối -->
+    <section class="close" id="download" aria-labelledby="close-title">
+      <div class="container close__grid">
+        <div class="close__text">
+          <h2 id="close-title">Tải Mini-Asi.</h2>
+          <p class="lead muted">Kéo vào Applications. Lần đầu mở: chuột phải, chọn Mở.</p>
+          <div class="hero__actions">
+            <a href="https://github.com/binhduongdo09/mini-asi/releases/latest" class="btn">Tải file .dmg</a>
+            <a href="https://github.com/binhduongdo09/mini-asi/releases/latest" class="link">Bản Windows và Linux</a>
+          </div>
+        </div>
+        <figure class="close__shot glass">
+          <div class="shot" data-slot="close" data-kind="product" data-alt="cửa sổ cài đặt Mini-Asi">
+            <img src="assets/screens/settings.png" width="1720" height="1240" alt="Cài đặt Mini-Asi: chọn bộ não Apple Intelligence, ChatGPT, Gemini hoặc Claude" loading="lazy">
+          </div>
+        </figure>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p class="footer__line">Làm ở Việt Nam, cho người dùng Mac nói tiếng Việt.</p>
+      <div class="footer__row">
+        <span>Đỗ Bình Dương</span>
+        <nav class="footer__links" aria-label="Liên kết cuối trang">
+          <a href="https://github.com/binhduongdo09/mini-asi">GitHub</a>
+          <a href="https://github.com/binhduongdo09/mini-asi/blob/main/CHANGELOG.md">Nhật ký thay đổi</a>
+          <a href="https://github.com/binhduongdo09/mini-asi/issues">Báo lỗi</a>
+        </nav>
+      </div>
+      <p class="footer__credit" data-credits>Ảnh: <a href="https://commons.wikimedia.org/wiki/File:Vallee-brouillard.jpg">Thomas Bresson</a> (CC BY 3.0, Wikimedia Commons).</p>
     </div>
   </footer>
 
   <script src="script.js"></script>
+  <script>window.hallmarkSlots = (m) => { for (const [k, v] of Object.entries(m)) { const s = document.querySelector(`[data-slot="${k}"]`); if (!s) continue; const im = new Image(); im.src = typeof v === 'string' ? v : v.src; im.alt = (typeof v === 'object' && v.alt) || s.dataset.alt || ''; s.querySelectorAll(':scope > img').forEach((o) => o.remove()); s.prepend(im); } };
+  document.querySelectorAll('[data-slot] img').forEach((i) => { if (i.complete && !i.naturalWidth) i.remove(); else i.addEventListener('error', () => i.remove(), { once: true }); });</script>
 </body>
 </html>

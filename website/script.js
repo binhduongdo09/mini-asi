@@ -1,52 +1,36 @@
-/**
- * Mini-Asi — Hardware Notch Preview Controller
- */
+/* Mini-Asi, trang giới thiệu: đổi ảnh sản phẩm theo tab đang chọn (bàn phím: mũi tên lên / xuống). */
+(() => {
+  const tabs = [...document.querySelectorAll(".tab")];
+  const pane = document.getElementById("pane");
+  const img = document.getElementById("paneImg");
+  if (!tabs.length || !pane || !img) return;
 
-document.addEventListener("DOMContentLoaded", () => {
-  const buttons = document.querySelectorAll(".pill-switch");
-  const panels = document.querySelectorAll(".notch-panel");
-  const recTimer = document.getElementById("recTimer");
+  const shots = {
+    asi: ["assets/screens/asi.png", "Tab Asi trả lời giá cổ phiếu FPT từ DNSE Entrade"],
+    tasks: ["assets/screens/tasks.png", "Tab Việc: lịch hôm nay, việc trễ hạn, việc hôm nay"],
+    capture: ["assets/screens/capture.png", "Bảng tạo sự kiện lịch từ ảnh vé máy bay vừa thả vào tai thỏ"],
+    clips: ["assets/screens/clips.png", "Tab Clipboard với các mục đã ghim"],
+  };
+  // tải trước để đổi tab không nháy
+  Object.values(shots).forEach(([src]) => { const i = new Image(); i.src = src; });
 
-  // Tab switching between notch states
-  buttons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const targetId = btn.getAttribute("data-target");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const select = (tab) => {
+    tabs.forEach((t) => t.setAttribute("aria-selected", String(t === tab)));
+    const [src, alt] = shots[tab.dataset.shot];
+    if (reduce) { img.src = src; img.alt = alt; return; }
+    pane.classList.add("is-swapping");
+    setTimeout(() => { img.src = src; img.alt = alt; pane.classList.remove("is-swapping"); }, 180);
+  };
 
-      buttons.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-
-      panels.forEach((p) => {
-        if (p.id === targetId) {
-          p.classList.add("active");
-        } else {
-          p.classList.remove("active");
-        }
-      });
+  tabs.forEach((tab, i) => {
+    tab.addEventListener("click", () => select(tab));
+    tab.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      e.preventDefault();
+      const next = tabs[(i + (e.key === "ArrowDown" ? 1 : -1) + tabs.length) % tabs.length];
+      next.focus();
+      select(next);
     });
   });
-
-  // Meeting timer simulation
-  let totalSeconds = 278; // 04:38
-  setInterval(() => {
-    totalSeconds++;
-    const minutes = Math.floor(totalSeconds / 60);
-    const seconds = totalSeconds % 60;
-    if (recTimer) {
-      recTimer.textContent = `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-    }
-  }, 1000);
-
-  // Smooth anchor scrolling
-  document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
-    anchor.addEventListener("click", function (e) {
-      const targetId = this.getAttribute("href");
-      if (targetId && targetId !== "#") {
-        const target = document.querySelector(targetId);
-        if (target) {
-          e.preventDefault();
-          target.scrollIntoView({ behavior: "smooth" });
-        }
-      }
-    });
-  });
-});
+})();
