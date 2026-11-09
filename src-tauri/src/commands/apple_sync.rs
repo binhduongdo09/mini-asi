@@ -75,6 +75,7 @@ pub(crate) fn sync_tasks(st: &AppState) -> Result<(usize, usize), String> {
                             notified: r.due.is_some_and(|d| d <= started),
                             updated: r.modified,
                             ext_id: Some(ext.clone()),
+                            notes: String::new(),
                         });
                         pulled += 1;
                     }

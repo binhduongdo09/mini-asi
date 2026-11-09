@@ -6,13 +6,13 @@
 ┌──── Cửa sổ "notch" (index.html, trong suốt, luôn ở trên) ────┐  ┌── Cửa sổ "settings" (settings.html) ──┐
 │ common.js · app.js: collapsed/peek/expanded/alert/listen/     │  │ common.js · settings.js               │
 │   reply/drop/sheet · views.js (Asi, Việc, Ghi chú, Dọn máy)   │  │ 10 mục, lưu bằng patch_settings       │
-│ extra.js (Clipboard, Nhật ký, Threads) · vocab.js · vnkey.js  │  └───────────────────────────────────────┘
+│ extra.js (Clipboard, Nhật ký, Social)  · vocab.js · vnkey.js  │  └───────────────────────────────────────┘
 └───────────────┬───────────────────────────────────────────────▲────────────────────┘
                 │ invoke("lệnh", args)                           │ emit("sự kiện", dữ liệu)
 ┌───────────────▼───────────────────────────────────────────────┴────────────────────┐
 │ src-tauri/src/lib.rs  run(): plugin, phím tắt, khay, cửa sổ, luồng nền, đăng ký lệnh │
 │ commands/*.rs  lớp lệnh mỏng theo tính năng ── gọi logic thuần ↓                     │
-│ store · nlp · sync · apple · clipboard · voice · journal · threads · backup · files  │
+│ store · nlp · sync · apple · clipboard · capture · social · voice · journal · threads · backup · files │
 │ health · assistant · tts · vocab · license                                           │
 │ crates/notch-native (API macOS) · crates/asi-clean (dọn máy)                         │
 └─────────────────────────────────────────────────────────────────────────────────────┘
@@ -90,16 +90,17 @@ Phiên âm/audio/ví dụ: Free Dictionary API (cache trong `vocab.json`). Chấ
 | clean | clean_scan, clean_run, clean_history, open_disk_settings |
 | health | health_break_done, health_snooze, focus_start, focus_stop |
 | settings | get_settings, save_settings, patch_settings, license_info, activate_license, deactivate_license, quit |
-| clipboard | clip_list, clip_copy, clip_merge, clip_copy_files, clip_pin, clip_delete, clip_clear, clip_image, clip_to_note, clip_to_task, accessibility_status, open_privacy |
+| clipboard | clip_list, clip_copy, clip_merge, clip_copy_files, clip_pin, clip_label, clip_delete, clip_clear, clip_image, clip_to_note, clip_to_task, accessibility_status, open_privacy |
 | voice_input | voice_start, voice_stop(lang, keep), voice_cancel |
 | apple_sync | sync_now, sync_info, get_events, add_to_calendar |
 | journal | journal_get, journal_save, journal_delete, journal_snooze, journal_skip_today, journal_make_tasks, journal_export |
-| threads | threads_get, threads_save_app, threads_login, threads_finish, threads_set_token, threads_logout, threads_replies, threads_post, threads_mark_read, threads_web, threads_embed, threads_close, threads_embed_ime, threads_embed_nav, open_link |
+| threads | threads_get, threads_save_app, threads_login, threads_finish, threads_set_token, threads_logout, threads_replies, threads_post, threads_mark_read, threads_web, social_open, social_open_list, threads_embed, threads_close, threads_embed_ime, threads_embed_nav, open_link |
 | permissions | permissions_status, request_permissions |
 | backup | backup_info, backup_pick_dir, backup_set, backup_now, device_sync_now, backup_restore |
 | assistant | asi_ask, asi_action, asi_reset, apple_ai_status, ai_info, ai_set_key, ai_test |
 | speech | asi_speak, asi_stop_speaking, tts_info, tts_install, tts_uninstall, tts_use |
 | vocab | vocab_batch, vocab_learned, vocab_check, vocab_play, vocab_play_mine |
+| capture | drop_read, capture_supports, capture_set_text, capture_from_clip, capture_analyze, capture_create, calendar_list |
 | status | get_status |
 
 ## Sự kiện backend → UI

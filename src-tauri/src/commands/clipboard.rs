@@ -64,6 +64,11 @@ pub(crate) fn clip_pin(st: S, id: u64) {
 }
 
 #[tauri::command]
+pub(crate) fn clip_label(st: S, id: u64, label: String) {
+    st.clips.lock().unwrap().set_label(id, &label);
+}
+
+#[tauri::command]
 pub(crate) fn clip_delete(st: S, id: u64) {
     let hash = st.clips.lock().unwrap().get(id).map(|c| c.hash);
     st.clips.lock().unwrap().delete(id);

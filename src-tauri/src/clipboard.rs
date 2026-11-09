@@ -37,6 +37,12 @@ pub struct Clip {
     pub pinned: bool,
     #[serde(default)]
     pub uses: u32,
+    /// Tên gợi nhớ cho mục ghim (vd. "STK công ty")
+    #[serde(default)]
+    pub label: Option<String>,
+    /// Lúc ghim — mục ghim xếp theo thứ tự ghim (cũ trước), không nhảy lên đầu khi chép lại
+    #[serde(default)]
+    pub pinned_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -59,6 +65,7 @@ pub struct ClipView {
     pub used: i64,
     pub pinned: bool,
     pub uses: u32,
+    pub label: Option<String>,
 }
 
 pub struct ClipStore {
@@ -119,7 +126,7 @@ impl ClipStore {
             self.save();
             return true;
         }
-        let mut clip = Clip { id, kind: ClipKind::Text, text: String::new(), files: vec![], image: None, bytes: 0, hash: h, created: now, used: now, pinned: false, uses: 0 };
+        let mut clip = Clip { id, kind: ClipKind::Text, text: String::new(), files: vec![], image: None, bytes: 0, hash: h, created: now, used: now, pinned: false, uses: 0, label: None, pinned_at: 0 };
         match data {
             ClipData::Text(t) => {
                 clip.bytes = t.len() as u64;
@@ -197,8 +204,27 @@ impl ClipStore {
     }
 
     pub fn toggle_pin(&mut self, id: u64) {
+        let now = chrono::Utc::now().timestamp_millis();
         if let Some(c) = self.items.iter_mut().find(|c| c.id == id) {
             c.pinned = !c.pinned;
+            c.pinned_at = if c.pinned { now } else { 0 };
+            if !c.pinned {
+                c.label = None;
+            }
+        }
+        self.save();
+    }
+
+    /// Đặt tên gợi nhớ cho mục (rỗng = bỏ tên). Đặt tên cũng tự ghim luôn.
+    pub fn set_label(&mut self, id: u64, label: &str) {
+        let now = chrono::Utc::now().timestamp_millis();
+        if let Some(c) = self.items.iter_mut().find(|c| c.id == id) {
+            let l: String = label.trim().chars().take(60).collect();
+            c.label = if l.is_empty() { None } else { Some(l) };
+            if c.label.is_some() && !c.pinned {
+                c.pinned = true;
+                c.pinned_at = now;
+            }
         }
         self.save();
     }
@@ -221,18 +247,32 @@ impl ClipStore {
         self.save();
     }
 
+    /// `kind`: all | text | image | files | pinned (theo thứ tự ghim) | history (chưa ghim)
     pub fn list(&self, query: &str, kind: &str) -> Vec<ClipView> {
         let q = crate::nlp::fold(query.trim());
-        self.items
+        let mut items: Vec<&Clip> = self
+            .items
             .iter()
             .filter(|c| match kind {
                 "text" => c.kind == ClipKind::Text,
                 "image" => c.kind == ClipKind::Image,
                 "files" => c.kind == ClipKind::Files,
                 "pinned" => c.pinned,
+                "history" => !c.pinned,
                 _ => true,
             })
-            .filter(|c| q.is_empty() || crate::nlp::fold(&c.text).contains(&q) || c.files.iter().any(|f| crate::nlp::fold(f).contains(&q)))
+            .filter(|c| {
+                q.is_empty()
+                    || crate::nlp::fold(&c.text).contains(&q)
+                    || c.label.as_deref().is_some_and(|l| crate::nlp::fold(l).contains(&q))
+                    || c.files.iter().any(|f| crate::nlp::fold(f).contains(&q))
+            })
+            .collect();
+        if kind == "pinned" {
+            items.sort_by_key(|c| (c.pinned_at, c.id));
+        }
+        items
+            .into_iter()
             .take(300)
             .map(|c| ClipView {
                 id: c.id,
@@ -253,6 +293,7 @@ impl ClipStore {
                 used: c.used,
                 pinned: c.pinned,
                 uses: c.uses,
+                label: c.label.clone(),
             })
             .collect()
     }
@@ -261,6 +302,27 @@ impl ClipStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pinned_kept_forever_ordered_and_labelled() {
+        let d = tempfile::tempdir().unwrap();
+        let mut s = ClipStore::open(d.path(), 10);
+        s.ingest(ClipData::Text("STK 0123".into()), 1, 1);
+        s.ingest(ClipData::Text("mẫu trả lời".into()), 2, 2);
+        s.set_label(1, "STK công ty");
+        s.toggle_pin(2);
+        for i in 0..30 {
+            s.ingest(ClipData::Text(format!("rác {i}")), 100 + i, 10 + i as i64);
+        }
+        s.clear();
+        let pinned = s.list("", "pinned");
+        assert_eq!(pinned.iter().map(|c| c.id).collect::<Vec<_>>(), vec![1, 2], "ghim còn mãi, theo thứ tự ghim");
+        assert_eq!(pinned[0].label.as_deref(), Some("STK công ty"));
+        assert_eq!(s.list("cong ty", "all").len(), 1, "tìm được theo tên");
+        assert!(s.list("", "history").is_empty());
+        let reopened = ClipStore::open(d.path(), 10);
+        assert_eq!(reopened.list("", "pinned").len(), 2, "vẫn còn sau khi mở lại app");
+    }
 
     #[test]
     fn dedupe_trim_pin_and_images() {

@@ -1,5 +1,31 @@
 # Nhật ký thay đổi
 
+## 0.15.0 (11/2026) — ghim clipboard mãi mãi, thả nội dung → việc / lịch, tab Social
+**Clipboard ghim**
+- Mục ghim nằm riêng ở đầu ("Đã ghim", theo thứ tự ghim), giữ mãi cho tới khi bỏ ghim — "Xoá lịch sử" và giới hạn số mục
+  không đụng tới. Đặt tên cho mục ghim (vd. "STK công ty"), tìm được theo tên; hiện số lần đã dùng. Lệnh mới `clip_label`.
+
+**Thả vào tai thỏ → tạo việc / sự kiện lịch**
+- Kéo **chữ đang chọn, tin nhắn trong app chat, link, ảnh trên web, ảnh chụp màn hình, danh bạ** vào tai thỏ → bảng
+  "Tạo việc · lịch": Asi đề xuất tiêu đề, ngày giờ, địa điểm, ghi chú, chọn Việc hay Lịch; sửa lại rồi bấm tạo.
+- File ảnh / .vcf / .txt kéo từ Finder: nửa phải → nút "Tạo việc · lịch". Trong Clipboard cũng có nút này cho chữ & ảnh.
+- Chữ trong ảnh đọc bằng Vision ngay trên máy (tiếng Việt + Anh), không gửi ảnh đi đâu.
+- Đề xuất tức thì bằng quy tắc trên máy (`capture.rs`, có test), rồi Apple Intelligence / AI đã chọn đọc lại kỹ hơn
+  (không ghi đè nếu bạn đã sửa — hiện nút "Dùng gợi ý AI").
+- Sự kiện vào lịch đã chọn (nhớ lựa chọn lần sau): iCloud, **Google** (tài khoản Google thêm trong Cài đặt hệ thống ›
+  Tài khoản Internet → tự đồng bộ lên Google Calendar), Exchange… Danh bạ có ngày sinh → sự kiện cả ngày "Sinh nhật …".
+- Việc có thêm ghi chú (nội dung gốc), hiện biểu tượng nhỏ trong danh sách.
+- Lệnh mới: `drop_read`, `capture_supports`, `capture_set_text`, `capture_from_clip`, `capture_analyze`, `capture_create`,
+  `calendar_list`; native: `clip::read_drag` (bảng kéo-thả macOS), `ocr::recognize_text`, `calendar::calendars`,
+  `calendar::create_event_full`.
+
+**Tab Threads → Social**
+- 7 ô: Facebook, Messenger, Instagram, Threads, X, TikTok, YouTube — bấm là mở cửa sổ dạng điện thoại ngay dưới tai thỏ
+  (mỗi mạng một cửa sổ, đăng nhập một lần là nhớ, bấm lần nữa để ẩn; chấm xanh = đang mở). Link ra ngoài → trình duyệt.
+- Threads API (đăng bài, trả lời, nhắc đến) vẫn ở thẻ "Threads nâng cao" trong tab Social.
+- Mã: `social.rs` (danh sách mạng + tên miền được phép, có test), lệnh `social_open`, `social_open_list`;
+  `threads_web` dùng chung `open_mobile_window`. Mô-đun vẫn mang id `threads` để giữ cài đặt cũ.
+
 ## 0.14.0 (11/2026) — hỏi đáp đúng nghĩa trợ lý, thêm ChatGPT / Gemini / Claude
 **Sửa lỗi "hỏi gì cũng bị đẩy vào Việc / Ghi chú"**
 - Mô hình chỉ được thêm việc / ghi chú / bật tập trung khi người dùng nhờ rõ ràng (có "nhắc", "thêm việc", "ghi chú", "lưu"…)

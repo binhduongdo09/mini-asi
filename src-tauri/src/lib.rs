@@ -10,6 +10,8 @@ pub mod apple;
 pub mod apple_ai;
 pub mod assistant;
 pub mod backup;
+pub mod capture;
+pub mod social;
 pub mod clipboard;
 pub mod files;
 pub mod health;
@@ -215,15 +217,16 @@ pub fn run() {
             health_break_done, health_snooze, focus_start, focus_stop,
             get_settings, save_settings, patch_settings, license_info, activate_license, deactivate_license, quit,
             get_status, asi_ask, asi_action, asi_reset, ai_info, ai_set_key, ai_test, asi_speak, asi_stop_speaking, apple_ai_status,
-            clip_list, clip_copy, clip_merge, clip_copy_files, clip_copy_image, clip_pin, clip_delete, clip_clear, clip_image, clip_to_note, clip_to_task,
+            clip_list, clip_copy, clip_merge, clip_copy_files, clip_copy_image, clip_pin, clip_label, clip_delete, clip_clear, clip_image, clip_to_note, clip_to_task,
             accessibility_status, open_privacy,
             voice_start, voice_stop, voice_cancel,
             sync_now, sync_info, get_events, add_to_calendar,
             journal_get, journal_save, journal_delete, journal_snooze, journal_skip_today, journal_make_tasks, journal_export,
-            threads_get, threads_save_app, threads_login, threads_finish, threads_set_token, threads_logout, threads_replies, threads_post, threads_mark_read, threads_web, open_link, threads_embed, threads_embed_ime, threads_embed_nav, threads_close, ime_info,
+            threads_get, threads_save_app, threads_login, threads_finish, threads_set_token, threads_logout, threads_replies, threads_post, threads_mark_read, threads_web, social_open, social_open_list, open_link, threads_embed, threads_embed_ime, threads_embed_nav, threads_close, ime_info,
             permissions_status, request_permissions,
             backup_info, backup_pick_dir, backup_set, backup_now, device_sync_now, backup_restore,
-            update_info, update_check, update_install
+            update_info, update_check, update_install,
+            drop_read, capture_supports, capture_set_text, capture_from_clip, capture_analyze, capture_create, calendar_list
         ])
         .run(tauri::generate_context!())
         .expect("Mini-Asi không khởi động được");

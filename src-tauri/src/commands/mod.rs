@@ -21,3 +21,4 @@ pub mod speech;
 pub mod vocab;
 pub mod status;
 pub mod updater;
+pub mod capture;

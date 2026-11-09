@@ -49,7 +49,7 @@
   const clampW = (w) => Math.round(Math.min(Math.max(w, Math.max(BASE_W + 60, 560)), MAX_W));
   const clampH = (h) => Math.round(Math.min(Math.max(h, 400), MAX_H));
   const EMBED_OK = geo.platform === "macos" || URL_PARAMS.has("embed");
-  const threadsInline = () => EMBED_OK && DISP !== "bubble" && tab === "threads" && (settings.threads_embed_beta || URL_PARAMS.has("embed")) && !window.__thApi;
+  const threadsInline = () => EMBED_OK && DISP !== "bubble" && tab === "threads" && (settings.threads_embed_beta || URL_PARAMS.has("embed")) && !!window.__thInline;
 
   // Mô-đun phụ (bật/tắt trong Cài đặt › Tính năng). Asi, Việc, Ghi chú, Clipboard luôn có.
   const DEFAULT_MODULES = ["threads", "clean", "focus"];
@@ -89,6 +89,7 @@
     SIZES.reply = [Math.max(BASE_W + 120, 500), BAR + 270];
     SIZES.drop = [Math.max(BASE_W + 120, 480), BAR + 112];
     SIZES.sheet = [Math.max(BASE_W + 140, 520), BAR + 188];
+    SIZES.capture = [Math.max(BASE_W + 140, 560), BAR + 336];
     SIZES.expanded = [Math.max(BASE_W + 140, 700), 520];
     const [w, h] = sizeOf(mode);
     root.style.setProperty("--w", w + "px");
@@ -143,7 +144,9 @@
       renderView();
     } else if (next === "expanded") {
       renderView();
-    } else if (prev === "expanded") {
+    } else if (next === "capture") {
+      if (prev !== "capture") await syncIme(true); // bảng tạo việc/lịch có ô nhập → cần bàn phím + bộ gõ
+    } else if (prev === "expanded" || prev === "capture") {
       syncIme(false);
     }
     if (next === "peek") { renderPeek(); refreshMedia(); }
@@ -764,7 +767,7 @@
   $$("#drop .drop-ic").forEach((el) => (el.innerHTML = I[el.dataset.i]));
   let dropZone = "airdrop", dropPoll = null, dropBefore = "collapsed";
   function setDropZone(z) {
-    dropZone = z === "tools" ? "tools" : "airdrop";
+    dropZone = z === "tools" || z === "capture" ? z : "airdrop";
     $$("#drop .drop-half").forEach((h) => h.classList.toggle("on", h.dataset.zone === dropZone));
   }
   $("#drop").addEventListener("dragover", (e) => { e.preventDefault(); setDropZone(e.clientX < window.innerWidth / 2 ? "airdrop" : "tools"); });
@@ -774,12 +777,18 @@
     const lx = pos.x > window.innerWidth ? pos.x / (window.devicePixelRatio || 1) : pos.x; // toạ độ logical hoặc physical
     setDropZone(lx < window.innerWidth / 2 ? "airdrop" : "tools");
   });
-  on("tauri://drag-enter", () => {
+  // Kéo file → 2 nửa (AirDrop / công cụ file). Kéo chữ, link, ảnh từ web/app chat, danh bạ… (không phải file)
+  // → 1 ô "Tạo việc / lịch".
+  let dropContent = false;
+  on("tauri://drag-enter", (p) => {
     if (mode === "drop") return;
+    dropContent = !(p && p.paths && p.paths.length);
+    $("#drop").classList.toggle("content", dropContent);
     dropBefore = mode;
-    setDropZone("airdrop");
+    setDropZone(dropContent ? "capture" : "airdrop");
     setMode("drop");
     clearInterval(dropPoll);
+    if (dropContent) return;
     dropPoll = setInterval(async () => {
       if (mode !== "drop") { clearInterval(dropPoll); return; }
       try { setDropZone((await api("cursor_side")) === "right" ? "tools" : "airdrop"); } catch (_) {}
@@ -792,7 +801,13 @@
   on("tauri://drag-drop", async (p) => {
     clearInterval(dropPoll);
     const paths = (p && p.paths) || [];
-    if (!paths.length) return;
+    if (!paths.length) {
+      // chữ đang chọn, tin nhắn, link, ảnh trên web, danh bạ… → đọc bảng kéo-thả của macOS
+      let info = null;
+      try { info = await api("drop_read", { paths: [] }); } catch (err) { toast(String(err)); }
+      if (!info || info.kind === "none") { await setMode(dropBefore === "expanded" ? "expanded" : "collapsed"); toast("Chưa đọc được nội dung này — thử kéo chữ, ảnh, link hoặc danh bạ"); return; }
+      return openCapture(info);
+    }
     let side = dropZone;
     try { side = (await api("cursor_side")) === "right" ? "tools" : "airdrop"; } catch (_) {}
     if (side === "airdrop") {
@@ -809,6 +824,7 @@
     if (!add) { sheet.files = []; sheet.result = null; }
     const known = new Set(sheet.files.map((f) => f.path));
     sheet.files.push(...info.filter((f) => !known.has(f.path)));
+    sheet.capture = await api("capture_supports", { paths: sheet.files.map((f) => f.path) }).catch(() => false);
     renderSheet();
     await setMode("sheet", { force: true });
   }
@@ -833,6 +849,7 @@
         ${arcs.length ? `<button class="act" data-sh="extract" ${sheet.busy ? "disabled" : ""}>${I.unzip}<span>Giải nén</span></button>` : ""}
         ${pdfs.length ? `<button class="act" data-sh="pdf" ${sheet.busy ? "disabled" : ""}>${I.pdf}<span>Nén PDF</span></button>` : ""}
         ${pdfs.length >= 2 ? `<button class="act" data-sh="merge" ${sheet.busy ? "disabled" : ""}>${I.merge}<span>Gộp ${pdfs.length} PDF</span></button>` : ""}
+        ${sheet.capture ? `<button class="act" data-sh="capture">${I.cal}<span>Tạo việc · lịch</span></button>` : ""}
         <button class="act" data-sh="airdrop">${I.airdrop}<span>AirDrop</span></button>
         <button class="act" data-sh="copy">${I.copy}<span>Chép file</span></button>
       </div>${resHtml}`;
@@ -850,6 +867,7 @@
     if (!b || b.disabled) return;
     const a = b.dataset.sh, paths = sheet.files.map((f) => f.path);
     if (a === "close") return setMode("collapsed");
+    if (a === "capture") { try { return openCapture(await api("drop_read", { paths })); } catch (err) { return toast(String(err)); } }
     if (a === "add") { suppressHoverUntil = Date.now() + 2000; const p = await api("pick_files"); if (p && p.length) openSheet(p, true); return; }
     if (a === "reveal" && sheet.result) return api("reveal", { path: sheet.result.output });
     if (a === "airdrop") { try { await api("file_airdrop", { paths }); setMode("collapsed"); } catch (err) { toast(String(err)); } return; }
@@ -858,6 +876,165 @@
     if (a === "merge") return runSheet(() => api("file_merge_pdf", { paths: sheet.files.filter((f) => f.is_pdf).map((f) => f.path) }));
     if (a === "extract") return runSheet(async () => { let r; for (const f of sheet.files.filter((x) => x.is_archive)) r = await api("file_extract", { path: f.path }); return r; });
     if (a === "pdf") return runSheet(async () => { let r; for (const f of sheet.files.filter((x) => x.is_pdf)) r = await api("file_compress_pdf", { path: f.path, quality: settings.pdf_quality || "ebook" }); return r; });
+  });
+
+  // ───────── Thả nội dung → tạo việc / sự kiện lịch (Apple / Google qua app Lịch của Mac) ─────────
+  const cap = { info: null, d: null, cals: null, dirty: false, aiBusy: false, aiDraft: null, err: "", busy: false };
+  const aiReady = () => (settings.ai_provider && settings.ai_provider !== "apple") || settings.apple_ai_enabled !== false;
+  const ymd = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  const engineName = (e) => (!e || e === "rule" ? "Đọc bằng quy tắc trên máy" : `Đọc bằng ${e}`);
+  async function openCapture(info) {
+    Object.assign(cap, { info, d: null, dirty: false, aiDraft: null, err: "", busy: false, aiBusy: false });
+    renderCapture();
+    await setMode("capture", { force: true });
+    try { cap.d = await api("capture_analyze", { ai: false }); }
+    catch (err) { cap.d = { kind: "task", title: "", start: null, end: null, all_day: false, location: "", notes: info.preview || "", engine: "rule", ocr: "" }; if (info.kind !== "image") cap.err = String(err); }
+    renderCapture();
+    loadCals();
+    if (info.kind === "image" || ((info.kind === "text" || info.kind === "url") && aiReady())) runCapAi(true);
+    setTimeout(() => { const t = $("#cp-title"); if (t && !t.value) t.focus(); }, 60);
+  }
+  async function loadCals() {
+    if (cap.cals) return;
+    try { cap.cals = await api("calendar_list"); } catch (err) { cap.cals = []; cap.calErr = String(err); }
+    if (mode === "capture" && cap.d && cap.d.kind === "event") { readCap(); renderCapture(); }
+  }
+  async function runCapAi(auto) {
+    if (cap.aiBusy) return;
+    cap.aiBusy = true; cap.err = ""; renderCapFoot();
+    try {
+      const d = await api("capture_analyze", { ai: true });
+      if (mode !== "capture") return;
+      if (auto && cap.dirty) { cap.aiDraft = d; }
+      else { cap.d = { ...d, calendar_id: cap.d ? cap.d.calendar_id : "" }; cap.dirty = false; cap.aiBusy = false; renderCapture(); return; }
+    } catch (err) { if (!auto || !cap.d || !cap.d.title) cap.err = String(err); }
+    cap.aiBusy = false;
+    if (mode === "capture") renderCapFoot();
+  }
+  function srcHtml(i) {
+    if (!i) return "";
+    if (i.kind === "image") return `<div class="cp-src">${i.image ? `<img src="${i.image}" alt="">` : `<span class="cp-ic">${I.image}</span>`}<span class="grow dim">${cap.d && cap.d.ocr ? esc(cap.d.ocr.slice(0, 160)) : "Ảnh — Asi đọc chữ trong ảnh ngay trên máy (Vision)"}</span></div>`;
+    if (i.kind === "contact") return `<div class="cp-src"><span class="cp-ic">${I.at}</span><span class="grow">${esc(i.contacts.join(", "))}</span></div>`;
+    return `<div class="cp-src"><span class="cp-ic">${i.kind === "url" ? I.ext : I.text}</span><span class="grow dim cp-clamp">${esc(i.preview)}</span></div>`;
+  }
+  function calOptions() {
+    const sel = (cap.d && cap.d.calendar_id) || settings.capture_calendar || "";
+    const list = cap.cals || [];
+    if (!list.length) return `<option value="">Lịch mặc định</option>`;
+    const has = list.some((c) => c.id === sel);
+    return list.map((c) => `<option value="${esc(c.id)}" ${(has ? c.id === sel : c.default) ? "selected" : ""}>${esc(c.source ? `${c.source} · ${c.title}` : c.title)}</option>`).join("");
+  }
+  function renderCapture() {
+    const d = cap.d, ev = d && d.kind === "event";
+    const el = $("#capture");
+    if (!d) {
+      el.innerHTML = `<button class="x" data-cp="close" title="Đóng">${I.x}</button><div class="cp-head">${I.cal}<b>Tạo việc · lịch</b></div>${srcHtml(cap.info)}<div class="cp-wait"><span class="spin"></span>Đang đọc nội dung…</div>`;
+      return;
+    }
+    const allDay = ev && d.all_day;
+    const noGoogle = cap.cals && cap.cals.length && !cap.cals.some((c) => /google|gmail/i.test(c.source));
+    el.innerHTML = `<button class="x" data-cp="close" title="Đóng">${I.x}</button>
+      <div class="cp-head">${I.cal}<b>Tạo việc · lịch</b><span class="dim cp-eng">${esc(engineName(d.engine))}</span></div>
+      ${srcHtml(cap.info)}
+      <div class="cp-row">
+        <div class="seg"><button data-cp="k-task" class="${ev ? "" : "on"}">Việc</button><button data-cp="k-event" class="${ev ? "on" : ""}">Lịch</button></div>
+        <input class="field grow" id="cp-title" placeholder="${ev ? "Tên sự kiện" : "Việc cần làm"}" value="${esc(d.title)}">
+      </div>
+      <div class="cp-row">
+        <input class="field" type="date" id="cp-date" value="${d.start ? ymd(d.start) : ""}">
+        <input class="field cp-time" type="time" id="cp-time" value="${d.start && !allDay ? hm(new Date(d.start)) : ""}" ${allDay ? "disabled" : ""}>
+        ${ev ? `<span class="dim">–</span><input class="field cp-time" type="time" id="cp-end" value="${d.end && !allDay ? hm(new Date(d.end)) : ""}" ${allDay ? "disabled" : ""}>
+          <label class="cp-check"><input type="checkbox" id="cp-allday" ${allDay ? "checked" : ""}>Cả ngày</label>`
+        : `<span class="dim cp-hint">${d.start ? "" : "Không hạn"}</span>${d.start ? `<button class="link" data-cp="nodate">Bỏ hạn</button>` : ""}`}
+      </div>
+      ${ev ? `<div class="cp-row">
+        <input class="field grow" id="cp-loc" placeholder="Địa điểm" value="${esc(d.location)}">
+        <select class="field cp-cal" id="cp-cal" title="Lịch Google đã thêm trong Cài đặt hệ thống › Tài khoản Internet sẽ tự đồng bộ lên Google Calendar">${calOptions()}</select>
+      </div>` : ""}
+      <textarea class="field cp-notes" id="cp-notes" rows="2" placeholder="Ghi chú">${esc(d.notes)}</textarea>
+      ${ev && noGoogle ? `<div class="cp-tip">Muốn lên Google Calendar? Thêm tài khoản Google trong Cài đặt hệ thống › Tài khoản Internet, rồi chọn lịch Google ở đây.</div>` : ev && cap.calErr ? `<div class="cp-tip err">${esc(cap.calErr)}</div>` : ""}
+      <div class="cp-foot"></div>`;
+    renderCapFoot();
+  }
+  function renderCapFoot() {
+    const f = $("#capture .cp-foot");
+    if (!f || !cap.d) return;
+    const ev = cap.d.kind === "event";
+    const left = cap.aiBusy
+      ? `<span class="cp-ai"><span class="spin"></span>${cap.info && cap.info.kind === "image" && !cap.d.ocr ? "Đang đọc chữ trong ảnh…" : "AI đang đọc…"}</span>`
+      : cap.aiDraft ? `<button class="btn sm ghost" data-cp="use-ai">${I.sparkle}Dùng gợi ý AI</button>`
+      : cap.err ? `<span class="cp-err">${esc(cap.err)}</span>`
+      : `<button class="btn sm ghost" data-cp="ai" title="Đọc lại bằng ${esc(settings.ai_provider && settings.ai_provider !== "apple" ? "AI đã chọn trong Cài đặt" : "Apple Intelligence")}">${I.sparkle}Đọc lại bằng AI</button>`;
+    f.innerHTML = `${left}<span class="grow"></span><button class="btn primary" data-cp="create" ${cap.busy ? "disabled" : ""}>${cap.busy ? `<span class="spin"></span>` : ev ? I.cal : I.check}${ev ? "Thêm vào lịch" : "Tạo việc"}</button>`;
+  }
+  function readCap() {
+    const d = cap.d;
+    if (!d || !$("#cp-title")) return d;
+    d.title = $("#cp-title").value;
+    d.notes = $("#cp-notes").value;
+    const date = $("#cp-date").value, time = $("#cp-time").value;
+    if (d.kind === "event") {
+      d.all_day = $("#cp-allday").checked;
+      d.location = $("#cp-loc").value;
+      d.calendar_id = $("#cp-cal").value;
+      if (!date) { d.start = d.end = null; return d; }
+      if (d.all_day) { d.start = new Date(`${date}T00:00`).getTime(); d.end = d.start + 86400000; }
+      else {
+        d.start = new Date(`${date}T${time || "09:00"}`).getTime();
+        const e = $("#cp-end").value;
+        let end = e ? new Date(`${date}T${e}`).getTime() : 0;
+        if (!(end > d.start)) end = d.start + 3600000;
+        d.end = end;
+      }
+    } else {
+      d.start = date ? new Date(`${date}T${time || "09:00"}`).getTime() : null;
+      d.end = null;
+    }
+    return d;
+  }
+  async function createCapture() {
+    const d = readCap();
+    if (!d.title.trim()) { $("#cp-title").focus(); return toast("Nhập tiêu đề trước đã"); }
+    if (d.kind === "event" && !d.start) { $("#cp-date").focus(); return toast("Sự kiện cần ngày"); }
+    cap.busy = true; renderCapFoot();
+    try {
+      const r = await api("capture_create", { d });
+      if (d.kind === "event" && d.calendar_id) settings.capture_calendar = d.calendar_id;
+      toast(r.message); confetti(10); flashMood("happy");
+      await setMode("collapsed");
+    } catch (err) { cap.err = String(err); flashMood("worried", 2500); }
+    cap.busy = false;
+    if (mode === "capture") renderCapFoot();
+  }
+  $("#capture").addEventListener("input", () => { cap.dirty = true; });
+  $("#capture").addEventListener("change", (e) => {
+    cap.dirty = true;
+    if (e.target.id === "cp-allday" || e.target.id === "cp-date") { readCap(); if (e.target.id === "cp-allday") renderCapture(); }
+  });
+  $("#capture").addEventListener("keydown", (e) => {
+    if (isComposing(e)) return;
+    if (e.key === "Enter" && e.target.id === "cp-title") { e.preventDefault(); createCapture(); }
+    if (e.key === "Escape") setMode("collapsed");
+  });
+  $("#capture").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-cp]");
+    if (!b || b.disabled) return;
+    const a = b.dataset.cp;
+    if (a === "close") return setMode("collapsed");
+    if (a === "k-task" || a === "k-event") {
+      readCap();
+      const k = a === "k-task" ? "task" : "event";
+      if (cap.d.kind === k) return;
+      cap.d.kind = k;
+      if (k === "event") { if (!cap.d.start) { const t = new Date(); t.setMinutes(0, 0, 0); t.setHours(t.getHours() + 1); cap.d.start = t.getTime(); } if (!cap.d.end || cap.d.end <= cap.d.start) cap.d.end = cap.d.start + 3600000; loadCals(); }
+      else cap.d.all_day = false;
+      renderCapture();
+      return;
+    }
+    if (a === "nodate") { readCap(); cap.d.start = null; renderCapture(); return; }
+    if (a === "ai") return runCapAi(false);
+    if (a === "use-ai" && cap.aiDraft) { cap.d = { ...cap.aiDraft, calendar_id: cap.d.calendar_id }; cap.aiDraft = null; cap.dirty = false; renderCapture(); return; }
+    if (a === "create") return createCapture();
   });
 
   // ───────── Thanh tab ─────────
@@ -869,7 +1046,7 @@
     ["clips", "Clipboard", I.clip, null],
     ["journal", "Nhật ký", I.book, "journal"],
     ["words", "Từ mới", I.words, "words"],
-    ["threads", "Threads", I.at, "threads"],
+    ["threads", "Social", I.grid, "threads"], // id giữ "threads" để không mất cài đặt mô-đun cũ
     ["clean", "Dọn máy", I.broom, "clean"],
   ];
   function visibleTabs() {
@@ -1100,12 +1277,13 @@
     get status() { return status; }, set status(s) { onStatus(s); },
     get tasks() { return tasks; },
     get settings() { return settings; },
+    get DISP() { return DISP; },
     saveSettings: async (patch) => { Object.assign(settings, patch); await saveSettings(Object.keys(patch)); },
     takeFreshOpen() { const f = freshOpen; freshOpen = false; return f; },
     applyMood, applyColor,
   };
   document.dispatchEvent(new Event("asi-ready"));
-  window.__asi = { setMode, get mode() { return mode; }, set tab(t) { tab = t; }, renderView, showAlert, flashMood, openSheet, voiceCommand };
+  window.__asi = { setMode, get mode() { return mode; }, set tab(t) { tab = t; }, renderView, showAlert, flashMood, openSheet, openCapture, voiceCommand };
 
   await refreshTasks();
   onStatus(await api("get_status"));
@@ -1118,6 +1296,8 @@
   else if (devOpen === "reply") askAsi("máy mình thế nào", true);
   else if (devOpen === "sheet") openSheet(["/Users/binh/Desktop/Hop-dong.pdf", "/Users/binh/Desktop/Bao-gia.pdf", "/Users/binh/Downloads/Anh.zip"]);
   else if (devOpen === "drop") { setDropZone("tools"); setMode("drop"); }
+  else if (devOpen === "dropc") { $("#drop").classList.add("content"); setDropZone("capture"); setMode("drop"); }
+  else if (devOpen === "capture") openCapture(await api("drop_read", { paths: [] }));
   else if (devOpen && devOpen.startsWith("alert-")) {
     const k = devOpen.slice(6);
     showAlert(k === "break" ? { kind: "break", minutes: 52 } : k === "journal" ? { kind: "journal" } : k === "event" ? { kind: "event", event: { title: "Họp khách hàng", start: Date.now() + 9 * 60000 } } : { kind: "reminder", task: tasks[0] });

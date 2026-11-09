@@ -5,7 +5,7 @@
   const q = new URLSearchParams(location.search);
   const listeners = {};
   const emit = (ev, payload) => (listeners[ev] || []).forEach((cb) => cb({ payload }));
-  let id = 100;
+  let id = 100, lastDrop = "text";
   const tasks = [
     { id: 1, title: "Gửi báo giá cho anh Tuấn", due: now - 5 * H, created: now - 9 * H, done_at: null },
     { id: 2, title: "Duyệt banner chiến dịch Q4", due: now - 0.6 * H, created: now - 3 * H, done_at: null },
@@ -127,10 +127,11 @@
     license_info: () => (pro ? { pro: true, email: "binh@example.vn", expires: null } : { pro: false }),
     activate_license: ({ key }) => (key.startsWith("MASI1.") ? ((pro = true), { pro: true, email: "binh@example.vn" }) : { pro: false, error: "Khoá không đúng định dạng" }),
     deactivate_license: () => { pro = false; }, quit: () => null,
-    clip_list: ({ query, kind }) => clips.filter((c) => (kind === "all" || !kind || c.kind === kind || (kind === "pinned" && c.pinned)) && (!query || (c.preview + c.files.map((f) => f.name).join()).toLowerCase().includes(query.toLowerCase()))),
+    clip_list: ({ query, kind }) => clips.filter((c) => (kind === "all" || !kind || c.kind === kind || (kind === "pinned" && c.pinned) || (kind === "history" && !c.pinned)) && (!query || ((c.label || "") + c.preview + c.files.map((f) => f.name).join()).toLowerCase().includes(query.toLowerCase()))),
+    clip_label: ({ id, label }) => { const c = clips.find((x) => x.id === id); c.label = label.trim() || null; c.pinned = true; },
     clip_copy: ({ id }) => { const c = clips.find((x) => x.id === id); c.uses++; c.used = Date.now(); return false; },
     clip_merge: () => null, clip_copy_files: () => null,
-    clip_pin: ({ id }) => { const c = clips.find((x) => x.id === id); c.pinned = !c.pinned; },
+    clip_pin: ({ id }) => { const c = clips.find((x) => x.id === id); c.pinned = !c.pinned; if (!c.pinned) c.label = null; },
     clip_delete: ({ id }) => clips.splice(clips.findIndex((x) => x.id === id), 1), clip_clear: () => null,
     clip_image: () => "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120"><defs><linearGradient id="g"><stop offset="0" stop-color="#ff9a8b"/><stop offset="1" stop-color="#6a82fb"/></linearGradient></defs><rect width="240" height="120" rx="10" fill="url(#g)"/><text x="20" y="70" font-family="sans-serif" font-size="22" fill="white">Screenshot</text></svg>'),
     clip_to_note: () => notes[0], clip_to_task: () => tasks[2],
@@ -141,6 +142,32 @@
     sync_now: async () => { await wait(800); return { tasks_pushed: 2, tasks_pulled: 1, notes_pushed: 1, notes_pulled: 0, events: events.length, errors: [], at: Date.now() }; },
     sync_info: () => ({ last_run: Date.now() - 4 * 60e3, last_error: null, linked_tasks: 6, linked_notes: 2 }),
     get_events: () => events, add_to_calendar: async () => { await wait(300); },
+    // thả nội dung → việc / lịch (?drop=text|image|contact|url)
+    drop_read: ({ paths }) => {
+      const k = paths && paths.length ? "image" : q.get("drop") || "text";
+      lastDrop = k;
+      if (k === "image") return { kind: "image", preview: "", image: "data:image/svg+xml;base64," + btoa('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="100"><rect width="160" height="100" fill="#2c3e66"/><text x="12" y="40" font-family="sans-serif" font-size="14" fill="white">VN123 HAN-DAD</text><text x="12" y="64" font-family="sans-serif" font-size="12" fill="#ccc">20/11 07:45</text></svg>'), contacts: [] };
+      if (k === "contact") return { kind: "contact", preview: "", image: null, contacts: ["Nguyễn Văn An"] };
+      if (k === "url") return { kind: "url", preview: "https://www.facebook.com/events/123", image: null, contacts: [] };
+      return { kind: "text", preview: "Anh ơi mai 14h họp với đối tác bên Hoà Bình nhé\nĐịa điểm: 12 Lý Thái Tổ, Hoàn Kiếm", image: null, contacts: [] };
+    },
+    capture_supports: ({ paths }) => paths.length === 1 && /\.(png|jpe?g|heic|vcf|txt|md)$/i.test(paths[0]),
+    capture_from_clip: ({ id }) => { const c = clips.find((x) => x.id === id); lastDrop = c.kind === "image" ? "image" : "text"; return c.kind === "image" ? { kind: "image", preview: "", image: null, contacts: [] } : { kind: "text", preview: c.preview, image: null, contacts: [] }; },
+    capture_set_text: ({ text }) => ({ kind: "text", preview: text, image: null, contacts: [] }),
+    capture_analyze: async ({ ai }) => {
+      const tm = (d, h, m) => { const x = new Date(); x.setDate(x.getDate() + d); x.setHours(h, m, 0, 0); return x.getTime(); };
+      if (lastDrop === "image") {
+        if (!ai) throw "Không có nội dung để tạo";
+        await wait(900);
+        return { kind: "event", title: "Bay Hà Nội → Đà Nẵng (VN123)", start: tm(11, 7, 45), end: tm(11, 9, 5), all_day: false, location: "Sân bay Nội Bài, T1", notes: "Mã đặt chỗ ABC123 · Ghế 12A", engine: "Apple Intelligence", ocr: "VN123 HAN→DAD\n20/11 07:45", calendar_id: "" };
+      }
+      if (lastDrop === "contact") return { kind: "event", title: "Sinh nhật Nguyễn Văn An", start: tm(46, 0, 0), end: tm(47, 0, 0), all_day: true, location: "", notes: "Trốn Glamping\n☎ 0901 234 567", engine: "rule", ocr: "", calendar_id: "" };
+      if (lastDrop === "url") return { kind: "task", title: "Xem lại facebook.com", start: null, end: null, all_day: false, location: "", notes: "https://www.facebook.com/events/123", engine: "rule", ocr: "", calendar_id: "" };
+      if (ai) await wait(1200);
+      return { kind: "event", title: ai ? "Họp đối tác Hoà Bình" : "Họp với đối tác bên Hoà Bình nhé", start: tm(1, 14, 0), end: tm(1, 15, 0), all_day: false, location: "12 Lý Thái Tổ, Hoàn Kiếm", notes: "Anh ơi mai 14h họp với đối tác bên Hoà Bình nhé\nĐịa điểm: 12 Lý Thái Tổ, Hoàn Kiếm", engine: ai ? "Apple Intelligence" : "rule", ocr: "", calendar_id: "" };
+    },
+    calendar_list: async () => { await wait(200); return [{ id: "c1", title: "Lịch", source: "iCloud", default: true }, { id: "c2", title: "Công việc", source: "iCloud", default: false }, { id: "g1", title: "binhduong@gmail.com", source: "Google", default: false }]; },
+    capture_create: async ({ d }) => { await wait(300); if (d.kind === "task") { const t = { id: ++id, title: d.title, due: d.start, created: Date.now(), done_at: null, notes: d.notes }; tasks.push(t); emit("status", status()); return { task_id: t.id, event: false, message: "Đã thêm việc: " + d.title }; } events.push({ id: "e" + Date.now(), title: d.title, start: d.start, end: d.end, all_day: d.all_day, location: d.location, calendar: "Lịch" }); return { task_id: null, event: true, message: "Đã thêm vào lịch: " + d.title }; },
     journal_get: ({ date }) => {
       const e = journal[date] || { date, mood: null, answers: [], text: "", facts: {}, updated: 0 };
       e.facts = { tasks_done: ["Đặt vé máy bay Đà Nẵng", "Duyệt nội dung TikTok"], tasks_open: 5, tasks_late: 2, events: ["09:30 Standup team marketing", "Họp khách hàng Hoiana"], screen_minutes: 312, notes_written: 2, clips: 14 };
@@ -200,7 +227,7 @@
       .map(([id, name, dm, url]) => ({ id, name, has_key: id === "gemini", model: settings["ai_model_" + id] || dm, default_model: dm, key_url: url })),
     ai_set_key: () => null, ai_test: async ({ provider }) => { await wait(500); return provider === "gemini" ? "gemini-flash-latest" : "gpt-5-mini"; },
     ime_info: () => ({ current: "com.lacviet.inputmethod.VietTelex", recognized: "telex", enabled: ["com.apple.keylayout.ABC", "com.lacviet.inputmethod.VietTelex"] }),
-    threads_post: async () => { await wait(500); return "p9"; }, threads_mark_read: () => null, open_link: () => null, threads_web: () => null, threads_embed: () => null,
+    threads_post: async () => { await wait(500); return "p9"; }, threads_mark_read: () => null, open_link: () => null, threads_web: () => null, social_open: () => null, social_open_list: () => ["messenger"], threads_embed: () => null,
     asi_ask: async ({ text }) => { await wait(600); const r = await H_._ask_unused({ text }); if (r.intent === "unknown") { r.text = "Có, mai Hà Nội có mưa rào nhẹ buổi chiều (khoảng 60%). Bạn nhớ mang ô khi ra ngoài sau 3 giờ nhé."; r.actions = []; r.mood = "happy"; r.engine = "Gemini · gemini-flash-latest"; } else r.engine = "Lệnh cơ bản"; return r; },
     _ask_unused: async ({ text }) => { const t = text.toLowerCase();
       if (t.includes("máy") || t.includes("mac")) return { intent: "status", text: "Asi thấy 2 điều cần để ý: ổ đĩa sắp đầy (còn 9%); 2 việc đang trễ.", speak: "", mood: "worried",

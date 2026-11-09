@@ -143,6 +143,7 @@
       return `<div class="row task ${t.done_at ? "done" : ""}" data-id="${t.id}">
         <button class="check" data-t="toggle" title="${t.done_at ? "Bỏ đánh dấu" : "Xong"}">${I.check}</button>
         <span class="title" data-t="title" title="Bấm đúp để sửa">${esc(t.title)}</span>
+        ${t.notes ? `<span class="t-note" title="${esc(t.notes)}">${I.note}</span>` : ""}
         <span class="acts">${t.done_at ? "" : `<button class="ib txt" data-t="s60" title="Hoãn 1 giờ">+1h</button><button class="ib txt" data-t="stm" title="Chuyển sang mai">Mai</button>`}<button class="ib" data-t="del" title="Xoá">${I.trash}</button></span>
         ${t.due && !t.done_at ? `<span class="due ${late ? "late" : ""}">${fmtDue(t.due, now)}</span>` : ""}
       </div>`;

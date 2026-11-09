@@ -626,6 +626,7 @@ pub const NOTCH_LEVEL: isize = 27;
 
 pub mod calendar;
 pub mod clip;
+pub mod ocr;
 pub mod speech;
 pub mod ime;
 pub mod perm;

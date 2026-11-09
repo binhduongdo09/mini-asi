@@ -322,16 +322,42 @@ pub(crate) fn threads_mark_read(st: S) {
 #[tauri::command]
 pub(crate) async fn threads_web(app: AppHandle, st: S<'_>, url: Option<String>) -> Result<(), String> {
     let target = url.filter(|u| u.starts_with("https://www.threads.") || u.starts_with("https://threads.")).unwrap_or_else(|| "https://www.threads.com/".into());
-    // Đưa cửa sổ Threads lên trước SAU khi tai thỏ thu gọn xong (thu gọn trả focus cho app trước đó,
-    // nếu mở ngay thì Threads bị app khác che mất — lỗi hay gặp ở chế độ bong bóng/viên thuốc)
-    let bring_front = |app: &AppHandle| {
+    let home = target.ends_with("threads.com/");
+    let n = crate::social::find("threads").ok_or("Thiếu cấu hình Threads")?;
+    open_mobile_window(&app, &st, n, &target, home)
+}
+
+/// Tab Social: mở Facebook / Messenger / Instagram / Threads / X / TikTok / YouTube thành cửa sổ dạng điện thoại.
+/// Bấm lần nữa khi cửa sổ đang ở trước mặt → ẩn đi (giữ nguyên trang đang xem).
+#[tauri::command]
+pub(crate) async fn social_open(app: AppHandle, st: S<'_>, network: String) -> Result<(), String> {
+    let n = crate::social::find(&network).ok_or("Chưa hỗ trợ mạng xã hội này")?;
+    open_mobile_window(&app, &st, n, n.url, true)
+}
+
+/// Mạng nào đang mở cửa sổ (để tab Social đánh dấu)
+#[tauri::command]
+pub(crate) fn social_open_list(app: AppHandle) -> Vec<&'static str> {
+    crate::social::NETWORKS
+        .iter()
+        .filter(|n| app.get_webview_window(&crate::social::window_label(n)).is_some_and(|w| w.is_visible().unwrap_or(false)))
+        .map(|n| n.id)
+        .collect()
+}
+
+/// Cửa sổ web dạng điện thoại ngay dưới tai thỏ. `is_home` = mở trang đầu (bấm lại khi đang hiện → ẩn).
+pub(crate) fn open_mobile_window(app: &AppHandle, st: &AppState, n: &'static crate::social::Network, target: &str, is_home: bool) -> Result<(), String> {
+    let label = crate::social::window_label(n);
+    // Đưa cửa sổ lên trước SAU khi tai thỏ thu gọn xong (thu gọn trả focus cho app trước đó,
+    // nếu mở ngay thì cửa sổ bị app khác che mất — lỗi hay gặp ở chế độ bong bóng/viên thuốc)
+    let bring_front = |app: &AppHandle, label: String| {
         let h = app.clone();
         std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(550));
             let h2 = h.clone();
             let _ = h.run_on_main_thread(move || {
                 notch_native::activate_app();
-                if let Some(w) = h2.get_webview_window("threads-web") {
+                if let Some(w) = h2.get_webview_window(&label) {
                     let _ = w.unminimize();
                     let _ = w.show();
                     let _ = w.set_focus();
@@ -339,24 +365,24 @@ pub(crate) async fn threads_web(app: AppHandle, st: S<'_>, url: Option<String>) 
             });
         });
     };
-    if let Some(w) = app.get_webview_window("threads-web") {
+    if let Some(w) = app.get_webview_window(&label) {
         // đang ở trước mặt → bấm lần nữa để ẩn; bị che/thu nhỏ → đưa lên trước
-        if w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false) && !w.is_minimized().unwrap_or(false) && target.ends_with("threads.com/") {
+        if is_home && w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false) && !w.is_minimized().unwrap_or(false) {
             let _ = w.hide();
             return Ok(());
         }
-        if !target.ends_with("threads.com/") {
+        if !is_home {
             if let Ok(u) = target.parse() {
                 let _ = w.navigate(u);
             }
         }
-        bring_front(&app);
+        bring_front(app, label);
         return Ok(());
     }
-    let (geo, d) = (st.geo.lock().unwrap().clone(), disp_of(&st));
+    let (geo, d) = (st.geo.lock().unwrap().clone(), disp_of(st));
     let sh = geo.screen_height.max(600.0);
     let top = geo.screen_y + geo.notch_height.max(24.0) + 14.0;
-    let w = 440.0;
+    let w = n.width;
     let h = (sh - (top - geo.screen_y) - 40.0).clamp(480.0, 860.0);
     let x = match d.mode.as_str() {
         // bong bóng: mở cạnh bong bóng, không đè lên nó
@@ -366,19 +392,19 @@ pub(crate) async fn threads_web(app: AppHandle, st: S<'_>, url: Option<String>) 
         }
         _ => geo.screen_x + (geo.screen_width - w) / 2.0,
     };
-    tauri::WebviewWindowBuilder::new(&app, "threads-web", tauri::WebviewUrl::External(target.parse().map_err(|e| format!("{e}"))?))
-        .title("Threads · Mini-Asi")
+    tauri::WebviewWindowBuilder::new(app, &label, tauri::WebviewUrl::External(target.parse().map_err(|e| format!("{e}"))?))
+        .title(format!("{} · Mini-Asi", n.name))
         .inner_size(w, h)
         .min_inner_size(360.0, 480.0)
         .position(x.max(geo.screen_x), top)
-        .user_agent(MOBILE_UA)
+        .user_agent(if n.mobile { MOBILE_UA } else { DESKTOP_UA })
         .always_on_top(false)
         .resizable(true)
         .closable(true)
         .minimizable(true)
         .focused(true)
         .on_navigation(move |u| {
-            if u.scheme() == "https" && threads_host_ok(u.host_str().unwrap_or("")) {
+            if u.scheme() == "https" && crate::social::host_ok(n, u.host_str().unwrap_or("")) {
                 true
             } else {
                 // link ra ngoài (bài báo, web khác) → mở bằng trình duyệt của máy
@@ -387,11 +413,12 @@ pub(crate) async fn threads_web(app: AppHandle, st: S<'_>, url: Option<String>) 
             }
         })
         .build()
-        .map_err(|e| format!("Không mở được cửa sổ Threads: {e}"))?;
-    bring_front(&app);
+        .map_err(|e| format!("Không mở được cửa sổ {}: {e}", n.name))?;
+    bring_front(app, label);
     Ok(())
 }
 
+pub(crate) const DESKTOP_UA: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
 pub(crate) const MOBILE_UA: &str = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
 
 pub(crate) fn threads_host_ok(host: &str) -> bool {

@@ -11,6 +11,19 @@ pub enum ClipData {
     Files(Vec<String>),
 }
 
+/// Nội dung đang được kéo thả (đọc từ bảng kéo-thả của hệ thống sau khi thả vào tai thỏ)
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct DragData {
+    pub text: Option<String>,
+    /// Liên kết (kéo từ thanh địa chỉ / ảnh trên web)
+    pub url: Option<String>,
+    /// Ảnh dạng PNG (kéo ảnh từ web, app chat, ảnh chụp màn hình…)
+    pub image_png: Option<Vec<u8>>,
+    /// Danh bạ (vCard) kéo từ app Danh bạ
+    pub vcard: Option<String>,
+    pub files: Vec<String>,
+}
+
 // ─────────────────────────── macOS ───────────────────────────
 #[cfg(target_os = "macos")]
 mod imp {
@@ -86,6 +99,64 @@ mod imp {
         }
     }
 
+    /// Đọc bảng kéo-thả (NSPasteboardNameDrag): chữ, liên kết, ảnh, vCard, file
+    pub fn read_drag() -> Option<super::DragData> {
+        unsafe {
+            let pb = NSPasteboard::pasteboardWithName(objc2_app_kit::NSPasteboardNameDrag);
+            let types: Vec<String> = pb.types()?.iter().map(|t| t.to_string()).collect();
+            let mut d = super::DragData::default();
+            if let Some(items) = pb.pasteboardItems() {
+                for it in items.iter() {
+                    if let Some(s) = it.stringForType(NSPasteboardTypeFileURL) {
+                        if let Some(p) = NSURL::URLWithString(&s).and_then(|u| u.path()) {
+                            d.files.push(p.to_string());
+                        }
+                    }
+                }
+            }
+            if let Some(s) = pb.stringForType(NSPasteboardTypeString) {
+                let s = s.to_string();
+                if !s.trim().is_empty() {
+                    d.text = Some(s);
+                }
+            }
+            if let Some(u) = pb.stringForType(objc2_app_kit::NSPasteboardTypeURL) {
+                let u = u.to_string();
+                if !u.starts_with("file:") {
+                    d.url = Some(u);
+                }
+            }
+            for t in ["public.vcard", "com.apple.vcard"] {
+                if types.iter().any(|x| x == t) {
+                    if let Some(v) = pb.dataForType(&NSString::from_str(t)) {
+                        d.vcard = Some(decode_text(&v.to_vec()));
+                        break;
+                    }
+                }
+            }
+            if let Some(png) = pb.dataForType(NSPasteboardTypePNG) {
+                d.image_png = Some(png.to_vec());
+            } else if let Some(tiff) = pb.dataForType(NSPasteboardTypeTIFF) {
+                if let Some(rep) = NSBitmapImageRep::imageRepWithData(&tiff) {
+                    if let Some(png) = rep.representationUsingType_properties(NSBitmapImageFileType::PNG, &NSDictionary::new()) {
+                        d.image_png = Some(png.to_vec());
+                    }
+                }
+            }
+            if d == super::DragData::default() { None } else { Some(d) }
+        }
+    }
+
+    /// vCard có thể là UTF-8 hoặc UTF-16 (có BOM)
+    fn decode_text(b: &[u8]) -> String {
+        if b.len() >= 2 && (b[0] == 0xFF && b[1] == 0xFE || b[0] == 0xFE && b[1] == 0xFF) {
+            let le = b[0] == 0xFF;
+            let u: Vec<u16> = b[2..].chunks_exact(2).map(|c| if le { u16::from_le_bytes([c[0], c[1]]) } else { u16::from_be_bytes([c[0], c[1]]) }).collect();
+            return String::from_utf16_lossy(&u);
+        }
+        String::from_utf8_lossy(b).to_string()
+    }
+
     pub fn write(data: &ClipData) -> Result<(), String> {
         unsafe {
             let pb = NSPasteboard::generalPasteboard();
@@ -159,6 +230,9 @@ mod imp {
 // ─────────────────────────── Windows / Linux ───────────────────────────
 #[cfg(not(target_os = "macos"))]
 mod imp {
+    pub fn read_drag() -> Option<super::DragData> {
+        None
+    }
     use super::ClipData;
     use std::hash::{Hash, Hasher};
 
@@ -223,4 +297,4 @@ mod imp {
     }
 }
 
-pub use imp::{accessibility_trusted, change_count, read, send_paste, write};
+pub use imp::{accessibility_trusted, change_count, read, read_drag, send_paste, write};

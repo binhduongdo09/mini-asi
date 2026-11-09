@@ -9,8 +9,9 @@ Mini-Asi là trợ lý desktop sống quanh **tai thỏ** MacBook (máy không t
 Chủ dự án: Đỗ Bình Dương (người Việt). **Giao diện, chú thích code và trả lời người dùng đều bằng tiếng Việt.**
 Ưu tiên macOS, sau đó Linux & Windows. Có bản Free và Pro (khoá ký ed25519, kiểm tra offline).
 
-Luôn có: Asi (chat & lệnh giọng nói), Việc (hiểu câu tự nhiên Việt/Anh), Ghi chú, Clipboard, kéo thả file (AirDrop / nén / PDF).
-Mô-đun bật/tắt (`settings.modules`): Dọn máy, Tập trung, Threads (mặc định bật) · Nhật ký, Từ mới (người dùng tự bật).
+Luôn có: Asi (chat & lệnh giọng nói), Việc (hiểu câu tự nhiên Việt/Anh), Ghi chú, Clipboard (mục ghim giữ mãi), kéo thả file
+(AirDrop / nén / PDF), thả nội dung → việc / sự kiện lịch (`capture.rs`, `commands/capture.rs`).
+Mô-đun bật/tắt (`settings.modules`): Dọn máy, Tập trung, Social (id `threads`, mặc định bật) · Nhật ký, Từ mới (người dùng tự bật).
 Nền: nhắc nghỉ mắt/uống nước, đồng bộ Apple (Lời nhắc, Ghi chú, Lịch), sao lưu đám mây, giọng đọc tải thêm, tự cập nhật.
 
 ## Công nghệ
@@ -70,6 +71,10 @@ Kiểm tra biên dịch cho macOS từ Linux (không cần Mac): `RUSTC_BOOTSTRA
 - **Không commit/gửi thư mục `secrets/`** (khoá bí mật ký bản quyền, key Pro). Đã có trong `.gitignore`.
   Khoá công khai nằm ở `src-tauri/src/license.rs`. Trước khi bán thật: tạo cặp khoá mới bằng `license-tool keygen`.
 - Đăng bài Threads chỉ khi người dùng bấm Đăng **và** xác nhận. Không tự động đăng.
+- Tab Social: chỉ dùng ô chữ viết tắt trung tính (Fb, Ms, Ig…), **không** vẽ/nhúng logo thương hiệu. Cửa sổ mạng xã hội
+  không được cấp capabilities (chỉ `notch`, `settings` có quyền gọi lệnh); thêm mạng mới ở `social.rs` kèm tên miền được phép.
+- Thả nội dung → việc/lịch: luôn để người dùng xem & bấm tạo, không tự tạo. Ảnh chỉ đọc bằng Vision trên máy; chỉ chữ đọc được
+  (không phải ảnh) mới gửi cho AI đám mây nếu người dùng chọn bộ não đám mây.
 - Giọng đọc: **không** dùng các giọng NghiTTS mang tên/giọng người nổi tiếng hoặc giọng thương mại
   (Mỹ Tâm, Trấn Thành, Ngọc Ngạn, Việt Thảo, Ban Mai, Thanh Phương Viettel, Minh Khang, Tài An, Lạc Phi, Adam…).
   Chỉ dùng giọng thường (hiện tại: Mai Phương, Minh Quang). VieNeu-TTS: Apache-2.0, giữ ghi công.
@@ -79,8 +84,8 @@ Kiểm tra biên dịch cho macOS từ Linux (không cần Mac): `RUSTC_BOOTSTRA
 
 ## Xem thử UI (trình duyệt, dữ liệu giả)
 
-`ui/index.html?open=peek|home|tasks|notes|clips|journal|words|threads|clean|listen|reply|sheet|drop|alert-reminder|alert-break|alert-journal`
-· `late=0|3` · `notch=0` · `disp=pill|bubble` · `mods=journal,words,clean,focus,threads` · `media=0` · `threads=1` · `update=1` · `journal=1`
+`ui/index.html?open=peek|home|tasks|notes|clips|journal|words|threads|clean|listen|reply|sheet|drop|dropc|capture|alert-reminder|alert-break|alert-journal`
+· `drop=text|image|contact|url` (với open=capture) · `late=0|3` · `notch=0` · `disp=pill|bubble` · `mods=journal,words,clean,focus,threads` · `media=0` · `threads=1` · `update=1` · `journal=1`
 · Cửa sổ Cài đặt: `ui/settings.html?sec=general|look|features|reminders|assistant|ime|clips|sync|perms|pro`.
 
 ## Những gì chưa kiểm chứng trên Mac thật (ưu tiên test khi có máy)

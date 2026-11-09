@@ -13,14 +13,15 @@ Bên trong là linh vật hai mắt biết chớp, cười, lo lắng, ngáp ng�
 | ✦ **Asi** | Trang đầu: lời chào, 3 việc/lịch gần nhất, gợi ý câu hỏi. Gõ hoặc nói: *"hôm nay có gì"*, *"máy mình thế nào"*, *"nhắc tôi 3h chiều gọi khách"*, *"dọn rác giúp mình"*… Có Apple Intelligence (macOS 26) thì hỏi gì cũng được — viết, dịch, giải thích, lên kế hoạch — và Asi tự thêm việc / ghi chú khi bạn nhờ. Nút mic ở tai thỏ để ra lệnh không cần mở bảng. |
 | ✅ **Việc** | Câu tự nhiên Việt/Anh, có dấu hay không: *"mai 9h gọi khách"*, *"thứ 6 tuần sau chốt hợp đồng"*, *"tomorrow 3pm call John"*. Nhóm Trễ hạn / Hôm nay / Sắp tới; lịch hôm nay (Lịch Apple). Đến giờ: Xong · 10 phút · 1 giờ · Mai. |
 | ✎ **Ghi chú** | Tự lưu, ghim, tìm, đọc cho Asi ghi. ⌘⇧Space mở nhanh. |
-| 📋 **Clipboard** | Nhớ chữ, ảnh, file đã chép. Bấm = chép lại, bấm đúp = dán luôn, ghim để giữ mãi. ⌃⇧V. |
+| 📋 **Clipboard** | Nhớ chữ, ảnh, file đã chép. Bấm = chép lại, bấm đúp = dán luôn. Ghim = giữ mãi ở đầu danh sách (đặt tên được). ⌃⇧V. |
 | 📦 **Kéo thả file** | Thả vào **nửa trái** tai thỏ = AirDrop ngay; **nửa phải** = Nén ZIP, giải nén, nén/gộp PDF, chép file. |
+| 🗓 **Thả → việc / lịch** | Kéo chữ, tin nhắn, link, ảnh, ảnh chụp màn hình, danh bạ vào tai thỏ → Asi đề xuất việc hoặc sự kiện (đọc cả chữ trong ảnh). Sự kiện vào lịch iCloud hoặc Google (tài khoản Google thêm trong Cài đặt hệ thống › Tài khoản Internet). |
 
 | Mô-đun (bật/tắt trong Cài đặt › Tính năng) | |
 |---|---|
 | 🧹 **Dọn máy** *(mặc định bật)* | Cache, log, Xcode, npm/brew, trình duyệt. Pro: file cài đặt cũ, `node_modules` bỏ lâu, sao lưu iPhone. Cache xoá hẳn, file của bạn vào Thùng rác. |
 | ◎ **Tập trung** *(mặc định bật)* | Nút 25 phút trên tai thỏ; Asi tạm im lặng, chỉ hiện đồng hồ tím. |
-| @ **Threads** *(mặc định bật)* | Mở Threads trong cửa sổ nhỏ riêng; nâng cao: thống kê, trả lời, đăng bài (luôn hỏi xác nhận). |
+| ▦ **Social** *(mặc định bật)* | Facebook, Messenger, Instagram, Threads, X, TikTok, YouTube trong cửa sổ dạng điện thoại dưới tai thỏ; Threads nâng cao: thống kê, trả lời, đăng bài (luôn hỏi xác nhận). |
 | 📔 **Nhật ký** | Mỗi tối Asi hỏi 3 câu ngắn về ngày của bạn. |
 | 📚 **Từ mới** | 2–3 từ tiếng Anh mỗi lần mở, phiên âm, nghe mẫu, chấm phát âm. |
 
@@ -86,7 +87,7 @@ Threads chỉ cho app bên ngoài truy cập qua **Threads API** của Meta, nê
 1. Vào [developers.facebook.com/apps](https://developers.facebook.com/apps), bấm **Create app**, chọn use case **Access the Threads API**.
 2. Trong **Use cases › Threads API › Settings**: bật các quyền `threads_basic`, `threads_content_publish`, `threads_read_replies`, `threads_manage_replies`, `threads_manage_insights`, `threads_manage_mentions`.
 3. Thêm tài khoản Threads của bạn vào **App roles › Roles › Threads Testers**, rồi chấp nhận lời mời trong app Threads (Cài đặt › Tài khoản › Quyền truy cập website).
-4. Trong Mini-Asi, tab **Threads**, chọn một trong hai cách:
+4. Trong Mini-Asi, tab **Social** › **Threads nâng cao**, chọn một trong hai cách:
    - **Dán token**: dùng **User Token Generator** trong trang Settings của app để tạo token rồi dán vào.
    - **Đăng nhập (OAuth)**: nhập App ID, App Secret và Redirect URI (mặc định `https://localhost/`, nhớ thêm vào **Redirect Callback URLs**). Bấm "Mở trang đăng nhập", chọn Cho phép, rồi chép địa chỉ trang hiện ra dán lại vào Mini-Asi.
 
@@ -144,7 +145,7 @@ mini-asi/
 ├─ ui/                      HTML/CSS/JS thuần (không cần build)
 │  ├─ index.html · app.js   Cửa sổ tai thỏ: hình học, linh vật, peek, báo động, giọng nói, kéo thả file, thanh tab
 │  ├─ views.js              Tab Asi · Việc · Ghi chú · Dọn máy
-│  ├─ extra.js · vocab.js   Tab Clipboard · Nhật ký · Threads · Từ mới
+│  ├─ extra.js · vocab.js   Tab Clipboard · Nhật ký · Social/Threads · Từ mới
 │  ├─ settings.html/.js     Cửa sổ Cài đặt riêng
 │  ├─ common.js             Cầu nối Tauri, định dạng ngày giờ/dung lượng (dùng chung 2 cửa sổ)
 │  ├─ base.css · style.css · settings.css

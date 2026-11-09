@@ -356,7 +356,7 @@ mod tests {
     use super::*;
 
     fn task(id: u64, title: &str, upd: i64) -> Task {
-        Task { id, title: title.into(), due: None, created: 1, done_at: None, notified: false, updated: upd, ext_id: None }
+        Task { id, title: title.into(), due: None, created: 1, done_at: None, notified: false, updated: upd, ext_id: None, notes: String::new() }
     }
 
     #[test]

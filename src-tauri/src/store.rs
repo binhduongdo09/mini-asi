@@ -22,6 +22,9 @@ pub struct Task {
     /// id bên Lời nhắc (Reminders) của Apple
     #[serde(default)]
     pub ext_id: Option<String>,
+    /// Ghi chú kèm theo (vd. nội dung gốc khi tạo việc từ thứ kéo thả vào tai thỏ)
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub notes: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -148,6 +151,9 @@ pub struct Settings {
     /// Gửi kèm ngữ cảnh (việc, lịch, ghi chú, mục vừa chép, tình trạng máy) khi dùng AI đám mây
     #[serde(default = "default_true")]
     pub ai_cloud_context: bool,
+    /// Lịch đích khi tạo sự kiện từ thứ kéo thả vào tai thỏ ("" = lịch mặc định của máy). Có thể là lịch Google
+    /// đã thêm trong Cài đặt hệ thống › Tài khoản Internet → tự đồng bộ lên Google Calendar.
+    pub capture_calendar: String,
 }
 
 fn default_true() -> bool {
@@ -232,6 +238,7 @@ impl Default for Settings {
             ai_model_gemini: String::new(),
             ai_model_claude: String::new(),
             ai_cloud_context: true,
+            capture_calendar: String::new(),
         }
     }
 }
@@ -320,7 +327,7 @@ impl Store {
     // ── Task
     pub fn add_task(&mut self, title: String, due: Option<i64>) -> Task {
         let now = now_ms();
-        let t = Task { id: self.id(), title, due, created: now, done_at: None, notified: false, updated: now, ext_id: None };
+        let t = Task { id: self.id(), title, due, created: now, done_at: None, notified: false, updated: now, ext_id: None, notes: String::new() };
         self.tasks.push(t.clone());
         let _ = self.save_tasks();
         t
@@ -424,6 +431,7 @@ mod tests {
             notified: false,
             updated: 0,
             ext_id: None,
+            notes: String::new(),
         }
     }
 

@@ -14,10 +14,10 @@
     // ═════════ CLIPBOARD ═════════
     let cq = "", ckind = "all", searchTimer = null, clickTimer = null;
     const thumbs = new Map();
-    const KINDS = [["all", "Tất cả"], ["text", "Chữ"], ["image", "Ảnh"], ["files", "File"], ["pinned", "Đã ghim"]];
+    const KINDS = [["all", "Tất cả"], ["text", "Chữ"], ["image", "Ảnh"], ["files", "File"]];
 
     function viewClips() {
-      view.innerHTML = `<div class="search">${I.search}<input class="field" id="clipSearch" placeholder="Tìm trong những gì đã chép" value="${esc(cq)}" /></div>
+      view.innerHTML = `<div class="search">${I.search}<input class="field" id="clipSearch" placeholder="Tìm trong những gì đã chép (cả tên mục ghim)" value="${esc(cq)}" /></div>
         <div class="filters">${KINDS.map(([k, n]) => `<button class="chip-btn ${ckind === k ? "on" : ""}" data-ck="${k}">${n}</button>`).join("")}
           <span class="grow"></span><button class="link" data-cl="clear" title="Xoá lịch sử, giữ mục đã ghim">Xoá lịch sử</button></div>
         <div id="clipList"></div>`;
@@ -25,36 +25,72 @@
       setTimeout(() => $("#clipSearch") && $("#clipSearch").focus(), 80);
       drawClips();
     }
+    function clipRow(c, auto) {
+      let body = "";
+      if (c.kind === "text") body = `<div class="cl-text">${esc(c.preview)}</div>`;
+      if (c.kind === "image") body = `<img class="cl-img" data-img="${c.id}" alt="" />`;
+      if (c.kind === "files") body = `<div class="cl-files">${c.files.map((f) => `<span class="fchip ${f.exists ? "" : "gone"}" title="${esc(f.path)}">${I.file}${esc(f.name)}</span>`).join("")}</div>`;
+      const meta = c.pinned
+        ? (c.uses ? `đã dùng ${c.uses} lần` : "chưa dùng")
+        : [fmtAgo(c.used), c.kind === "text" ? `${c.chars} ký tự` : c.kind === "image" ? bytes(c.bytes) : `${c.files.length} file`].join(" · ");
+      return `<div class="row clip ${c.pinned ? "pinned" : ""}" data-id="${c.id}">
+        <div class="cl-body" data-cl="${auto ? "paste" : "copy"}" title="${auto ? "Bấm để dán" : "Bấm để chép · bấm đúp để dán"}">
+          ${c.label ? `<b class="cl-label">${esc(c.label)}</b>` : ""}${body}<span class="meta">${meta}</span></div>
+        <span class="acts">
+          ${c.pinned ? `<button class="ib" data-cl="label" title="Đặt tên">${I.note}</button>` : c.kind === "text" ? `<button class="ib" data-cl="note" title="Lưu thành ghi chú">${I.note}</button>` : ""}
+          ${c.kind !== "files" ? `<button class="ib" data-cl="cap" title="Tạo việc · lịch từ mục này">${I.cal}</button>` : ""}
+          <button class="ib ${c.pinned ? "on" : ""}" data-cl="pin" title="${c.pinned ? "Bỏ ghim" : "Ghim — giữ mãi, không bị xoá"}">${I.pin}</button>
+          <button class="ib" data-cl="del" title="Xoá">${I.trash}</button>
+        </span></div>`;
+    }
     async function drawClips() {
       const box = $("#clipList");
       if (!box) return;
-      const list = await api("clip_list", { query: cq, kind: ckind });
       const auto = A.settings.clip_autopaste;
-      if (!list.length) {
+      // Tất cả + không tìm: mục ghim luôn nằm riêng ở đầu (theo thứ tự ghim), bên dưới là lịch sử
+      const split = ckind === "all" && !cq.trim();
+      const [pinned, list] = split
+        ? await Promise.all([api("clip_list", { query: "", kind: "pinned" }), api("clip_list", { query: "", kind: "history" })])
+        : [[], await api("clip_list", { query: cq, kind: ckind })];
+      if (!list.length && !pinned.length) {
         box.innerHTML = cq || ckind !== "all"
           ? `<div class="empty sm">Không tìm thấy mục nào</div>`
-          : `<div class="empty"><b>Chưa có gì</b><span>Chép (⌘C) chữ, ảnh hay file — Asi nhớ giúp bạn.<br>Bấm một mục để chép lại · bấm đúp để dán luôn.</span></div>`;
+          : `<div class="empty"><b>Chưa có gì</b><span>Chép (⌘C) chữ, ảnh hay file — Asi nhớ giúp bạn.<br>Bấm một mục để chép lại · bấm đúp để dán luôn · ghim để giữ mãi.</span></div>`;
         return;
       }
-      box.innerHTML = list.map((c) => {
-        let body = "";
-        if (c.kind === "text") body = `<div class="cl-text">${esc(c.preview)}</div>`;
-        if (c.kind === "image") body = `<img class="cl-img" data-img="${c.id}" alt="" />`;
-        if (c.kind === "files") body = `<div class="cl-files">${c.files.map((f) => `<span class="fchip ${f.exists ? "" : "gone"}" title="${esc(f.path)}">${I.file}${esc(f.name)}</span>`).join("")}</div>`;
-        const meta = [fmtAgo(c.used), c.kind === "text" ? `${c.chars} ký tự` : c.kind === "image" ? bytes(c.bytes) : `${c.files.length} file`].join(" · ");
-        return `<div class="row clip ${c.pinned ? "pinned" : ""}" data-id="${c.id}">
-          <div class="cl-body" data-cl="${auto ? "paste" : "copy"}" title="${auto ? "Bấm để dán" : "Bấm để chép · bấm đúp để dán"}">${body}<span class="meta">${c.pinned ? I.pin : ""}${meta}</span></div>
-          <span class="acts">
-            <button class="ib ${c.pinned ? "on" : ""}" data-cl="pin" title="${c.pinned ? "Bỏ ghim" : "Ghim"}">${I.pin}</button>
-            ${c.kind === "text" ? `<button class="ib" data-cl="note" title="Lưu thành ghi chú">${I.note}</button>` : ""}
-            <button class="ib" data-cl="del" title="Xoá">${I.trash}</button>
-          </span></div>`;
-      }).join("");
+      let html = "";
+      if (split && pinned.length) html += `<div class="sec">Đã ghim<span>${pinned.length}</span><span class="grow"></span><span class="hint-txt">giữ mãi cho tới khi bỏ ghim</span></div>` + pinned.map((c) => clipRow(c, auto)).join("");
+      if (split && pinned.length && list.length) html += `<div class="sec">Gần đây<span>${list.length}</span></div>`;
+      html += list.map((c) => clipRow(c, auto)).join("");
+      box.innerHTML = html;
       await Promise.all($$("img[data-img]", box).map(async (img) => {
         const id = Number(img.dataset.img);
         if (!thumbs.has(id)) thumbs.set(id, await api("clip_image", { id }));
         if (thumbs.get(id)) img.src = thumbs.get(id);
       }));
+    }
+    /** Ô sửa tên ngay tại chỗ cho mục ghim */
+    function editLabel(row) {
+      const id = Number(row.dataset.id);
+      const old = row.querySelector(".cl-label")?.textContent || "";
+      const body = row.querySelector(".cl-body");
+      const inp = document.createElement("input");
+      inp.className = "field cl-label-input";
+      inp.value = old;
+      inp.placeholder = "Tên gợi nhớ, vd. STK công ty";
+      body.prepend(inp);
+      row.querySelector(".cl-label")?.remove();
+      inp.focus();
+      let done = false;
+      const finish = async (save) => {
+        if (done) return;
+        done = true;
+        if (save) await api("clip_label", { id, label: inp.value });
+        drawClips();
+      };
+      inp.addEventListener("keydown", (k) => { if (A.isComposing(k)) return; if (k.key === "Enter") finish(true); if (k.key === "Escape") { k.stopPropagation(); finish(false); } });
+      inp.addEventListener("blur", () => finish(true));
+      inp.addEventListener("click", (e) => e.stopPropagation());
     }
     async function copyClip(id, paste) {
       try {
@@ -76,11 +112,13 @@
         if (b.dataset.sure !== "1") { b.dataset.sure = "1"; b.textContent = "Bấm lần nữa để xoá"; b.classList.add("danger"); return; }
         await api("clip_clear"); thumbs.clear(); toast("Đã xoá lịch sử (giữ mục ghim)"); return viewClips();
       }
-      if (a === "copy") { clearTimeout(clickTimer); clickTimer = setTimeout(() => copyClip(id, false), 230); return; } // chờ xem có bấm đúp không
+      if (a === "label") return editLabel(b.closest(".clip"));
+      if (a === "copy") { if (e.target.closest(".cl-label-input")) return; clearTimeout(clickTimer); clickTimer = setTimeout(() => copyClip(id, false), 230); return; } // chờ xem có bấm đúp không
       if (a === "paste") { clearTimeout(clickTimer); return copyClip(id, true); }
       if (a === "pin") { await api("clip_pin", { id }); drawClips(); }
       if (a === "del") { await api("clip_delete", { id }); thumbs.delete(id); drawClips(); }
       if (a === "note") { await api("clip_to_note", { id }); toast("Đã lưu vào Ghi chú"); }
+      if (a === "cap") { try { window.__asi.openCapture(await api("capture_from_clip", { id })); } catch (err) { toast(String(err)); } }
     });
     view.addEventListener("dblclick", (e) => {
       if (A.tab !== "clips") return;
@@ -224,6 +262,41 @@
       loading = false;
       if (A.tab === "threads" && A.mode === "expanded" && !(A.typing() && document.activeElement?.closest?.("#view"))) draw();
     }
+    // ───────── Trang chính tab Social: mỗi mạng một cửa sổ dạng điện thoại ─────────
+    const NETS = [
+      ["facebook", "Facebook", "Fb"], ["messenger", "Messenger", "Ms"], ["instagram", "Instagram", "Ig"], ["threads", "Threads", "Th"],
+      ["x", "X", "X"], ["tiktok", "TikTok", "Tk"], ["youtube", "YouTube", "Yt"],
+    ];
+    let openNets = [];
+    const draw = () => (A.threadsInline() ? inlineView() : window.__thApi ? drawApi() : socialHome());
+    function socialHome() {
+      const c = tv && tv.connected ? tv.cache : null, user = c && c.profile ? c.profile.username || "" : "";
+      const unread = c ? (c.unread || 0) + (c.mention_unread || 0) : 0;
+      view.innerHTML = `<div class="soc">
+        <div class="soc-head"><b>Social</b><span class="dim">Bấm để mở dạng cửa sổ điện thoại · đăng nhập một lần là nhớ · bấm lần nữa để ẩn</span></div>
+        <div class="soc-grid">${NETS.map(([id, name, ab]) => `<button class="soc-tile ${openNets.includes(id) ? "on" : ""}" data-soc="${id}" title="Mở ${name}">
+            <span class="soc-ic">${ab}</span><b>${name}</b>${openNets.includes(id) ? `<i class="soc-dot"></i>` : ""}</button>`).join("")}</div>
+        <div class="soc-th">
+          <span class="soc-ic sm">Th</span>
+          <span class="grow">${c ? `<b>@${esc(user)}</b><span class="dim">${unread ? `${unread} trả lời / nhắc đến mới` : "Đăng bài, xem trả lời & nhắc đến ngay trong tai thỏ"}</span>` : `<b>Threads nâng cao</b><span class="dim">Đăng bài, thống kê, báo trả lời mới (cần Threads API)</span>`}</span>
+          ${unread ? `<span class="tag red">${unread}</span>` : ""}
+          <button class="btn sm" data-thn="api">${c ? "Mở" : "Kết nối"}</button>
+        </div>
+        ${A.settings.threads_embed_beta && A.DISP !== "bubble" ? `<button class="link center" data-thn="inline">Xem Threads ngay trong tai thỏ (thử nghiệm)</button>` : ""}
+      </div>`;
+    }
+    async function refreshOpen() {
+      try { openNets = await api("social_open_list"); } catch (_) { openNets = []; }
+      if (A.tab === "threads" && A.mode === "expanded" && !window.__thApi && !A.threadsInline()) socialHome();
+    }
+    view.addEventListener("click", async (e) => {
+      if (A.tab !== "threads") return;
+      const b = e.target.closest("[data-soc]");
+      if (!b) return;
+      A.setMode("collapsed");
+      try { await api("social_open", { network: b.dataset.soc }); } catch (err) { toast(String(err)); }
+    });
+
     function connectView() {
       return `<div class="hero">
           <div class="th-logo">@</div>
@@ -256,11 +329,12 @@
             ${r.is_reply_owned_by_me ? "" : `<button class="link" data-th="reply" data-rid="${esc(r.id)}" data-name="${esc(r.username || "")}">Trả lời</button>`}</div>`).join("") : '<div class="dim">Chưa có trả lời</div>'}</div>` : ""}
       </div>`;
     }
-    function draw() {
+    function drawApi() {
       if (!tv) { view.innerHTML = `<div class="empty"><span class="spin"></span></div>`; return; }
-      if (!tv.connected) { view.innerHTML = connectView(); return; }
+      if (!tv.connected) { view.innerHTML = `<div class="th-bar"><button class="link" data-thn="home">${I.chevron}Social</button></div>` + connectView(); return; }
       const c = tv.cache, pr = c.profile || {}, ov = c.overview || {}, user = pr.username || "";
       view.innerHTML = `<div class="th-head">
+          <button class="ib" data-thn="home" title="Về Social">${I.chevron}</button>
           <div class="th-logo sm">${esc((user[0] || "@").toUpperCase())}</div>
           <div class="grow"><b>@${esc(user)}</b><div class="dim">${ov.followers != null ? `${num(ov.followers)} người theo dõi · ` : ""}2 ngày: ${num(ov.views)} lượt xem · ${num(ov.likes)} thích</div></div>
           <button class="btn sm primary" data-thn="feed">Mở bảng tin</button>
@@ -339,6 +413,7 @@
           <span class="grow"></span>
           <button class="link" data-thn="window">Mở cửa sổ riêng</button>
           <button class="link" data-thn="api">Thống kê</button>
+          <button class="link" data-thn="home">Social</button>
         </div>
         <div id="thSlot" class="th-slot"><span class="spin"></span></div>`;
       setTimeout(() => A.placeEmbed(), 480);
@@ -351,10 +426,12 @@
       const a = b.dataset.thn;
       if (a === "back" || a === "reload") return api("threads_embed_nav", { action: a });
       if (a === "window") { A.hideEmbed(); A.setMode("collapsed"); api("threads_web", {}).catch((err) => toast(String(err))); return; }
-      if (a === "api") { window.__thApi = true; A.switchTab("threads"); return; }
-      if (a === "feed") {
+      if (a === "api") { window.__thApi = true; window.__thInline = false; A.hideEmbed(); A.switchTab("threads"); return; }
+      if (a === "home") { window.__thApi = false; window.__thInline = false; A.hideEmbed(); A.switchTab("threads"); return; }
+      if (a === "feed" || a === "inline") {
         window.__thApi = false;
-        if (!A.threadsInline()) { A.setMode("collapsed"); api("threads_web", {}).catch((err) => toast(String(err))); return; }
+        window.__thInline = true;
+        if (!A.threadsInline()) { window.__thInline = false; A.setMode("collapsed"); api("threads_web", {}).catch((err) => toast(String(err))); return; }
         A.switchTab("threads");
       }
     });
@@ -362,6 +439,7 @@
     A.views.threads = () => {
       if (A.threadsInline()) return inlineView();
       draw();
+      if (!window.__thApi) refreshOpen();
       load(false);
     };
   }

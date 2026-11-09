@@ -410,7 +410,7 @@ fn rule_reply(app2: &AppHandle, st: &AppState, intent: assistant::Intent, rest: 
 }
 
 /// Bộ não đang chọn: (nhà cung cấp, nhãn hiển thị)
-fn brain(st: &AppState) -> (Option<llm::Provider>, String) {
+pub(crate) fn brain(st: &AppState) -> (Option<llm::Provider>, String) {
     let s = st.store.lock().unwrap();
     match llm::Provider::from_id(&s.settings.ai_provider) {
         Some(p) => {

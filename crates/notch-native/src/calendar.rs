@@ -11,6 +11,29 @@ pub struct Event {
     pub calendar: String,
 }
 
+/// Một lịch trên máy (iCloud, Google, Exchange… đã thêm trong Cài đặt hệ thống › Tài khoản Internet)
+#[derive(Debug, Clone, PartialEq)]
+pub struct CalendarInfo {
+    pub id: String,
+    pub title: String,
+    /// Tên tài khoản: "iCloud", "Google" / email, "Trên máy"…
+    pub source: String,
+    pub default: bool,
+}
+
+/// Sự kiện mới cần tạo
+#[derive(Debug, Clone, Default)]
+pub struct NewEvent {
+    pub title: String,
+    pub start_ms: i64,
+    pub end_ms: i64,
+    pub all_day: bool,
+    pub location: String,
+    pub notes: String,
+    /// "" = lịch mặc định
+    pub calendar_id: String,
+}
+
 #[cfg(target_os = "macos")]
 mod imp {
     #![allow(unused_unsafe)]
@@ -82,6 +105,56 @@ mod imp {
         }
     }
 
+    /// Các lịch ghi được (để chọn lịch đích: iCloud, Google…)
+    pub fn calendars() -> Result<Vec<super::CalendarInfo>, String> {
+        ensure_access()?;
+        unsafe {
+            let store = EKEventStore::new();
+            let def = store.defaultCalendarForNewEvents().map(|c| c.calendarIdentifier().to_string()).unwrap_or_default();
+            let mut out = vec![];
+            for c in store.calendarsForEntityType(EKEntityType::Event).iter() {
+                if !c.allowsContentModifications() {
+                    continue;
+                }
+                let id = c.calendarIdentifier().to_string();
+                out.push(super::CalendarInfo {
+                    default: id == def,
+                    id,
+                    title: c.title().to_string(),
+                    source: c.source().map(|s| s.title().to_string()).unwrap_or_default(),
+                });
+            }
+            out.sort_by(|a, b| b.default.cmp(&a.default).then(a.source.cmp(&b.source)).then(a.title.cmp(&b.title)));
+            Ok(out)
+        }
+    }
+
+    /// Tạo sự kiện đầy đủ (địa điểm, ghi chú, cả ngày, lịch đích). Lịch Google trên máy sẽ tự đồng bộ lên Google Calendar.
+    pub fn create_event_full(e: &super::NewEvent) -> Result<String, String> {
+        ensure_access()?;
+        unsafe {
+            let store = EKEventStore::new();
+            let cal = if e.calendar_id.is_empty() { None } else { store.calendarWithIdentifier(&NSString::from_str(&e.calendar_id)) };
+            let cal = cal.or_else(|| store.defaultCalendarForNewEvents()).ok_or("Chưa có lịch nào trên máy")?;
+            let ev = EKEvent::eventWithEventStore(&store);
+            ev.setTitle(Some(&NSString::from_str(&e.title)));
+            ev.setStartDate(Some(&date(e.start_ms)));
+            ev.setEndDate(Some(&date(e.end_ms.max(e.start_ms + 60_000))));
+            ev.setAllDay(e.all_day);
+            if !e.location.trim().is_empty() {
+                ev.setLocation(Some(&NSString::from_str(&e.location)));
+            }
+            if !e.notes.trim().is_empty() {
+                ev.setNotes(Some(&NSString::from_str(&e.notes)));
+            }
+            ev.setCalendar(Some(&cal));
+            store
+                .saveEvent_span_commit_error(&ev, EKSpan::ThisEvent, true)
+                .map_err(|e| format!("Không tạo được sự kiện: {}", e.localizedDescription()))?;
+            Ok(ev.eventIdentifier().map(|s| s.to_string()).unwrap_or_default())
+        }
+    }
+
     pub fn create_event(title: &str, start_ms: i64, end_ms: i64) -> Result<String, String> {
         ensure_access()?;
         unsafe {
@@ -112,6 +185,12 @@ mod imp {
     pub fn create_event(_t: &str, _s: i64, _e: i64) -> Result<String, String> {
         ensure_access().map(|_| String::new())
     }
+    pub fn calendars() -> Result<Vec<super::CalendarInfo>, String> {
+        ensure_access().map(|_| vec![])
+    }
+    pub fn create_event_full(_e: &super::NewEvent) -> Result<String, String> {
+        ensure_access().map(|_| String::new())
+    }
 }
 
-pub use imp::{create_event, ensure_access, events};
+pub use imp::{calendars, create_event, create_event_full, ensure_access, events};

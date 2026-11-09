@@ -96,11 +96,11 @@
       group("", [
         mod("clean", "Dọn máy", "Quét cache, nhật ký, file cài đặt cũ để giải phóng ổ đĩa"),
         mod("focus", "Tập trung", "Nút hẹn giờ 25 phút trên tai thỏ — Asi tạm im lặng"),
-        mod("threads", "Threads", "Mở Threads trong cửa sổ nhỏ, xem thống kê & trả lời"),
+        mod("threads", "Social", "Facebook, Messenger, Instagram, Threads, X, TikTok, YouTube trong cửa sổ dạng điện thoại"),
         mod("journal", "Nhật ký", "Mỗi tối Asi hỏi 3 câu về ngày của bạn", m.includes("journal") ? `<span class="inline dim">lúc</span>${num("journal_hour", 17, 23, "giờ")}` : ""),
         mod("words", "Từ mới tiếng Anh", "2–3 từ mỗi lần mở bảng, có chấm phát âm", m.includes("words") ? seg("vocab_count", [[2, "2 từ"], [3, "3 từ"]], st.vocab_count || 3) : ""),
       ]) +
-      (m.includes("threads") && MAC ? group("Thử nghiệm", [row("Threads nhúng trong bảng", "Thay vì mở cửa sổ riêng", sw("threads_embed_beta"))]) : "");
+      (m.includes("threads") && MAC ? group("Thử nghiệm", [row("Threads nhúng trong bảng", "Trong tab Social, xem Threads ngay trong tai thỏ thay vì cửa sổ riêng", sw("threads_embed_beta"))]) : "");
   }
 
   // ───────── Nhắc nhở ─────────

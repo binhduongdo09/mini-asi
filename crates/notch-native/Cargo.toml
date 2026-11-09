@@ -11,6 +11,7 @@ block2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSThread", "NSString", "NSArray", "NSURL", "NSData", "NSDictionary", "NSDate", "NSError", "NSLocale", "NSOperation", "NSObject", "block2"] }
 objc2-app-kit = { version = "0.3", features = ["NSScreen", "NSWindow", "NSResponder", "NSGraphics", "NSApplication", "NSRunningApplication", "NSPasteboard", "NSPasteboardItem", "NSImageRep", "NSBitmapImageRep"] }
 objc2-event-kit = "0.3"
+objc2-vision = "0.3"
 objc2-speech = "0.3"
 objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "AVCaptureDevice", "AVMediaFormat"] }
 
