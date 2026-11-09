@@ -8,7 +8,7 @@
 :root {
   --nav-h: 64px;
   --hero-min: 760px;
-  --shot-ratio: 1400 / 1040;
+  --shot-ratio: 900 / 600;
 }
 
 /* ---------- Nav ---------- */
@@ -84,7 +84,7 @@ figcaption { margin-top: var(--space-sm); padding-inline: var(--space-2xs); font
 .hero .btn--ghost:hover { background: color-mix(in oklab, var(--color-light) 70%, transparent); }
 .hero__note { margin-top: var(--space-md); font-size: var(--text-sm); color: var(--color-day-ink); }
 
-.hero__shot .shot { aspect-ratio: 920 / 448; background: transparent; }
+.hero__shot .shot { aspect-ratio: 1200 / 580; background: transparent; }
 .hero__shot { padding: var(--space-lg); }
 
 /* ---------- Sections ---------- */
