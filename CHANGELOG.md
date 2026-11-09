@@ -1,5 +1,26 @@
 # Nhật ký thay đổi
 
+## 0.16.0 (11/2026) — ghi âm & biên bản cuộc họp
+**Tab Họp mới** (luôn có, sau Ghi chú)
+- Bấm "Ghi cuộc họp": thu **micro** (họp trực tiếp) + tuỳ chọn **âm thanh của máy** (giọng người khác trong Zoom / Meet /
+  Teams, kể cả khi đeo tai nghe — macOS 14.6+, quyền "Ghi âm thanh hệ thống"; cpal process tap).
+- Đang ghi: đồng hồ đỏ trên tai thỏ (bấm để mở), thanh âm lượng micro / máy, chữ hiện dần sau mỗi ~30–45 giây.
+- Chuyển chữ bằng nhận dạng giọng nói của Apple, **ngay trên máy** nếu máy hỗ trợ tiếng Việt (không cần mạng), không thì
+  qua máy chủ Apple. Cắt đoạn ở chỗ lặng nhất để không cắt giữa câu. Có 2 nguồn → biên bản chia "Bạn" / "Người khác";
+  tiếng loa lọt vào micro tự bỏ.
+- Dừng ghi → tự tóm tắt (tắt được): **Apple Intelligence** (mặc định, chạy trên máy; chia khúc ~2200 ký tự vì mô hình chỉ
+  đọc ~4096 token rồi gộp, bỏ trùng) hoặc **Gemini** (đọc trọn cuộc họp; chưa có key / lỗi → tự dùng Apple và ghi chú lý do).
+- Biên bản: Tóm tắt · Quyết định · Việc cần làm (người phụ trách, hạn) — tick chọn rồi "Thêm vào tab Việc" (hạn đọc bằng
+  nlp, ghi chú "Từ cuộc họp…"); Lưu vào Ghi chú, Chép (Markdown), mở file ghi âm, đổi tên, xoá. Tên mặc định = sự kiện lịch
+  đang diễn ra.
+- Cài đặt › Asi & giọng nói › Ghi cuộc họp: bộ não tóm tắt (Apple / Gemini, ô API key Gemini + nút Kiểm tra ngay tại đây),
+  tự tóm tắt, thu âm thanh máy.
+- Dữ liệu: `meetings/<id>/meeting.json` + `audio.wav` (16 kHz mono) trong thư mục dữ liệu app, chỉ lưu trên máy.
+- Mã: `meeting.rs` (thu âm, cắt đoạn, đổi tần số, đọc biên bản, có test), `commands/meeting.rs`, `ui/meeting.js`;
+  `speech::transcribe_file_opts` / `on_device_support`; `llm::ask_with_timeout`. Info.plist: `NSAudioCaptureUsageDescription`.
+- Giới hạn đã biết: thiết bị phát có kèm micro (tai nghe Bluetooth đang ở chế độ gọi) chưa thu được âm thanh máy → chỉ ghi
+  micro và báo rõ.
+
 ## 0.15.1 (11/2026) — hết lặp câu trả lời, hết bịa thời tiết / giá vàng
 **Lỗi**: Apple Intelligence (mô hình nhỏ trên máy) chép lại câu trả lời trước cho câu hỏi khác ("thị trường hôm nay"
 → trả lời thời tiết / giá vàng), nhại lại câu hỏi ("Tin công nghệ hôm nay có gì không?"), và bịa số liệu trực tiếp

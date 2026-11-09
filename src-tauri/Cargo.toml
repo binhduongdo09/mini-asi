@@ -1,6 +1,6 @@
 [package]
 name = "mini-asi"
-version = "0.15.1"
+version = "0.16.0"
 edition = "2021"
 description = "Mini-Asi — trợ lý sống quanh tai thỏ"
 license = "Proprietary"

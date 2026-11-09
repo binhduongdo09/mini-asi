@@ -12,6 +12,7 @@ pub mod assistant;
 pub mod backup;
 pub mod capture;
 pub mod live;
+pub mod meeting;
 pub mod social;
 pub mod clipboard;
 pub mod files;
@@ -227,7 +228,8 @@ pub fn run() {
             permissions_status, request_permissions,
             backup_info, backup_pick_dir, backup_set, backup_now, device_sync_now, backup_restore,
             update_info, update_check, update_install,
-            drop_read, capture_supports, capture_set_text, capture_from_clip, capture_analyze, capture_create, calendar_list
+            drop_read, capture_supports, capture_set_text, capture_from_clip,
+            meeting_start, meeting_stop, meeting_status, meeting_list, meeting_get, meeting_rename, meeting_delete, meeting_reveal, meeting_summarize, meeting_add_tasks, meeting_to_note, meeting_copy, capture_analyze, capture_create, calendar_list
         ])
         .run(tauri::generate_context!())
         .expect("Mini-Asi không khởi động được");

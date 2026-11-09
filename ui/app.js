@@ -204,6 +204,23 @@
   // ───────── Thanh trên ─────────
   const IDLE_DEFAULT = ["focus", "overdue", "event", "next", "tasks", "mic"];
   const idleItems = () => (Array.isArray(settings.idle_items) ? settings.idle_items : IDLE_DEFAULT);
+  // ───────── Ghi cuộc họp: trạng thái đang ghi (đồng hồ đỏ trên tai thỏ) ─────────
+  let meet = null; // { id, title, secs, system_audio, stt, pending, mic, sys }
+  const clockOf = (secs) => { const s = Math.max(0, Math.floor(secs || 0)); return s >= 3600 ? `${Math.floor(s / 3600)}:${pad(Math.floor(s / 60) % 60)}:${pad(s % 60)}` : `${pad(Math.floor(s / 60))}:${pad(s % 60)}`; };
+  function setMeet(m) {
+    meet = m ? { ...(meet || {}), ...m } : null;
+    updateBar();
+    document.dispatchEvent(new Event("asi-meet"));
+  }
+  on("meeting-state", (m) => setMeet(m));
+  on("meeting-level", (lv) => {
+    if (!meet || !Array.isArray(lv)) return;
+    meet.secs = lv[0]; meet.mic = lv[1]; meet.sys = lv[2];
+    updateBar();
+    document.dispatchEvent(new Event("asi-meet-level"));
+  });
+  api("meeting_status").then((m) => m && setMeet(m)).catch(() => {});
+
   function updateBar() {
     const rw = $("#rightWing");
     if (mode === "expanded") {
@@ -217,16 +234,17 @@
     }
     const s = status;
     const items = idleItems();
-    const micHtml = items.includes("mic") && DISP !== "bubble" ? `<button class="wing-mic" data-act="vmic" title="Ra lệnh bằng giọng nói">${I.mic}</button>` : "";
+    const micHtml = items.includes("mic") && DISP !== "bubble" && !meet ? `<button class="wing-mic" data-act="vmic" title="Ra lệnh bằng giọng nói">${I.mic}</button>` : "";
     if (!s) { if (rw.dataset.keys !== "nos") { rw.innerHTML = micHtml; rw.dataset.keys = "nos"; } return; }
     if (DISP === "bubble" && mode === "collapsed") {
       const n = s.lateness.overdue && !s.focus_mode ? s.lateness.overdue : 0;
-      const k = "bub:" + n;
-      if (rw.dataset.keys !== k) { rw.innerHTML = n ? `<span class="b-dot">${n}</span>` : ""; rw.dataset.keys = k; }
+      const k = "bub:" + n + (meet ? ":rec" : "");
+      if (rw.dataset.keys !== k) { rw.innerHTML = meet ? `<i class="rec-dot b-rec"></i>` : n ? `<span class="b-dot">${n}</span>` : ""; rw.dataset.keys = k; }
       return;
     }
     const now = Date.now(), b = [];
     const want = (k) => items.includes(k);
+    if (meet) b.push(["meet", "red rec", "", clockOf(meet.secs)]); // đang ghi họp: đồng hồ đỏ
     if (want("focus") && s.focus_until) {
       const left = Math.max(0, s.focus_until * 1000 - now);
       b.push(["focus", "violet", "", `${pad(Math.floor(left / 60000))}:${pad(Math.floor((left % 60000) / 1000))}`]);
@@ -253,6 +271,7 @@
   // ───────── Peek: một dòng trạng thái + nhạc (nếu đang phát) + 4 nút nhanh ─────────
   function peekStatus() {
     const s = status, now = Date.now();
+    if (meet) return { go: "meet", html: `<span class="pill red"><i class="rec-dot"></i>Đang ghi ${clockOf(meet.secs)}</span><span class="t">${esc(meet.title || "Cuộc họp")}</span>` };
     if (!s) return { html: "", go: "home" };
     if (s.lateness.overdue > 0 && !s.focus_until) {
       const t = tasks.find((x) => !x.done_at && x.due && x.due < now);
@@ -548,6 +567,7 @@
     if (act === "vmic") { e.stopPropagation(); voiceCommand(); return; }
     if (act === "ime") { e.stopPropagation(); toggleIme(e.altKey); return; }
     if (act === "settings") { e.stopPropagation(); openSettings(); return; }
+    if (e.target.closest('[data-k="meet"]')) { e.stopPropagation(); tab = "meet"; setMode("expanded", { force: true }); return; }
     if (mode === "collapsed" || mode === "peek") setMode("expanded");
     else if (mode === "expanded") setMode("collapsed");
   });
@@ -1043,6 +1063,7 @@
     ["home", "Asi", I.sparkle, null],
     ["tasks", "Việc", I.tasks, null],
     ["notes", "Ghi chú", I.note, null],
+    ["meet", "Họp", I.wave, null],
     ["clips", "Clipboard", I.clip, null],
     ["journal", "Nhật ký", I.book, "journal"],
     ["words", "Từ mới", I.words, "words"],
@@ -1054,7 +1075,7 @@
     if (!list.some(([id]) => id === tab)) { const cur = TABS.find(([id]) => id === tab); if (cur) list.push(cur); }
     return list;
   }
-  const tabDot = (id) => !!((id === "tasks" && status && status.lateness.overdue) || (id === "threads" && status && status.threads_unread));
+  const tabDot = (id) => !!((id === "tasks" && status && status.lateness.overdue) || (id === "threads" && status && status.threads_unread) || (id === "meet" && meet));
   function renderTabs() {
     const el = $("#tabs");
     const list = visibleTabs();
@@ -1282,6 +1303,8 @@
     get tasks() { return tasks; },
     get settings() { return settings; },
     get DISP() { return DISP; },
+    get meet() { return meet; },
+    clockOf,
     saveSettings: async (patch) => { Object.assign(settings, patch); await saveSettings(Object.keys(patch)); },
     takeFreshOpen() { const f = freshOpen; freshOpen = false; return f; },
     applyMood, applyColor,

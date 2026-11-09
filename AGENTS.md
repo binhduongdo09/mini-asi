@@ -76,6 +76,8 @@ Kiểm tra biên dịch cho macOS từ Linux (không cần Mac): `RUSTC_BOOTSTRA
 - Thông tin trực tiếp (thời tiết, tin tức, tỷ giá, giá vàng, chứng khoán…) **không bao giờ** hỏi mô hình — đi qua `live.rs`
   (nguồn thật hoặc nút "Xem trên web"). Apple Intelligence chỉ nhận lịch sử khi `assistant::is_follow_up`; câu trả lời lặp
   bị chặn bằng `assistant::is_repeat`.
+- Ghi cuộc họp: chỉ ghi khi người dùng bấm (không tự ghi); biên bản/âm thanh chỉ lưu trên máy; chỉ gửi toàn văn lên Gemini
+  khi người dùng chọn Gemini. Việc cần làm trong biên bản chỉ vào tab Việc khi người dùng tick & bấm thêm.
 - Thả nội dung → việc/lịch: luôn để người dùng xem & bấm tạo, không tự tạo. Ảnh chỉ đọc bằng Vision trên máy; chỉ chữ đọc được
   (không phải ảnh) mới gửi cho AI đám mây nếu người dùng chọn bộ não đám mây.
 - Giọng đọc: **không** dùng các giọng NghiTTS mang tên/giọng người nổi tiếng hoặc giọng thương mại
@@ -87,8 +89,8 @@ Kiểm tra biên dịch cho macOS từ Linux (không cần Mac): `RUSTC_BOOTSTRA
 
 ## Xem thử UI (trình duyệt, dữ liệu giả)
 
-`ui/index.html?open=peek|home|tasks|notes|clips|journal|words|threads|clean|listen|reply|sheet|drop|dropc|capture|alert-reminder|alert-break|alert-journal`
-· `drop=text|image|contact|url` (với open=capture) · `late=0|3` · `notch=0` · `disp=pill|bubble` · `mods=journal,words,clean,focus,threads` · `media=0` · `threads=1` · `update=1` · `journal=1`
+`ui/index.html?open=peek|home|tasks|notes|meet|clips|journal|words|threads|clean|listen|reply|sheet|drop|dropc|capture|alert-reminder|alert-break|alert-journal`
+· `drop=text|image|contact|url` (với open=capture) · `meet=rec` (giả lập đang ghi họp) · `late=0|3` · `notch=0` · `disp=pill|bubble` · `mods=journal,words,clean,focus,threads` · `media=0` · `threads=1` · `update=1` · `journal=1`
 · Cửa sổ Cài đặt: `ui/settings.html?sec=general|look|features|reminders|assistant|ime|clips|sync|perms|pro`.
 
 ## Những gì chưa kiểm chứng trên Mac thật (ưu tiên test khi có máy)

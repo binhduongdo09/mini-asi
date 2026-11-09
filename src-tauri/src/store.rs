@@ -156,6 +156,14 @@ pub struct Settings {
     pub capture_calendar: String,
     /// Nơi xem thời tiết khi hỏi Asi ("" = đoán theo mạng / IP)
     pub weather_place: String,
+    /// Họp: bộ não tóm tắt "apple" (trên máy, mặc định) | "gemini"
+    pub meeting_ai: String,
+    /// Họp: thu cả âm thanh của máy (giọng người khác trong Zoom / Meet / Teams)
+    #[serde(default = "default_true")]
+    pub meeting_system_audio: bool,
+    /// Họp: tự tóm tắt khi dừng ghi
+    #[serde(default = "default_true")]
+    pub meeting_auto_summary: bool,
 }
 
 fn default_true() -> bool {
@@ -242,6 +250,9 @@ impl Default for Settings {
             ai_cloud_context: true,
             capture_calendar: String::new(),
             weather_place: String::new(),
+            meeting_ai: "apple".into(),
+            meeting_system_audio: true,
+            meeting_auto_summary: true,
         }
     }
 }

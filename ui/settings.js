@@ -161,6 +161,22 @@
     }
     return group("Bộ não của Asi", rows, foot);
   }
+  function meetGroup() {
+    const g = brains.find((x) => x.id === "gemini");
+    const rows = [
+      row("Tóm tắt biên bản bằng", "Apple Intelligence chạy trên máy, dùng được khi không có mạng. Gemini đọc trọn cuộc họp một lần (nội dung họp được gửi tới Google); Gemini lỗi thì tự dùng Apple", seg("meeting_ai", [["apple", "Apple Intelligence"], ["gemini", "Gemini"]], st.meeting_ai || "apple")),
+    ];
+    if (st.meeting_ai === "gemini" && g && (st.ai_provider || "apple") !== "gemini") {
+      rows.push(`<div class="srow"><div class="grow"><b>API key Gemini</b><span>${g.has_key ? "Đã lưu trong Keychain của máy" : `Chưa có — <button class="link inline-link" data-act="key-url" data-url="${esc(g.key_url)}">lấy key Gemini</button>`}</span></div>
+        <input class="field" type="password" style="width:200px" placeholder="${g.has_key ? "•••••••• (đã lưu)" : "Dán API key"}" />
+        <button class="btn sm" data-act="key-save" data-p="gemini">Lưu</button>${g.has_key ? `<button class="btn sm" data-act="ai-test" data-p="gemini">Kiểm tra</button>` : ""}</div>`);
+    }
+    rows.push(
+      row("Tự tóm tắt khi dừng ghi", "Tắt thì bấm Tóm tắt trong từng cuộc họp", sw("meeting_auto_summary", st.meeting_auto_summary !== false)),
+      row("Thu cả âm thanh máy", "Giọng người khác trong Zoom / Meet / Teams, kể cả khi đeo tai nghe (macOS 14.6+, cần quyền Ghi âm thanh hệ thống)", sw("meeting_system_audio", st.meeting_system_audio !== false)),
+    );
+    return group("Ghi cuộc họp", rows, "Chuyển chữ bằng nhận dạng giọng nói của Apple (ngay trên máy nếu máy hỗ trợ tiếng Việt, không thì qua máy chủ Apple). File ghi âm và biên bản chỉ lưu trên máy bạn.");
+  }
   async function secAssistant() {
     [tts, ai, brains] = await Promise.all([api("tts_info").catch(() => null), api("apple_ai_status").catch(() => null), api("ai_info").catch(() => [])]);
     const hasVoice = tts && tts.status.phase === "ready";
@@ -170,6 +186,7 @@
         row("Ngôn ngữ khi nói với Asi", "Dùng cho ghi chú, thêm việc, nhật ký bằng giọng nói", `<select class="field" data-txt="voice_lang">${[["vi-VN", "Tiếng Việt"], ["en-US", "English (US)"], ["en-GB", "English (UK)"]].map(([v, n]) => `<option value="${v}" ${st.voice_lang === v ? "selected" : ""}>${n}</option>`).join("")}</select>`),
         row("Đọc to câu trả lời", hasVoice ? "Asi đọc 1–2 câu đầu của câu trả lời" : "Cần tải giọng đọc bên dưới", hasVoice ? sw("voice_reply") : ""),
       ]) +
+      `<div id="meetGroup">${meetGroup()}</div>` +
       group("Thông tin trực tiếp", [
         row("Nơi xem thời tiết", "Để trống: Asi đoán theo mạng đang dùng. Hỏi \"thời tiết Đà Nẵng\" để xem nơi khác", txt("weather_place", 170).replace("<input", '<input placeholder="Vd: Cầu Giấy, Hà Nội"')),
       ], "Thời tiết (Open-Meteo), tin tức (VnExpress), tỷ giá (Vietcombank) lấy từ nguồn thật. Giá vàng, chứng khoán, giá xăng chưa có nguồn ổn định nên Asi đưa nút xem trên web thay vì đoán số.") +
@@ -335,12 +352,14 @@
       if (a === "quit") return api("quit");
       if (a === "key-url") return api("open_link", { url: b.dataset.url });
       if (a === "key-save" || a === "key-del") {
-        const key = a === "key-del" ? "" : ($("#aiKey").value || "").trim();
+        const inp = b.closest(".srow")?.querySelector('input[type="password"]');
+        const key = a === "key-del" ? "" : ((inp && inp.value) || "").trim();
         if (a === "key-save" && !key) { toast("Dán API key vào ô trước đã"); return; }
         await api("ai_set_key", { provider: b.dataset.p, key });
         brains = await api("ai_info");
         toast(key ? "Đã lưu key — đang kiểm tra…" : "Đã xoá key");
         $("#brainGroup").innerHTML = brainGroup();
+        if ($("#meetGroup")) $("#meetGroup").innerHTML = meetGroup();
         if (key) $(`[data-act="ai-test"][data-p="${b.dataset.p}"]`)?.click();
         return;
       }

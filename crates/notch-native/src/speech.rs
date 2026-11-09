@@ -31,8 +31,22 @@ mod imp {
         }
     }
 
+    /// Máy có nhận dạng `locale` ngay trên máy (không cần mạng) không. None = không hỗ trợ ngôn ngữ này.
+    pub fn on_device_support(locale: &str) -> Option<bool> {
+        unsafe {
+            let loc = NSLocale::localeWithLocaleIdentifier(&NSString::from_str(locale));
+            let rec = SFSpeechRecognizer::initWithLocale(SFSpeechRecognizer::alloc(), &loc)?;
+            Some(rec.supportsOnDeviceRecognition())
+        }
+    }
+
     /// `locale`: "vi-VN" hoặc "en-US"...
     pub fn transcribe_file(path: &str, locale: &str) -> Result<String, String> {
+        transcribe_file_opts(path, locale, false)
+    }
+
+    /// `on_device = true` → bắt buộc nhận dạng ngay trên máy (họp offline); máy không hỗ trợ thì dùng máy chủ Apple.
+    pub fn transcribe_file_opts(path: &str, locale: &str, on_device: bool) -> Result<String, String> {
         ensure_access()?;
         unsafe {
             let loc = NSLocale::localeWithLocaleIdentifier(&NSString::from_str(locale));
@@ -46,6 +60,9 @@ mod imp {
             let url = NSURL::fileURLWithPath(&NSString::from_str(path));
             let req = SFSpeechURLRecognitionRequest::initWithURL(SFSpeechURLRecognitionRequest::alloc(), &url);
             req.setShouldReportPartialResults(false);
+            if on_device && rec.supportsOnDeviceRecognition() {
+                req.setRequiresOnDeviceRecognition(true);
+            }
             if req.respondsToSelector(sel!(setAddsPunctuation:)) {
                 req.setAddsPunctuation(true);
             }
@@ -78,6 +95,12 @@ mod imp {
     pub fn transcribe_file(_path: &str, _locale: &str) -> Result<String, String> {
         ensure_access().map(|_| String::new())
     }
+    pub fn transcribe_file_opts(_path: &str, _locale: &str, _on_device: bool) -> Result<String, String> {
+        ensure_access().map(|_| String::new())
+    }
+    pub fn on_device_support(_locale: &str) -> Option<bool> {
+        None
+    }
 }
 
-pub use imp::{ensure_access, transcribe_file};
+pub use imp::{ensure_access, on_device_support, transcribe_file, transcribe_file_opts};

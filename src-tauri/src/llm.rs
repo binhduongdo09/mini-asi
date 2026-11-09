@@ -159,8 +159,13 @@ pub fn explain_status(p: Provider, code: u16, body: &str) -> String {
 
 /// Gửi câu hỏi, trả về chữ mô hình trả lời
 pub fn ask(p: Provider, key: &str, model: &str, system: &str, prompt: &str) -> Result<String, String> {
+    ask_with_timeout(p, key, model, system, prompt, TIMEOUT)
+}
+
+/// Như `ask` nhưng chờ lâu hơn (tóm tắt cả cuộc họp dài)
+pub fn ask_with_timeout(p: Provider, key: &str, model: &str, system: &str, prompt: &str, timeout: Duration) -> Result<String, String> {
     let r = build_request(p, key, model, system, prompt);
-    let mut req = ureq::post(&r.url).timeout(TIMEOUT).set("Content-Type", "application/json");
+    let mut req = ureq::post(&r.url).timeout(timeout).set("Content-Type", "application/json");
     for (k, v) in &r.headers {
         req = req.set(k, v);
     }

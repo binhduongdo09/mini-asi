@@ -7,11 +7,13 @@
   <true/>
   <!-- Lời giải thích macOS hiện khi xin quyền (bắt buộc, thiếu là app bị tắt khi xin quyền) -->
   <key>NSMicrophoneUsageDescription</key>
-  <string>Mini-Asi dùng micro để bạn ghi chú, thêm việc, viết nhật ký bằng giọng nói và bật/tắt nhanh micro trên tai thỏ.</string>
+  <string>Mini-Asi dùng micro để bạn ghi chú, thêm việc, viết nhật ký bằng giọng nói, ghi âm cuộc họp và bật/tắt nhanh micro trên tai thỏ.</string>
   <key>NSCameraUsageDescription</key>
   <string>Mini-Asi dùng camera để hiển thị gương xem nhanh và bật/tắt camera ngay trên tai thỏ.</string>
+  <key>NSAudioCaptureUsageDescription</key>
+  <string>Mini-Asi thu âm thanh của máy (giọng người khác trong Zoom, Meet, Teams…) khi bạn bật ghi cuộc họp, để chuyển thành biên bản.</string>
   <key>NSSpeechRecognitionUsageDescription</key>
-  <string>Mini-Asi chuyển giọng nói tiếng Việt / tiếng Anh của bạn thành chữ.</string>
+  <string>Mini-Asi chuyển giọng nói tiếng Việt / tiếng Anh của bạn và nội dung cuộc họp bạn ghi thành chữ.</string>
   <key>NSCalendarsUsageDescription</key>
   <string>Mini-Asi hiện lịch họp trên tai thỏ và nhắc bạn trước giờ họp.</string>
   <key>NSCalendarsFullAccessUsageDescription</key>

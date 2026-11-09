@@ -15,6 +15,7 @@ Bên trong là linh vật hai mắt biết chớp, cười, lo lắng, ngáp ng�
 | ✎ **Ghi chú** | Tự lưu, ghim, tìm, đọc cho Asi ghi. ⌘⇧Space mở nhanh. |
 | 📋 **Clipboard** | Nhớ chữ, ảnh, file đã chép. Bấm = chép lại, bấm đúp = dán luôn. Ghim = giữ mãi ở đầu danh sách (đặt tên được). ⌃⇧V. |
 | 📦 **Kéo thả file** | Thả vào **nửa trái** tai thỏ = AirDrop ngay; **nửa phải** = Nén ZIP, giải nén, nén/gộp PDF, chép file. |
+| 🎙 **Họp** | Ghi cuộc họp trực tiếp hoặc online (micro + âm thanh máy), chuyển chữ bằng Apple ngay trên máy, biên bản tóm tắt · quyết định · việc cần làm bằng Apple Intelligence (hoặc Gemini). |
 | 🗓 **Thả → việc / lịch** | Kéo chữ, tin nhắn, link, ảnh, ảnh chụp màn hình, danh bạ vào tai thỏ → Asi đề xuất việc hoặc sự kiện (đọc cả chữ trong ảnh). Sự kiện vào lịch iCloud hoặc Google (tài khoản Google thêm trong Cài đặt hệ thống › Tài khoản Internet). |
 
 | Mô-đun (bật/tắt trong Cài đặt › Tính năng) | |
