@@ -22,3 +22,4 @@ pub mod vocab;
 pub mod status;
 pub mod updater;
 pub mod capture;
+pub mod live;

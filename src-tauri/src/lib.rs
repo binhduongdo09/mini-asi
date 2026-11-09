@@ -11,6 +11,7 @@ pub mod apple_ai;
 pub mod assistant;
 pub mod backup;
 pub mod capture;
+pub mod live;
 pub mod social;
 pub mod clipboard;
 pub mod files;

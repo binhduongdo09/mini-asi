@@ -73,6 +73,9 @@ Kiểm tra biên dịch cho macOS từ Linux (không cần Mac): `RUSTC_BOOTSTRA
 - Đăng bài Threads chỉ khi người dùng bấm Đăng **và** xác nhận. Không tự động đăng.
 - Tab Social: chỉ dùng ô chữ viết tắt trung tính (Fb, Ms, Ig…), **không** vẽ/nhúng logo thương hiệu. Cửa sổ mạng xã hội
   không được cấp capabilities (chỉ `notch`, `settings` có quyền gọi lệnh); thêm mạng mới ở `social.rs` kèm tên miền được phép.
+- Thông tin trực tiếp (thời tiết, tin tức, tỷ giá, giá vàng, chứng khoán…) **không bao giờ** hỏi mô hình — đi qua `live.rs`
+  (nguồn thật hoặc nút "Xem trên web"). Apple Intelligence chỉ nhận lịch sử khi `assistant::is_follow_up`; câu trả lời lặp
+  bị chặn bằng `assistant::is_repeat`.
 - Thả nội dung → việc/lịch: luôn để người dùng xem & bấm tạo, không tự tạo. Ảnh chỉ đọc bằng Vision trên máy; chỉ chữ đọc được
   (không phải ảnh) mới gửi cho AI đám mây nếu người dùng chọn bộ não đám mây.
 - Giọng đọc: **không** dùng các giọng NghiTTS mang tên/giọng người nổi tiếng hoặc giọng thương mại

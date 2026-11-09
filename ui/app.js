@@ -1115,6 +1115,7 @@
         <button class="ib" data-ta="done" title="Xong">${I.check}</button><button class="ib txt" data-ta="s60" title="Hoãn 1 giờ">+1h</button></div>`).join("")}</div>`;
     if (c.kind === "events") return `<div class="a-list">${c.items.map(([t, st, ad]) => `<div class="a-row"><span class="ev"></span><span class="grow">${esc(t)}</span><span class="due">${ad ? "Cả ngày" : hm(new Date(st))}</span></div>`).join("")}</div>`;
     if (c.kind === "text") return `<div class="a-text">${fmtMd(c.text)}</div>`;
+    if (c.kind === "links") return `<div class="a-list">${c.items.map((l) => `<button class="a-row a-link" data-url="${esc(l.url)}" title="${esc(l.url)}"><span class="grow">${esc(l.title)}</span>${l.meta ? `<span class="due">${esc(l.meta)}</span>` : ""}${I.ext}</button>`).join("")}</div>`;
     return "";
   }
   function replyHtml(r) {
@@ -1163,6 +1164,7 @@
   async function runAction(cmd, arg, compact) {
     if (cmd === "ask") return askAsi(arg, compact);
     if (cmd === "open_tab") { if (arg === "settings" || arg === "ai") return openSettings(arg === "ai" ? "assistant" : null); tab = arg; return setMode("expanded", { force: true }); }
+    if (cmd === "open_url") return api("open_link", { url: arg });
     if (cmd === "open_chat") { tab = "home"; return setMode("expanded", { force: true }); }
     if (cmd === "more_voice") return voiceCommand();
     if (cmd === "close") { api("asi_stop_speaking"); return setMode("collapsed"); }
@@ -1187,6 +1189,8 @@
     el.addEventListener("click", (e) => {
       const t = e.target.closest("[data-ta]");
       if (t) return taskAct(t.closest(".a-row"), t.dataset.ta);
+      const l = e.target.closest("[data-url]");
+      if (l) return api("open_link", { url: l.dataset.url });
       const b = e.target.closest("[data-ac]");
       if (b) runAction(b.dataset.ac, b.dataset.arg || "", el.id === "reply");
     });

@@ -124,6 +124,8 @@ pub(crate) fn ai_instructions(st: &AppState, en: bool, with_context: bool) -> St
          - Be direct and useful. Usually 1-4 sentences; use short '- ' bullet lines for steps or options; for writing tasks give the full text (up to about 12 lines).\n\
          - Use the conversation so far to understand follow-ups (\"nó\", \"cái đó\", \"dịch lại\", \"ngắn hơn\").\n\
          - Only state facts about the user's tasks, events, notes or Mac that appear in the context. Never invent them. If you are not sure about something, say so briefly.\n\
+         - You have NO internet access. Never state current weather, temperatures, prices (gold, fuel, stocks, crypto), exchange rates, news or sports results; say Asi cannot check that live.\n\
+         - Answer ONLY the latest user message. Never copy or repeat an earlier answer from the conversation, and never just repeat the user's question back.\n\
          - No greetings unless greeted, no disclaimers about being an AI.\n\
          Most messages are questions or requests for text: answer them fully in reply and set action to none.\n\
          Only choose another action when the user explicitly asks the app to DO it (\"nhắc tôi\", \"thêm việc\", \"ghi chú lại\", \"bật tập trung\"…):\n\
@@ -139,16 +141,23 @@ pub(crate) fn ai_instructions(st: &AppState, en: bool, with_context: bool) -> St
     )
 }
 
-/// Lịch sử gần đây (≤ 6 lượt, trong 30 phút) + câu hỏi hiện tại
-pub(crate) fn ai_prompt(st: &AppState, text: &str) -> String {
+/// Các lượt hỏi đáp gần đây (trong 30 phút), cũ → mới
+pub(crate) fn recent_turns(st: &AppState, n: usize) -> Vec<(String, String)> {
     let now = now_ms();
     let log = st.chat_log.lock().unwrap();
-    let recent: Vec<&(String, String, i64)> = log.iter().rev().take_while(|(_, _, t)| now - t < 30 * 60_000).take(6).collect();
+    let mut v: Vec<(String, String)> = log.iter().rev().take_while(|(_, _, t)| now - t < 30 * 60_000).take(n).map(|(q, a, _)| (q.clone(), a.clone())).collect();
+    v.reverse();
+    v
+}
+
+/// Lịch sử gần đây + câu hỏi hiện tại. `turns = 0` → chỉ câu hỏi hiện tại.
+pub(crate) fn ai_prompt(st: &AppState, text: &str, turns: usize) -> String {
+    let recent = recent_turns(st, turns);
     let mut p = String::new();
     if !recent.is_empty() {
-        p.push_str("Conversation so far:\n");
-        for (q, a, _) in recent.into_iter().rev() {
-            p.push_str(&format!("User: {}\nAsi: {}\n", clip_chars(q, 400), clip_chars(a, 500)));
+        p.push_str("Earlier conversation (context only — do not repeat these answers):\n");
+        for (q, a) in recent {
+            p.push_str(&format!("User: {}\nAsi: {}\n", clip_chars(&q, 400), clip_chars(&a, 500)));
         }
         p.push('\n');
     }
@@ -431,10 +440,11 @@ pub(crate) fn model_of(set: &store::Settings, p: llm::Provider) -> String {
 }
 
 /// Hỏi bộ não đã chọn (Apple Intelligence trên máy hoặc API đám mây). `allow_actions = false` → chỉ trả lời.
-fn ask_brain(st: &AppState, text: &str, en: bool, allow_actions: bool) -> Result<apple_ai::AiTurn, String> {
+/// `history`: gửi kèm hội thoại gần đây. Apple Intelligence (mô hình nhỏ) chỉ nhận 2 lượt gần nhất vì hay chép lại.
+fn ask_brain(st: &AppState, text: &str, en: bool, allow_actions: bool, history: bool) -> Result<apple_ai::AiTurn, String> {
     let (prov, _) = brain(st);
     match prov {
-        None => apple_ai::ask(&st.data_dir, &ai_instructions(st, en, true), &ai_prompt(st, text), allow_actions),
+        None => apple_ai::ask(&st.data_dir, &ai_instructions(st, en, true), &ai_prompt(st, text, if history { 2 } else { 0 }), allow_actions),
         Some(p) => {
             let (model, ctx) = {
                 let s = st.store.lock().unwrap();
@@ -442,7 +452,7 @@ fn ask_brain(st: &AppState, text: &str, en: bool, allow_actions: bool) -> Result
             };
             let key = threads::secret::get(&p.key_name(), &st.data_dir).filter(|k| !k.trim().is_empty()).ok_or_else(|| format!("Chưa nhập API key {} — vào Cài đặt › Asi & giọng nói", p.name()))?;
             let system = ai_instructions(st, en, ctx) + &llm::json_rules(allow_actions);
-            let raw = llm::ask(p, key.trim(), &model, &system, &ai_prompt(st, text))?;
+            let raw = llm::ask(p, key.trim(), &model, &system, &ai_prompt(st, text, if history { 6 } else { 0 }))?;
             let mut t = llm::parse_turn(&raw);
             if !allow_actions {
                 t.action = "none".into();
@@ -515,13 +525,35 @@ pub(crate) async fn asi_ask(app: AppHandle, st: S<'_>, text: String, offset: Opt
         let words = text.split_whitespace().count();
         let quick = explicit.is_some() || (!matches!(intent, Intent::Unknown | Intent::AddTask | Intent::Help) && words <= 4 && !assistant::looks_like_question(&text));
         let rules_label = if en { "Basic commands" } else { "Lệnh cơ bản" };
+        // Thời tiết, tin tức, tỷ giá, giá vàng… → nguồn dữ liệu thật (mô hình không có Internet, sẽ bịa số)
+        let wants_write = explicit.is_some() || assistant::user_asks_for("add_task", &text) || assistant::user_asks_for("add_note", &text);
+        if !wants_write {
+            if let Some(t) = crate::live::topic(&text) {
+                let r = live_reply(st, t, &text);
+                remember(st, &text, &r.text);
+                return Ok(r);
+            }
+        }
         if ai_on && !quick {
-            let (_, label) = brain(st);
-            let mut res = ask_brain(st, &text, en, true);
+            let (prov, label) = brain(st);
+            // Mô hình trên máy hay chép câu trả lời cũ → chỉ gửi lịch sử khi câu hỏi là câu nối tiếp
+            let history = prov.is_some() || assistant::is_follow_up(&text);
+            let mut res = ask_brain(st, &text, en, true, history);
             if let Ok(t) = &res {
                 if matches!(t.action.as_str(), "add_task" | "add_note" | "start_focus") && !assistant::user_asks_for(&t.action, &text) {
                     // mô hình định tự thêm việc / ghi chú trong khi người dùng chỉ hỏi → hỏi lại, chỉ trả lời
-                    res = ask_brain(st, &text, en, false).or_else(|_| Ok(apple_ai::AiTurn { reply: t.reply.clone(), action: "none".into(), argument: String::new() }));
+                    res = ask_brain(st, &text, en, false, history).or_else(|_| Ok(apple_ai::AiTurn { reply: t.reply.clone(), action: "none".into(), argument: String::new() }));
+                }
+            }
+            // Chép lại câu trả lời cũ / nhại lại câu hỏi → hỏi lại không kèm lịch sử; vẫn lặp → nói thật
+            let recent = recent_turns(st, 6);
+            if matches!(&res, Ok(t) if t.action == "none" && assistant::is_repeat(&text, &t.reply, &recent)) {
+                res = ask_brain(st, &text, en, false, false);
+                if matches!(&res, Ok(t) if assistant::is_repeat(&text, &t.reply, &recent)) {
+                    let mut r = Reply::new(Intent::Unknown, if en { "I'm not sure how to answer that. Try asking more specifically, or search the web." } else { "Asi chưa trả lời chắc được câu này. Bạn hỏi cụ thể hơn, hoặc tìm trên web nhé." });
+                    r.mood = "worried".into();
+                    r.engine = label;
+                    return Ok(r.act(if en { "Search the web" } else { "Tìm trên web" }, "open_url", &crate::live::search_url(&text)));
                 }
             }
             match res {

@@ -30,7 +30,7 @@ pub enum Intent {
 
 /// `s` đã được bọc dấu cách hai đầu; khoá chỉ khớp khi đứng thành từ trọn vẹn
 /// (để "tre" không khớp "trên", "rest" không khớp "restaurant").
-fn has_any(s: &str, keys: &[&str]) -> bool {
+pub(crate) fn has_any(s: &str, keys: &[&str]) -> bool {
     keys.iter().any(|k| {
         let k = k.trim();
         let mut from = 0;
@@ -245,6 +245,16 @@ pub enum Card {
     Tasks { items: Vec<TaskBrief> },
     Events { items: Vec<(String, i64, bool)> },
     Text { text: String },
+    /// Danh sách link (tin tức…): bấm để mở trong trình duyệt
+    Links { items: Vec<LinkItem> },
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LinkItem {
+    pub title: String,
+    pub url: String,
+    /// dòng phụ: "VnExpress · 2 giờ trước"
+    pub meta: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -292,8 +302,83 @@ pub fn help(en: bool) -> Reply {
         .act(if en { "Overdue tasks" } else { "Có việc nào trễ không?" }, "ask", "việc nào trễ")
 }
 
+
+// ───────── chống lặp câu trả lời (mô hình nhỏ trên máy hay chép lại câu trả lời trước) ─────────
+
+/// Chuẩn hoá để so sánh: bỏ dấu, chữ thường, chỉ giữ chữ & số
+pub fn norm(s: &str) -> String {
+    fold(s)
+        .chars()
+        .map(|c| if c.is_alphanumeric() { c } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .map(|w| match w {
+            // viết tắt hay gặp khi chat
+            "ko" | "k" | "khg" | "hok" | "hong" | "kh" | "kg" => "khong",
+            "dc" | "đc" => "duoc",
+            "j" => "gi",
+            "ntn" => "nhu the nao",
+            _ => w,
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Câu nối tiếp cần ngữ cảnh hội thoại ("còn mai thì sao", "ngắn hơn", "dịch sang tiếng Anh", "nó là gì")
+pub fn is_follow_up(input: &str) -> bool {
+    let f = format!(" {} ", norm(input));
+    let words = f.split_whitespace().count();
+    let starts = ["con ", "the con ", "vay con ", "vay ", "the ", "tai sao ", "sao ", "and ", "what about ", "how about ", "why "];
+    starts.iter().any(|p| f.trim_start().starts_with(p))
+        || has_any(&f, &["no", "cai do", "cai nay", "dieu do", "dieu nay", "y ban", "ngan hon", "ngan gon hon", "dai hon", "chi tiet hon", "cu the hon", "giai thich them", "noi them",
+            "viet lai", "sua lai", "lam lai", "dich", "dich sang", "viet tiep", "tiep tuc", "them nua", "vi du", "con gi nua", "cau tren", "doan tren", "ban vua", "luc nay",
+            "it", "that", "this", "shorter", "longer", "translate", "rewrite", "more", "again", "above", "continue"])
+            && words <= 12
+}
+
+/// Câu trả lời có phải chỉ nhắc lại câu hỏi, hoặc chép nguyên một câu trả lời trước cho câu hỏi KHÁC không
+pub fn is_repeat(question: &str, reply: &str, recent: &[(String, String)]) -> bool {
+    let (q, a) = (norm(question), norm(reply));
+    if a.is_empty() {
+        return false;
+    }
+    // nhại lại câu hỏi ("Tin công nghệ hôm nay có gì không?")
+    let (qw, aw): (Vec<&str>, Vec<&str>) = (q.split_whitespace().collect(), a.split_whitespace().collect());
+    let shared = aw.iter().filter(|w| qw.contains(w)).count();
+    let echo = a == q
+        || (q.len() >= 8 && a.contains(&q) && a.len() <= q.len() + 12)
+        || (a.len() >= 8 && q.contains(&a))
+        || (aw.len() >= 3 && aw.len() <= qw.len() + 2 && shared * 10 >= aw.len() * 9);
+    echo || recent.iter().any(|(q0, a0)| norm(a0) == a && norm(q0) != q)
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn repeat_and_follow_up_detection() {
+        let recent = vec![
+            ("nhiệt độ hôm nay thế nào".to_string(), "Thời tiết hôm nay có mưa rào, bạn nên mặc áo mưa.".to_string()),
+            ("giá vàng hôm nay thế nào".to_string(), "Giá vàng hôm nay là 1.650.000 VND/ounce.".to_string()),
+        ];
+        // đúng các lỗi trong ảnh chụp
+        assert!(is_repeat("thị trường hôm nay thế nào", "Thời tiết hôm nay có mưa rào, bạn nên mặc áo mưa.", &recent));
+        assert!(is_repeat("thị trường hôm nay thế nào", "Giá vàng hôm nay là 1.650.000 VND/ounce.", &recent));
+        assert!(is_repeat("Tin công nghệ hôm nay có gì ko", "Tin công nghệ hôm nay có gì không?", &recent));
+        assert!(!is_repeat("Hà Nội có mấy quận", "Hà Nội có 12 quận và 17 huyện, 1 thị xã.", &recent));
+        assert!(is_repeat("Tin công nghệ hôm nay có gì không", "Tin công nghệ hôm nay có gì không?", &recent));
+        // hỏi lại đúng câu cũ → được phép trả lời giống
+        assert!(!is_repeat("nhiệt độ hôm nay thế nào", "Thời tiết hôm nay có mưa rào, bạn nên mặc áo mưa.", &recent));
+        assert!(!is_repeat("viết lời chúc sinh nhật", "Chúc bạn tuổi mới thật nhiều niềm vui!", &recent));
+        assert!(!is_repeat("x", "", &recent));
+        assert!(is_follow_up("còn ngày mai thì sao"));
+        assert!(is_follow_up("viết ngắn hơn"));
+        assert!(is_follow_up("dịch sang tiếng Anh"));
+        assert!(is_follow_up("make it shorter"));
+        assert!(!is_follow_up("thị trường hôm nay thế nào"));
+        assert!(!is_follow_up("Công việc hôm nay thế nào"));
+        assert!(!is_follow_up("giải thích lạm phát là gì"));
+    }
+
     use super::*;
 
     #[test]

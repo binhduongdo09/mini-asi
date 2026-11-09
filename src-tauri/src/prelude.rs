@@ -31,3 +31,4 @@ pub use crate::commands::vocab::*;
 pub use crate::commands::status::*;
 pub use crate::commands::updater::*;
 pub use crate::commands::capture::*;
+pub use crate::commands::live::*;

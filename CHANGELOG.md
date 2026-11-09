@@ -1,5 +1,20 @@
 # Nhật ký thay đổi
 
+## 0.15.1 (11/2026) — hết lặp câu trả lời, hết bịa thời tiết / giá vàng
+**Lỗi**: Apple Intelligence (mô hình nhỏ trên máy) chép lại câu trả lời trước cho câu hỏi khác ("thị trường hôm nay"
+→ trả lời thời tiết / giá vàng), nhại lại câu hỏi ("Tin công nghệ hôm nay có gì không?"), và bịa số liệu trực tiếp
+(thời tiết, "giá vàng 1.650.000 VND/ounce") vì không có Internet.
+- **Thông tin trực tiếp lấy từ nguồn thật, không qua mô hình** (`live.rs`, `commands/live.rs`, có test):
+  thời tiết & ngày mai (Open-Meteo, nơi xem đặt trong Cài đặt › Asi & giọng nói hoặc đoán theo mạng; hỏi
+  "thời tiết Đà Nẵng" để xem nơi khác), tin tức mới nhất / công nghệ / kinh doanh / thể thao / thế giới / giải trí
+  (VnExpress, bấm để đọc), tỷ giá (Vietcombank). Giá vàng, chứng khoán, giá xăng, tiền số: nói thật là chưa có
+  dữ liệu trực tiếp + nút "Xem trên web" — không đoán số. "Thị trường hôm nay" → hỏi lại muốn xem thị trường nào.
+- **Chống lặp**: Apple Intelligence chỉ nhận lịch sử khi câu hỏi là câu nối tiếp ("còn mai thì sao", "ngắn hơn",
+  "dịch…"), tối đa 2 lượt. Câu trả lời trùng câu trả lời cũ / nhại câu hỏi → hỏi lại không kèm lịch sử; vẫn lặp →
+  nói thật "chưa trả lời chắc được" + nút tìm trên web (`assistant::is_repeat`, `is_follow_up`, có test).
+- Chỉ dẫn cho mọi bộ não: không có Internet → không nêu thời tiết / giá / tin tức; không chép câu trả lời cũ.
+- Thẻ link mới trong câu trả lời (`Card::Links`), nút `open_url`. Cài đặt mới `weather_place`.
+
 ## 0.15.0 (11/2026) — ghim clipboard mãi mãi, thả nội dung → việc / lịch, tab Social
 **Clipboard ghim**
 - Mục ghim nằm riêng ở đầu ("Đã ghim", theo thứ tự ghim), giữ mãi cho tới khi bỏ ghim — "Xoá lịch sử" và giới hạn số mục

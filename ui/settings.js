@@ -170,6 +170,9 @@
         row("Ngôn ngữ khi nói với Asi", "Dùng cho ghi chú, thêm việc, nhật ký bằng giọng nói", `<select class="field" data-txt="voice_lang">${[["vi-VN", "Tiếng Việt"], ["en-US", "English (US)"], ["en-GB", "English (UK)"]].map(([v, n]) => `<option value="${v}" ${st.voice_lang === v ? "selected" : ""}>${n}</option>`).join("")}</select>`),
         row("Đọc to câu trả lời", hasVoice ? "Asi đọc 1–2 câu đầu của câu trả lời" : "Cần tải giọng đọc bên dưới", hasVoice ? sw("voice_reply") : ""),
       ]) +
+      group("Thông tin trực tiếp", [
+        row("Nơi xem thời tiết", "Để trống: Asi đoán theo mạng đang dùng. Hỏi \"thời tiết Đà Nẵng\" để xem nơi khác", txt("weather_place", 170).replace("<input", '<input placeholder="Vd: Cầu Giấy, Hà Nội"')),
+      ], "Thời tiết (Open-Meteo), tin tức (VnExpress), tỷ giá (Vietcombank) lấy từ nguồn thật. Giá vàng, chứng khoán, giá xăng chưa có nguồn ổn định nên Asi đưa nút xem trên web thay vì đoán số.") +
       `<div id="ttsGroup">${group("Giọng đọc", voiceRows(), VOICE_NOTE)}</div>`;
   }
   const redrawTts = async () => { tts = await api("tts_info").catch(() => tts); const g = $("#ttsGroup"); if (g) g.innerHTML = group("Giọng đọc", voiceRows(), VOICE_NOTE); };

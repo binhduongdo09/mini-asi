@@ -577,3 +577,7 @@ body.mock:not(.disp-notch)::before { display: none; }
 .soc-th .grow b { font-size: 13px; }
 .soc-th .grow .dim { font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-thn="back"] svg, [data-thn="home"] svg { transform: rotate(180deg); }
+.a-link { width: 100%; text-align: left; cursor: pointer; }
+.a-link .grow { white-space: normal; line-height: 1.35; }
+.a-link > svg { width: 12px; height: 12px; color: var(--text-3); flex: none; }
+.a-link:hover .grow { text-decoration: underline; text-underline-offset: 2px; }

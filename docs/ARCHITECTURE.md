@@ -12,7 +12,7 @@
 ┌───────────────▼───────────────────────────────────────────────┴────────────────────┐
 │ src-tauri/src/lib.rs  run(): plugin, phím tắt, khay, cửa sổ, luồng nền, đăng ký lệnh │
 │ commands/*.rs  lớp lệnh mỏng theo tính năng ── gọi logic thuần ↓                     │
-│ store · nlp · sync · apple · clipboard · capture · social · voice · journal · threads · backup · files │
+│ store · nlp · sync · apple · clipboard · capture · social · live · voice · journal · threads · backup · files │
 │ health · assistant · tts · vocab · license                                           │
 │ crates/notch-native (API macOS) · crates/asi-clean (dọn máy)                         │
 └─────────────────────────────────────────────────────────────────────────────────────┘

@@ -154,6 +154,8 @@ pub struct Settings {
     /// Lịch đích khi tạo sự kiện từ thứ kéo thả vào tai thỏ ("" = lịch mặc định của máy). Có thể là lịch Google
     /// đã thêm trong Cài đặt hệ thống › Tài khoản Internet → tự đồng bộ lên Google Calendar.
     pub capture_calendar: String,
+    /// Nơi xem thời tiết khi hỏi Asi ("" = đoán theo mạng / IP)
+    pub weather_place: String,
 }
 
 fn default_true() -> bool {
@@ -239,6 +241,7 @@ impl Default for Settings {
             ai_model_claude: String::new(),
             ai_cloud_context: true,
             capture_calendar: String::new(),
+            weather_place: String::new(),
         }
     }
 }
