@@ -53,11 +53,18 @@ Mở file `.dmg` và kéo Mini-Asi vào Applications.
 
 > Vì app chưa ký số Apple, lần đầu mở bạn cần **chuột phải → Open**, hoặc vào *System Settings → Privacy & Security → Open Anyway*.
 
+> **Giữ quyền qua các lần cập nhật**: app được ký bằng chứng chỉ riêng "Mini-Asi Code Signing" (để trong `secrets/codesign/`,
+> không đưa lên git). Script tự nạp chứng chỉ vào Keychain; nếu Keychain hỏi, bấm **Luôn cho phép**. Cùng một chứng chỉ →
+> macOS không hỏi lại quyền sau khi cập nhật.
+
 ### Cách 2: để GitHub đóng gói hộ
 
 1. Tạo repo riêng (private) trên GitHub và đẩy thư mục này lên.
 2. Vào tab **Actions → build → Run workflow**.
 3. Sau khoảng 15 phút, trong mục **Releases** sẽ có bản nháp chứa `.dmg` (Mac), `.msi` (Windows), `.deb` và `.AppImage` (Linux).
+4. Để bản Mac giữ quyền qua các lần cập nhật: vào **Settings → Secrets and variables → Actions → New repository secret**, thêm
+   `MINIASI_CODESIGN_P12` = nội dung file `secrets/codesign/mini-asi-codesign.p12.base64.txt` và
+   `MINIASI_CODESIGN_PASSWORD` = nội dung file `secrets/codesign/mini-asi-codesign-password.txt`.
 
 ### Các quyền nên cấp
 

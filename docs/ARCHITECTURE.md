@@ -22,7 +22,8 @@
 
 - `background_loop` (10 giây): nhắc việc đến hạn (thông báo + sự kiện `reminder`), điểm trễ → màu đỏ,
   nghỉ mắt / uống nước, hỏi nhật ký buổi tối, đồng bộ định kỳ, đẩy `status` lên UI.
-- `hover_loop` (65–350 ms tuỳ khoảng cách chuột): con trỏ vào/ra cửa sổ → sự kiện `hover` (để "ló ra" kể cả khi app không focus).
+- `hover_loop` (65–350 ms tuỳ khoảng cách chuột): con trỏ vào/ra cửa sổ → sự kiện `hover` (để "ló ra" kể cả khi app không focus);
+  trong cửa sổ thì gửi thêm `hover-at` [x, y] (px CSS, khi chuột nhích ≥ 2 px) để UI biết chuột đang trên nút micro.
 - Luồng đồng bộ Apple (`apple_sync::run_sync`) chạy khi có `kick_sync` hoặc mỗi 5 phút.
 
 ## Trạng thái & dữ liệu
@@ -115,6 +116,6 @@ Phiên âm/audio/ví dụ: Free Dictionary API (cache trong `vocab.json`). Chấ
 
 ## Sự kiện backend → UI
 
-`status`, `reminder`, `break`, `water`, `event-soon`, `focus-done`, `journal-ask`, `hover`, `toggle`, `open-tab`, `window-blur`,
+`status`, `reminder`, `break`, `water`, `event-soon`, `focus-done`, `journal-ask`, `hover`, `hover-at`, `toggle`, `open-tab`, `window-blur`,
 `perm-prompt`, `ime-warn`, `voice-level`, `voice-ended`, `clip`, `synced`, `threads`, `tts-progress`, `vocab-updated`,
 `settings-changed`, `settings-section`, `update-available`, `update-progress`.

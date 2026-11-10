@@ -202,6 +202,7 @@ pub(crate) fn background_loop(app: AppHandle, st: Arc<AppState>) {
 /// Theo dõi chuột: báo UI khi con trỏ đi vào/ra khỏi cửa sổ (kể cả khi app không được focus).
 pub(crate) fn hover_loop(app: AppHandle) {
     let mut inside = false;
+    let mut last_at: Option<(i32, i32)> = None;
     let mut sleep_ms = 80u64;
     loop {
         std::thread::sleep(Duration::from_millis(sleep_ms));
@@ -219,6 +220,16 @@ pub(crate) fn hover_loop(app: AppHandle) {
         let x1 = (p.x + sz.width as i32) as f64 - pad;
         let y1 = (p.y + sz.height as i32) as f64 - pad;
         let now_in = c.x >= x0 && c.x <= x1.max(x0 + 20.0) && c.y >= y0 && c.y <= y1.max(y0 + 12.0);
+        // Vị trí chuột trong cửa sổ (px CSS) để UI biết đang rê lên nút micro — gửi trước "hover" và chỉ khi chuột nhích
+        if now_in {
+            let at = (((c.x - p.x as f64) / sf).round() as i32, ((c.y - p.y as f64) / sf).round() as i32);
+            if last_at.map_or(true, |(lx, ly): (i32, i32)| (lx - at.0).abs() + (ly - at.1).abs() >= 2) {
+                last_at = Some(at);
+                let _ = app.emit("hover-at", [at.0, at.1]);
+            }
+        } else {
+            last_at = None;
+        }
         if now_in != inside {
             inside = now_in;
             let _ = app.emit("hover", inside);

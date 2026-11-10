@@ -60,7 +60,15 @@
 
   function peekHeight() {
     const hasMedia = !!(media && (media.title || media.playing));
-    return BAR + 128 + (hasMedia ? 64 : 0) + (cam.active ? 178 : 0);
+    const n = Math.min(PEEK_LATE_MAX, lateTasks().length);
+    return BAR + 128 + (hasMedia ? 64 : 0) + (cam.active ? 178 : 0) + (n ? 8 + n * 32 + (n - 1) * 2 : 0);
+  }
+  // Việc đang trễ hiện ngay khi rê chuột (Cài đặt › Tai thỏ › Khi rê chuột); trễ lâu nhất lên đầu
+  const PEEK_LATE_MAX = 3;
+  function lateTasks() {
+    if (settings.peek_overdue === false || !status || status.focus_until) return [];
+    const now = Date.now();
+    return tasks.filter((t) => !t.done_at && t.due && t.due < now).sort((a, b) => a.due - b.due);
   }
   function sizeOf(m) {
     if (m === "peek") return [SIZES.peek[0], peekHeight()];
@@ -277,6 +285,11 @@
     if (meet) return { go: "meet", html: `<span class="pill red"><i class="rec-dot"></i>Đang ghi ${clockOf(meet.secs)}</span><span class="t" translate="no">${esc(meet.title || "Cuộc họp")}</span>` };
     if (!s) return { html: "", go: "home" };
     if (s.lateness.overdue > 0 && !s.focus_until) {
+      const late = lateTasks();
+      if (late.length) {
+        const more = late.length - PEEK_LATE_MAX;
+        return { go: "tasks", html: `<span class="pill red">${s.lateness.overdue} việc trễ</span><span class="t dim">${more > 0 ? `và ${more} việc khác` : "Xem danh sách việc"}</span>` };
+      }
       const t = tasks.find((x) => !x.done_at && x.due && x.due < now);
       return { go: "tasks", html: `<span class="pill red">${s.lateness.overdue} việc trễ</span><span class="t" translate="no">${esc(t ? t.title : "")}</span>` };
     }
@@ -313,11 +326,20 @@
       ${modOn("focus") ? tile("focus", focusOn, I.target, "Tập trung", focusOn ? "Dừng" : "25 phút", "violet") : ""}
     </div>`;
   }
+  function peekLateHtml() {
+    const late = lateTasks().slice(0, PEEK_LATE_MAX);
+    if (!late.length) return "";
+    return `<div class="pk-late">${late.map((t) => `<div class="pk-lrow" data-go="tasks" data-tid="${t.id}">
+      <span class="due">${fmtDue(t.due)}</span><span class="tt" translate="no">${esc(t.title)}</span>
+      <button class="pk-lb" data-pt="done" title="Xong">${I.check}</button><button class="pk-lb" data-pt="s60" title="Hoãn 1 giờ">+1h</button></div>`).join("")}</div>`;
+  }
   function renderPeek() {
     if (!status) return;
+    // Số việc trễ / nhạc đổi → chiều cao đổi: dựng lại khung trước (setMode gọi lại renderPeek)
+    if (mode === "peek" && Math.round(parseFloat(root.style.getPropertyValue("--h"))) !== peekHeight()) { setMode("peek", { force: true }); return; }
     const pk = $("#peek");
     const st = peekStatus();
-    const parts = [`<div class="pk-status" data-go="${st.go}">${st.html}<span class="chev">${I.chevron}</span></div>`, peekMediaHtml(), peekTilesHtml()];
+    const parts = [`<div class="pk-status" data-go="${st.go}">${st.html}<span class="chev">${I.chevron}</span></div>`, peekLateHtml(), peekMediaHtml(), peekTilesHtml()];
     if (cam.active) parts.push(`<div class="pk-cam"><video id="camVideo" autoplay playsinline muted></video><button class="btn sm" data-pk="snap">Chụp vào Clipboard</button></div>`);
     const html = parts.join("");
     if (pk.dataset.html === html) return; // không đổi gì → không vẽ lại (chống nhấp nháy)
@@ -492,15 +514,49 @@
     clearTimeout(modeTimer);
     if (island.classList.contains("resizing") || island.classList.contains("dragging")) return;
     if (inside && mode === "collapsed" && DISP !== "bubble" && Date.now() >= suppressHoverUntil) {
-      modeTimer = setTimeout(() => { if (hovering && mode === "collapsed" && Date.now() >= suppressHoverUntil) setMode("peek"); }, 130);
+      modeTimer = setTimeout(() => { if (hovering && !overMic && mode === "collapsed" && Date.now() >= suppressHoverUntil) setMode("peek"); }, 130);
     } else if (!inside && mode === "peek") {
       modeTimer = setTimeout(() => { if (!hovering && mode === "peek") setMode("collapsed"); }, cam.active ? 1600 : 380);
     }
   }
-  on("hover", (inside) => hoverSync(inside));
+  on("hover", (inside) => { if (!inside) micHover(false); hoverSync(inside); });
   const MOCK = document.body.classList.contains("mock");
   island.addEventListener("mouseenter", () => (MOCK ? hoverSync(true) : (hovering = true)));
-  island.addEventListener("mouseleave", () => { if (MOCK) hoverSync(false); });
+  island.addEventListener("mouseleave", () => { if (MOCK) { micHover(false); hoverSync(false); } });
+
+  // Rê chuột lên nút micro trên tai thỏ (giữ ~0,45 giây) = bấm micro. Vòng sáng chạy quanh nút trong lúc chờ;
+  // rời nút trước đó thì thôi. Kích hoạt xong phải rời nút rồi quay lại mới kích hoạt lần nữa.
+  // Toạ độ chuột lấy từ backend (sự kiện "hover-at") vì cửa sổ không được focus thì trang không nhận mousemove.
+  let overMic = false, micArmed = false, micTimer = 0;
+  function micHover(over) {
+    const btn = $("#rightWing .wing-mic");
+    if (over && (!btn || settings.hover_mic === false || voice.active || meet || (mode !== "collapsed" && mode !== "peek"))) over = false;
+    if (over === overMic) return;
+    overMic = over;
+    clearTimeout(micTimer);
+    if (btn) btn.classList.toggle("arming", over && !micArmed);
+    if (!over) {
+      micArmed = false;
+      if (hovering && mode === "collapsed") hoverSync(true); // rời nút nhưng vẫn trong tai thỏ → mở peek như thường
+      return;
+    }
+    if (micArmed) return;
+    clearTimeout(modeTimer); // đang chờ nói → không bung peek (nút sẽ chạy chỗ khác)
+    micTimer = setTimeout(() => {
+      if (!overMic || voice.active) return;
+      micArmed = true;
+      btn.classList.remove("arming");
+      voiceCommand();
+    }, 450);
+  }
+  function micHoverAt(x, y) {
+    const btn = $("#rightWing .wing-mic");
+    if (!btn) return micHover(false);
+    const r = btn.getBoundingClientRect();
+    micHover(x >= r.left - 3 && x <= r.right + 3 && y >= r.top - 4 && y <= r.bottom + 4);
+  }
+  on("hover-at", (p) => Array.isArray(p) && micHoverAt(p[0], p[1]));
+  if (MOCK) island.addEventListener("mousemove", (e) => micHoverAt(e.clientX, e.clientY));
 
   // Kéo để ghim hòn đảo ở vị trí bất kỳ (thả gần tai thỏ → về chỗ cũ)
   let justDragged = false;
@@ -578,6 +634,18 @@
     if (justDragged) return;
     const b = e.target.closest("[data-pk]");
     if (b) { e.stopPropagation(); await peekAction(b.dataset.pk); return; }
+    const pt = e.target.closest("[data-pt]");
+    if (pt) {
+      e.stopPropagation();
+      const id = Number(pt.closest("[data-tid]").dataset.tid);
+      pt.disabled = true;
+      try {
+        if (pt.dataset.pt === "done") { await api("toggle_task", { id }); confetti(12); flashMood("happy"); }
+        else { await api("snooze_task", { id, minutes: 60 }); toast("Đã hoãn 1 giờ"); }
+      } catch (err) { toast(String(err)); }
+      refreshTasks();
+      return;
+    }
     if (e.target.closest(".pk-media, .pk-tiles, .pk-cam")) return;
     const go = e.target.closest("[data-go]");
     if (go) tab = go.dataset.go;

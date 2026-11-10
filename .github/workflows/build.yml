@@ -50,10 +50,43 @@ jobs:
       - name: Kiểm thử
         run: cargo test --workspace
 
+      # Ký mọi bản bằng CÙNG một chứng chỉ (tự ký, miễn phí) → macOS nhận ra vẫn là app cũ, giữ nguyên quyền
+      # (Trợ năng, Micro, Ghi âm thanh hệ thống…) sau mỗi lần cập nhật. Chứng chỉ nằm ở secrets/codesign/ trên máy
+      # chủ dự án; GitHub cần 2 secret: MINIASI_CODESIGN_P12 (nội dung file .p12.base64.txt) và MINIASI_CODESIGN_PASSWORD.
+      # Thiếu secret → ký tạm (ad-hoc) như cũ, người dùng sẽ phải cấp quyền lại sau khi cập nhật.
+      - name: Chuẩn bị chứng chỉ ký (macOS)
+        if: matrix.platform == 'macos-latest'
+        env:
+          CERT_P12: ${{ secrets.MINIASI_CODESIGN_P12 }}
+          CERT_PASSWORD: ${{ secrets.MINIASI_CODESIGN_PASSWORD }}
+        run: |
+          if [ -z "$CERT_P12" ] || [ -z "$CERT_PASSWORD" ]; then
+            echo "::warning::Chưa có secret MINIASI_CODESIGN_P12 / MINIASI_CODESIGN_PASSWORD — ký tạm (ad-hoc)"
+            echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          KC="$RUNNER_TEMP/miniasi.keychain-db"
+          KP="$(uuidgen)"
+          printf '%s' "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cs.p12"
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          security import "$RUNNER_TEMP/cs.p12" -k "$KC" -P "$CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KP" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          # Chứng chỉ tự ký: đánh dấu tin cậy cho việc ký code trên máy build
+          security find-certificate -c "Mini-Asi Code Signing" -p "$KC" > "$RUNNER_TEMP/cs.pem"
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain "$RUNNER_TEMP/cs.pem"
+          ID="$(openssl x509 -in "$RUNNER_TEMP/cs.pem" -noout -fingerprint -sha1 | cut -d= -f2 | tr -d ':')"
+          rm -f "$RUNNER_TEMP/cs.p12"
+          # Ký thử để chắc chứng chỉ dùng được
+          cp /usr/bin/true "$RUNNER_TEMP/probe" && codesign --force -s "$ID" "$RUNNER_TEMP/probe"
+          echo "APPLE_SIGNING_IDENTITY=$ID" >> "$GITHUB_ENV"
+          echo "Ký bằng chứng chỉ Mini-Asi Code Signing ($ID)"
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_SIGNING_IDENTITY: "-"
           # Ký số & notarize macOS (tuỳ chọn — cần tài khoản Apple Developer):
           # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}

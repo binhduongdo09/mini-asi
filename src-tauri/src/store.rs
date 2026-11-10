@@ -174,6 +174,10 @@ pub struct Settings {
     pub meeting_live: String,
     /// Ngôn ngữ giao diện: "vi" | "en"
     pub ui_lang: String,
+    /// Rê chuột lên tai thỏ: hiện danh sách việc trễ (tối đa 3)
+    pub peek_overdue: bool,
+    /// Rê chuột lên nút micro trên tai thỏ (~0,45 s) = bấm micro
+    pub hover_mic: bool,
 }
 
 fn default_true() -> bool {
@@ -265,6 +269,8 @@ impl Default for Settings {
             meeting_auto_summary: true,
             meeting_live: "auto".into(),
             ui_lang: "vi".into(),
+            peek_overdue: true,
+            hover_mic: true,
         }
     }
 }

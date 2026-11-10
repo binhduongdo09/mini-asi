@@ -75,7 +75,9 @@ Kiểm tra biên dịch cho macOS từ Linux (không cần Mac): `RUSTC_BOOTSTRA
 
 ## Ràng buộc quan trọng (đừng phá)
 
-- **Không commit/gửi thư mục `secrets/`** (khoá bí mật ký bản quyền, key Pro). Đã có trong `.gitignore`.
+- **Không commit/gửi thư mục `secrets/`** (khoá bí mật ký bản quyền, key Pro, chứng chỉ ký app `secrets/codesign/`). Đã có trong `.gitignore`.
+- Ký app macOS: luôn dùng chứng chỉ cố định "Mini-Asi Code Signing" (CI: secret `MINIASI_CODESIGN_P12` / `_PASSWORD`;
+  máy: `scripts/build-mac.sh`). **Không ký lại app bằng ad-hoc** sau khi tải/cài — macOS sẽ quên mọi quyền đã cấp.
   Khoá công khai nằm ở `src-tauri/src/license.rs`. Trước khi bán thật: tạo cặp khoá mới bằng `license-tool keygen`.
 - Đăng bài Threads chỉ khi người dùng bấm Đăng **và** xác nhận. Không tự động đăng.
 - Tab Social: chỉ dùng ô chữ viết tắt trung tính (Fb, Ms, Ig…), **không** vẽ/nhúng logo thương hiệu. Cửa sổ mạng xã hội

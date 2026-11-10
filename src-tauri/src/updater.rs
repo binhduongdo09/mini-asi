@@ -356,12 +356,16 @@ pub fn install_dmg_macos(dmg_path: &Path, target_app: &Path) -> Result<(), Strin
         Err(e) => return Err(format!("Lỗi khi chép bản mới: {e}")),
     }
 
-    // Gỡ cờ cách ly của macOS và ký chuẩn Bundle Identifier com.miniasi.app để giữ nguyên nhận diện quyền hệ thống
+    // Gỡ cờ cách ly của macOS. Bản phát hành đã ký bằng chứng chỉ cố định "Mini-Asi Code Signing" → GIỮ NGUYÊN chữ ký
+    // (macOS nhớ quyền theo chữ ký; ký lại sẽ làm mất quyền). Chỉ khi chữ ký hỏng / thiếu mới ký tạm cho app chạy được.
     let _ = Command::new("xattr").args(["-cr"]).arg(&staging).status();
-    let _ = Command::new("codesign")
-        .args(["--force", "--deep", "--sign", "-", "--identifier", "com.miniasi.app"])
-        .arg(&staging)
-        .status();
+    let signed_ok = Command::new("codesign").args(["--verify", "--deep", "--strict"]).arg(&staging).status().is_ok_and(|s| s.success());
+    if !signed_ok {
+        let _ = Command::new("codesign")
+            .args(["--force", "--deep", "--sign", "-", "--identifier", "com.miniasi.app"])
+            .arg(&staging)
+            .status();
+    }
 
     // Tráo nguyên tử: bản cũ -> .Mini-Asi-old.app, bản mới -> Mini-Asi.app
     if target_app.exists() {

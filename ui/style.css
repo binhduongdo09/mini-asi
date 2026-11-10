@@ -111,6 +111,10 @@ body.disp-bubble #island.mode-collapsed .wing.right { position: absolute; top: -
 .wing-mic { width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; color: var(--text-2); flex: none; }
 .wing-mic:hover { color: #fff; background: var(--surface-2); }
 .wing-mic svg { width: 13px; height: 13px; }
+/* Rê chuột lên micro: vòng sáng chạy đủ một vòng (~0,45 s) rồi Asi bắt đầu nghe */
+.wing-mic.arming { color: #fff; background: conic-gradient(var(--blue, #0a84ff) var(--arm, 0%), var(--surface-2) 0); animation: micArm 0.45s linear forwards; }
+@property --arm { syntax: "<percentage>"; inherits: false; initial-value: 0%; }
+@keyframes micArm { to { --arm: 100%; } }
 /* thanh trên khi mở bảng */
 .ime-pill { height: 22px; min-width: 30px; padding: 0 8px; border-radius: 99px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; color: var(--text-2); background: var(--surface); flex: none; }
 .ime-pill:hover { color: #fff; background: var(--surface-2); }
@@ -157,6 +161,14 @@ body.disp-bubble #island.mode-collapsed .wing.right { position: absolute; top: -
 .mbtn.big { width: 36px; height: 36px; background: #fff; color: #000; }
 .mbtn.big:hover { background: rgba(255, 255, 255, 0.85); }
 
+.pk-late { flex: none; display: flex; flex-direction: column; gap: 2px; }
+.pk-lrow { height: 32px; display: flex; align-items: center; gap: 10px; padding: 0 6px 0 10px; border-radius: 10px; cursor: pointer; min-width: 0; transition: background 0.15s; }
+.pk-lrow:hover { background: var(--surface); }
+.pk-lrow .due { flex: none; min-width: 74px; font-size: 12px; font-weight: 600; color: var(--red); white-space: nowrap; }
+.pk-lrow .tt { flex: 1; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pk-lb { flex: none; height: 24px; min-width: 30px; padding: 0 8px; border: 0; border-radius: 7px; background: var(--surface-2); color: var(--text-2); font-size: 11.5px; font-weight: 600; display: grid; place-items: center; cursor: pointer; }
+.pk-lb:hover { background: var(--surface-3); color: var(--text); }
+.pk-lb svg { width: 13px; height: 13px; }
 .pk-tiles { flex: none; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
 .tile { height: 62px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border-radius: 14px; transition: background 0.15s; }
 .tile:hover { background: var(--surface); }

@@ -28,7 +28,29 @@ npm ci
 echo "④ Chạy kiểm thử…"
 cargo test --workspace -q
 
-echo "⑤ Đóng gói…"
+echo "⑤ Chứng chỉ ký…"
+# Ký mọi bản bằng cùng một chứng chỉ (secrets/codesign/, không đưa lên git) → macOS giữ nguyên quyền đã cấp sau mỗi lần cập nhật.
+# Lần đầu: nạp chứng chỉ vào Keychain đăng nhập. Không có chứng chỉ → ký tạm như cũ (phải cấp quyền lại sau khi cập nhật).
+CS_DIR="secrets/codesign"
+if [ -f "$CS_DIR/mini-asi-codesign.p12" ] && [ -f "$CS_DIR/mini-asi-codesign.pem" ]; then
+  CS_ID="$(openssl x509 -in "$CS_DIR/mini-asi-codesign.pem" -noout -fingerprint -sha1 | cut -d= -f2 | tr -d ':')"
+  if ! security find-identity -p codesigning | grep -q "$CS_ID"; then
+    security import "$CS_DIR/mini-asi-codesign.p12" -P "$(cat "$CS_DIR/mini-asi-codesign-password.txt")" -T /usr/bin/codesign >/dev/null \
+      && echo "   Đã nạp chứng chỉ Mini-Asi Code Signing vào Keychain"
+  fi
+  PROBE="$(mktemp -d)/probe"; cp /usr/bin/true "$PROBE"
+  if codesign --force -s "$CS_ID" "$PROBE" 2>/dev/null; then
+    export APPLE_SIGNING_IDENTITY="$CS_ID"
+    echo "   Ký bằng chứng chỉ Mini-Asi Code Signing"
+  else
+    echo "   ⚠️  Không ký được bằng chứng chỉ (Keychain hỏi quyền? bấm Luôn cho phép rồi chạy lại) — ký tạm"
+  fi
+  rm -f "$PROBE"
+else
+  echo "   Không có $CS_DIR — ký tạm (sau mỗi lần cập nhật macOS sẽ hỏi lại quyền)"
+fi
+
+echo "⑥ Đóng gói…"
 npx tauri build $TARGET_ARGS
 
 DMG=$(ls $OUT_DIR/*.dmg | head -1)

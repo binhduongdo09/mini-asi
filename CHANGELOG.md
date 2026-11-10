@@ -1,5 +1,23 @@
 # Nhật ký thay đổi
 
+## 0.20.0 (11/2026) — cập nhật không phải xin lại quyền, việc trễ khi rê chuột, rê lên micro để nói
+**Không phải cấp lại quyền sau mỗi lần cập nhật**
+- Nguyên nhân: mọi bản trước được "ký tạm" (ad-hoc) — chữ ký gắn với dấu vân tay của từng bản build, nên macOS coi mỗi
+  bản mới là một app khác và hỏi lại Trợ năng, Micro, Ghi âm thanh hệ thống, Tự động hoá…
+- Từ bản này mọi bản phát hành ký bằng **cùng một chứng chỉ tự ký "Mini-Asi Code Signing"** (miễn phí, hạn 20 năm).
+  macOS nhận ra vẫn là app cũ → giữ nguyên quyền. Lần chuyển sang chữ ký mới vẫn hỏi quyền **một lần cuối**.
+- Bộ tự cập nhật không còn ký lại app sau khi tải (việc đó làm mất chữ ký cố định); chỉ ký tạm nếu chữ ký bị hỏng.
+- GitHub Actions: 2 secret `MINIASI_CODESIGN_P12`, `MINIASI_CODESIGN_PASSWORD`; tự đóng gói trên Mac: `scripts/build-mac.sh`
+  tự nạp chứng chỉ từ `secrets/codesign/` vào Keychain. Thiếu chứng chỉ → ký tạm như cũ.
+- Tắt hardened runtime (chỉ cần khi notarize bằng Apple Developer ID).
+
+**Rê chuột lên tai thỏ: hiện việc trễ** — tối đa 3 việc trễ lâu nhất, mỗi việc có nút ✓ (xong) và +1h (hoãn);
+bấm vào việc → mở tab Việc. Tắt ở Cài đặt › Tai thỏ › Khi rê chuột.
+
+**Rê chuột lên nút micro trên tai thỏ = bấm micro**: giữ chuột trên nút ~0,45 giây (vòng xanh chạy quanh nút) là Asi
+bắt đầu nghe; lướt qua thì không. Backend gửi toạ độ chuột (`hover-at`) vì cửa sổ không focus thì trang không nhận mousemove.
+Tắt ở Cài đặt › Tai thỏ › Khi rê chuột.
+
 ## 0.19.0 (11/2026) — chat thêm việc / ghi chú chắc chắn, giao diện tiếng Anh
 **Sửa lỗi: bảo Asi thêm việc / ghi chú nhưng không vào tab Việc / Ghi chú**
 - Nguyên nhân: chỉ câu *mở đầu* bằng lệnh ("nhắc tôi…", "ghi chú…") mới chạy bằng quy tắc. Câu nói tự nhiên như

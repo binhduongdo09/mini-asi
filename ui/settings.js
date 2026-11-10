@@ -88,6 +88,10 @@
         row("Chiều cao", "", `<input type="range" id="notchH" min="22" max="54" step="1" value="${h}" /><span class="dim val" id="notchHVal">${h} px</span>`),
         row("Vị trí", custom ? "Đang ở vị trí bạn kéo tới" : "Mặc định — kéo hòn đảo để đổi chỗ", custom ? `<button class="btn sm" data-act="reset-pos">Về chỗ cũ</button>` : ""),
       ]) +
+      group("Khi rê chuột", [
+        row("Hiện việc trễ", "Tối đa 3 việc trễ lâu nhất, bấm ✓ để xong hoặc +1h để hoãn", sw("peek_overdue", st.peek_overdue !== false)),
+        row("Rê lên micro để ra lệnh", "Giữ chuột trên nút micro một chút là Asi bắt đầu nghe — như bấm vào nút", sw("hover_mic", st.hover_mic !== false)),
+      ]) +
       group("Khi thu gọn, hiện", IDLE.map(([id, n]) => `<label class="srow check-row"><input type="checkbox" data-idle="${id}" ${idle.includes(id) ? "checked" : ""}/><span class="cbox">${I.check}</span><b>${n}</b></label>`), "Chỉ hiện những gì quan trọng — cánh tai thỏ hẹp sẽ tự bỏ bớt mục cuối.");
   }
 
