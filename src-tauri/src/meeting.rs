@@ -42,6 +42,9 @@ pub struct ActionItem {
     pub owner: String,
     #[serde(default)]
     pub due: String,
+    /// giây trong ghi âm nơi việc này được nhắc tới (để nghe lại)
+    #[serde(default)]
+    pub at: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -55,6 +58,39 @@ pub struct Summary {
     /// ghi chú thêm (vd. "Gemini lỗi … — đã dùng Apple Intelligence")
     #[serde(default)]
     pub note: String,
+    /// mốc giây (để nghe lại) cho từng ý tóm tắt / quyết định — cùng độ dài với `overview` / `decisions`
+    #[serde(default)]
+    pub overview_at: Vec<Option<f32>>,
+    #[serde(default)]
+    pub decisions_at: Vec<Option<f32>>,
+}
+
+/// Bản dịch biên bản (Việt ↔ Anh)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct Translation {
+    /// "en" | "vi" — ngôn ngữ của bản dịch
+    pub lang: String,
+    pub summary: Summary,
+    pub engine: String,
+    pub at: i64,
+}
+
+/// Một đoạn của "ghi chép đầy đủ" (Take note): toàn bộ lời nói đã được AI làm sạch, không lược ý
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct NotePart {
+    /// giây bắt đầu đoạn (để nghe lại)
+    pub at: f32,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct FullNote {
+    pub parts: Vec<NotePart>,
+    pub engine: String,
+    pub at: i64,
+    /// số đoạn chưa làm sạch được (giữ nguyên văn)
+    #[serde(default)]
+    pub raw_parts: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -88,6 +124,17 @@ pub struct Meeting {
     /// Ghi chú "Biên bản họp" tương ứng trong tab Ghi chú
     #[serde(default)]
     pub note_id: Option<u64>,
+    /// Ghi chép đầy đủ (nút Take note) + ghi chú tương ứng trong tab Ghi chú
+    #[serde(default)]
+    pub full: Option<FullNote>,
+    #[serde(default)]
+    pub full_note_id: Option<u64>,
+    /// Bản dịch biên bản
+    #[serde(default)]
+    pub translation: Option<Translation>,
+    /// Đã nhận dạng lại toàn văn bằng gì ("Apple · vi-VN", "Gemini · …") — trống nếu là bản ghi lúc họp
+    #[serde(default)]
+    pub retranscribed: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -180,16 +227,76 @@ pub fn compress_audio(data_dir: &Path, id: &str) -> Result<PathBuf, String> {
     }
 }
 
-/// Các khúc toàn văn chưa được ghi chú trong lúc họp, đủ dài để tóm tắt (≥ `min_chars`)
-pub fn next_live_chunk(lines: &[Line], noted: usize, min_chars: usize, max_chars: usize) -> Option<(usize, usize)> {
-    let mut n = 0usize;
-    for (i, l) in lines.iter().enumerate().skip(noted) {
-        n += l.text.chars().count() + 12;
-        if n >= min_chars || n >= max_chars {
-            return Some((noted, i + 1));
+/// Đọc file ghi âm thành mẫu 16 kHz mono (m4a → đổi tạm sang wav bằng `afconvert` của macOS)
+pub fn load_audio_16k(data_dir: &Path, id: &str) -> Result<Vec<f32>, String> {
+    let src = audio_file(data_dir, id).ok_or("Không còn file ghi âm")?;
+    let (path, tmp) = if src.extension().is_some_and(|e| e == "m4a") {
+        let tmp = dir_of(data_dir, id).join("audio.decode.wav");
+        let ok = std::process::Command::new("/usr/bin/afconvert")
+            .args(["-f", "WAVE", "-d", "LEI16@16000", "-c", "1"])
+            .arg(&src)
+            .arg(&tmp)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !ok {
+            let _ = std::fs::remove_file(&tmp);
+            return Err("macOS không giải nén được file ghi âm".into());
         }
+        (tmp.clone(), Some(tmp))
+    } else {
+        (src, None)
+    };
+    let r = read_wav_16k(&path);
+    if let Some(t) = tmp {
+        let _ = std::fs::remove_file(t);
     }
-    None
+    r
+}
+
+/// WAV bất kỳ (mono/stereo, 16 bit / float) → mẫu 16 kHz mono
+pub fn read_wav_16k(path: &Path) -> Result<Vec<f32>, String> {
+    let mut r = hound::WavReader::open(path).map_err(|e| format!("Không đọc được file ghi âm: {e}"))?;
+    let spec = r.spec();
+    let ch = spec.channels.max(1) as usize;
+    let raw: Vec<f32> = match spec.sample_format {
+        hound::SampleFormat::Float => r.samples::<f32>().filter_map(Result::ok).collect(),
+        hound::SampleFormat::Int => {
+            let scale = (1i64 << (spec.bits_per_sample.max(1) - 1)) as f32;
+            r.samples::<i32>().filter_map(Result::ok).map(|x| x as f32 / scale).collect()
+        }
+    };
+    let mono: Vec<f32> = raw.chunks(ch).map(|c| c.iter().sum::<f32>() / c.len() as f32).collect();
+    Ok(resample(&mono, spec.sample_rate, RATE))
+}
+
+/// Cắt bản ghi dài thành các đoạn ~`min_s`–`max_s` giây ở chỗ lặng nhất → (giây bắt đầu, mẫu)
+pub fn split_audio(samples: &[f32], min_s: f32, max_s: f32) -> Vec<(f32, Vec<f32>)> {
+    let mut out = vec![];
+    let mut pos = 0usize;
+    let max = (max_s * RATE as f32) as usize;
+    while pos < samples.len() {
+        let rest = &samples[pos..];
+        let cut = if rest.len() <= max { rest.len() } else { best_cut(rest, RATE, min_s, max_s).max(1) };
+        out.push((pos as f32 / RATE as f32, rest[..cut].to_vec()));
+        pos += cut;
+    }
+    out
+}
+
+/// Khúc toàn văn kế tiếp để ghi chú trong lúc họp: phần chưa ghi chú đã đủ ~3 phút lời nói (hoặc đủ dài theo ký tự) →
+/// trả về khúc đầu tiên theo `chunk_ranges` (cắt ở chỗ đổi người nói nếu được). Chưa đủ → None.
+pub fn next_live_chunk(lines: &[Line], noted: usize, max_secs: f32, max_chars: usize) -> Option<(usize, usize)> {
+    let rest = lines.get(noted..)?;
+    let first = rest.first()?;
+    let chars: usize = rest.iter().map(|l| l.text.chars().count() + 12).sum();
+    let span = rest.last().map(|l| l.at - first.at).unwrap_or(0.0);
+    if chars < max_chars && span < max_secs {
+        return None;
+    }
+    chunk_ranges(rest, max_secs, max_chars).first().map(|(a, b)| (noted + a, noted + b))
 }
 
 /// Sau khi app bị tắt giữa chừng (thoát, mất điện) lúc đang ghi / đang chuyển chữ: các cuộc họp còn "đang chờ" không
@@ -432,20 +539,33 @@ pub fn parse_summary_text(raw: &str) -> Summary {
             }
         }
         let body = if new_sec > 0 { rest } else { l };
+        // "- [12:30] ý chính" → mốc để nghe lại
+        let (at, body) = split_stamp(body.trim().trim_start_matches(['-', '•', '*', '–']).trim());
         match sec {
-            1 => s.overview.extend(clean_item(body)),
-            2 => s.decisions.extend(clean_item(body)),
+            2 => {
+                if let Some(t) = clean_item(body) {
+                    s.decisions.push(t);
+                    s.decisions_at.push(at);
+                }
+            }
             3 => {
                 if let Some(t) = clean_item(body) {
                     let parts: Vec<&str> = t.split('|').collect();
+                    let (at2, task) = split_stamp(parts[0].trim());
                     s.actions.push(ActionItem {
-                        task: parts[0].trim().to_string(),
+                        task: task.trim().to_string(),
                         owner: parts.get(1).map(|x| none_field(x)).unwrap_or_default(),
                         due: parts.get(2).map(|x| none_field(x)).unwrap_or_default(),
+                        at: at.or(at2),
                     });
                 }
             }
-            _ => s.overview.extend(clean_item(body)),
+            _ => {
+                if let Some(t) = clean_item(body) {
+                    s.overview.push(t);
+                    s.overview_at.push(at);
+                }
+            }
         }
     }
     s
@@ -456,10 +576,20 @@ pub fn parse_summary_json(raw: &str) -> Option<Summary> {
     let a = raw.find('{')?;
     let b = raw.rfind('}')?;
     let v: serde_json::Value = serde_json::from_str(raw.get(a..=b)?).ok()?;
-    let strs = |k: &str| -> Vec<String> {
+    // mỗi ý là chuỗi ("[12:30] ý") hoặc đối tượng {"text": "...", "at": "12:30" | 750}
+    let strs = |k: &str| -> Vec<(String, Option<f32>)> {
+        let one = |i: &serde_json::Value| -> Option<(String, Option<f32>)> {
+            let (at0, raw) = match i {
+                serde_json::Value::String(x) => (None, x.as_str()),
+                serde_json::Value::Object(_) => (stamp_value(&i["at"]), i["text"].as_str().or_else(|| i["point"].as_str())?),
+                _ => return None,
+            };
+            let (at1, body) = split_stamp(raw.trim());
+            clean_item(body).map(|t| (t, at0.or(at1)))
+        };
         match &v[k] {
-            serde_json::Value::Array(x) => x.iter().filter_map(|i| i.as_str()).filter_map(clean_item).collect(),
-            serde_json::Value::String(x) => x.lines().filter_map(clean_item).collect(),
+            serde_json::Value::Array(x) => x.iter().filter_map(one).collect(),
+            serde_json::Value::String(x) => x.lines().filter_map(|l| one(&serde_json::Value::String(l.to_string()))).collect(),
             _ => vec![],
         }
     };
@@ -468,14 +598,174 @@ pub fn parse_summary_json(raw: &str) -> Option<Summary> {
         .map(|x| {
             x.iter()
                 .filter_map(|i| {
-                    let task = i["task"].as_str().or_else(|| i.as_str())?.trim().to_string();
-                    (!task.is_empty()).then(|| ActionItem { task, owner: none_field(i["owner"].as_str().unwrap_or("")), due: none_field(i["due"].as_str().unwrap_or("")) })
+                    let (at1, task) = split_stamp(i["task"].as_str().or_else(|| i.as_str())?.trim());
+                    let task = task.trim().to_string();
+                    (!task.is_empty()).then(|| ActionItem { task, owner: none_field(i["owner"].as_str().unwrap_or("")), due: none_field(i["due"].as_str().unwrap_or("")), at: stamp_value(&i["at"]).or(at1) })
                 })
                 .collect()
         })
         .unwrap_or_default();
-    let s = Summary { overview: strs("overview"), decisions: strs("decisions"), actions, ..Default::default() };
+    let (overview, overview_at) = strs("overview").into_iter().unzip();
+    let (decisions, decisions_at) = strs("decisions").into_iter().unzip();
+    let s = Summary { overview, overview_at, decisions, decisions_at, actions, ..Default::default() };
     (!s.overview.is_empty() || !s.actions.is_empty() || !s.decisions.is_empty()).then_some(s)
+}
+
+/// "[12:30] ý chính" / "(1:02:05) …" / "12:30 – …" ở đầu dòng → (mốc giây, phần còn lại)
+pub fn split_stamp(s: &str) -> (Option<f32>, &str) {
+    let t = s.trim_start();
+    let (inner, rest) = if let Some(r) = t.strip_prefix('[') {
+        match r.split_once(']') {
+            Some(x) => x,
+            None => return (None, s),
+        }
+    } else if let Some(r) = t.strip_prefix('(') {
+        match r.split_once(')') {
+            Some(x) => x,
+            None => return (None, s),
+        }
+    } else {
+        let end = t.find(|c: char| !(c.is_ascii_digit() || c == ':')).unwrap_or(t.len());
+        (&t[..end], &t[end..])
+    };
+    match parse_clock(inner.trim()) {
+        Some(v) => (Some(v), rest.trim_start_matches([' ', '-', '–', ':', '·']).trim_start()),
+        None => (None, s),
+    }
+}
+
+/// "12:30" → 750 giây; "1:02:05" → 3725
+pub fn parse_clock(s: &str) -> Option<f32> {
+    let parts: Vec<&str> = s.split(':').collect();
+    if !(2..=3).contains(&parts.len()) || parts.iter().any(|p| p.is_empty() || p.len() > 2 || !p.chars().all(|c| c.is_ascii_digit())) {
+        return None;
+    }
+    let n: Vec<u32> = parts.iter().map(|p| p.parse().unwrap_or(0)).collect();
+    let secs = if n.len() == 3 { n[0] * 3600 + n[1] * 60 + n[2] } else { n[0] * 60 + n[1] };
+    (n[n.len() - 1] < 60).then_some(secs as f32)
+}
+
+fn stamp_value(v: &serde_json::Value) -> Option<f32> {
+    match v {
+        serde_json::Value::Number(n) => n.as_f64().map(|x| x as f32).filter(|x| *x >= 0.0),
+        serde_json::Value::String(x) => parse_clock(x.trim().trim_matches(['[', ']'])),
+        _ => None,
+    }
+}
+
+impl Summary {
+    /// Bảo đảm `overview_at` / `decisions_at` đủ dài; ý chưa có mốc nhận `fallback` (vd. giây bắt đầu của khúc)
+    pub fn fill_stamps(mut self, fallback: Option<f32>) -> Summary {
+        self.overview_at.resize(self.overview.len(), None);
+        self.decisions_at.resize(self.decisions.len(), None);
+        for a in self.overview_at.iter_mut().chain(self.decisions_at.iter_mut()) {
+            if a.is_none() {
+                *a = fallback;
+            }
+        }
+        for a in self.actions.iter_mut() {
+            if a.at.is_none() {
+                a.at = fallback;
+            }
+        }
+        self
+    }
+    pub fn is_empty(&self) -> bool {
+        self.overview.is_empty() && self.decisions.is_empty() && self.actions.is_empty()
+    }
+}
+
+/// Chia toàn văn thành các khúc để AI đọc: mỗi khúc ≤ `max_secs` giây lời nói và ≤ `max_chars` ký tự (mô hình trên máy chỉ
+/// đọc được ~4096 token). Ưu tiên cắt ở chỗ đổi người nói khi khúc đã dài quá nửa — tức là
+/// tóm tắt theo phiên nói nếu phiên ngắn. Trả về (dòng đầu, dòng cuối + 1).
+pub fn chunk_ranges(lines: &[Line], max_secs: f32, max_chars: usize) -> Vec<(usize, usize)> {
+    let mut out = vec![];
+    let mut a = 0;
+    while a < lines.len() {
+        let mut chars = 0usize;
+        let mut b = a;
+        let mut soft: Option<usize> = None; // chỗ cắt đẹp gần nhất
+        while b < lines.len() {
+            let n = lines[b].text.chars().count() + 12;
+            let span = lines[b].at - lines[a].at;
+            if b > a && (chars + n > max_chars || span > max_secs) {
+                break;
+            }
+            if b > a {
+                // đổi người nói = hết một phiên nói (mỗi dòng đã là một đoạn ~30–45 giây nên không đo được chỗ ngừng)
+                let turn = lines[b].who != lines[b - 1].who;
+                if turn && (chars * 2 >= max_chars || span * 2.0 >= max_secs) {
+                    soft = Some(b);
+                }
+            }
+            chars += n;
+            b += 1;
+        }
+        let end = if b < lines.len() { soft.filter(|s| *s > a).unwrap_or(b) } else { b };
+        out.push((a, end.max(a + 1)));
+        a = end.max(a + 1);
+    }
+    out
+}
+
+/// Lỗi "quá dài" của Apple Intelligence (vượt cửa sổ ngữ cảnh) → nên chia nhỏ khúc rồi thử lại
+pub fn is_too_long(err: &str) -> bool {
+    let f = fold(err);
+    ["context", "exceeded", "too long", "token", "qua dai", "vuot"].iter().any(|k| f.contains(k))
+}
+
+/// Đọc danh sách đánh số "1. …\n2. …" (kết quả dịch theo dòng). Đúng `n` dòng mới nhận.
+pub fn parse_numbered(raw: &str, n: usize) -> Option<Vec<String>> {
+    let mut out: Vec<(usize, String)> = vec![];
+    for l in raw.lines() {
+        let t = l.trim().trim_matches('*').trim();
+        let d = t.chars().take_while(|c| c.is_ascii_digit()).count();
+        if d == 0 || d > 3 {
+            continue;
+        }
+        let rest = t[d..].trim_start_matches(['.', ')', ':', '-']).trim();
+        if let Ok(i) = t[..d].parse::<usize>() {
+            if (1..=n).contains(&i) && !rest.is_empty() && !out.iter().any(|x| x.0 == i) {
+                out.push((i, rest.to_string()));
+            }
+        }
+    }
+    if out.len() != n {
+        return None;
+    }
+    out.sort_by_key(|x| x.0);
+    Some(out.into_iter().map(|x| x.1).collect())
+}
+
+/// Toàn văn Gemini nghe lại từ file ghi âm: JSON [{"at": "mm:ss" | giây, "who": "Người 1", "text": "…"}] → dòng (cộng `offset`)
+pub fn parse_transcript_json(raw: &str, offset: f32) -> Vec<Line> {
+    let (Some(a), Some(b)) = (raw.find('['), raw.rfind(']')) else { return vec![] };
+    let Ok(serde_json::Value::Array(items)) = serde_json::from_str::<serde_json::Value>(&raw[a..=b]) else { return vec![] };
+    items
+        .iter()
+        .filter_map(|i| {
+            let text = i["text"].as_str()?.trim().to_string();
+            if text.is_empty() {
+                return None;
+            }
+            let who = i["who"].as_str().or_else(|| i["speaker"].as_str()).unwrap_or("").trim().chars().take(30).collect::<String>();
+            Some(Line { at: offset + stamp_value(&i["at"]).unwrap_or(0.0), who, text })
+        })
+        .collect()
+}
+
+/// Ghi chép đầy đủ dạng chữ cho tab Ghi chú
+pub fn full_note_text(m: &Meeting) -> String {
+    let en = is_en(&m.locale);
+    let when = chrono::DateTime::from_timestamp_millis(m.started).map(|d| d.with_timezone(&chrono::Local).format("%d/%m/%Y %H:%M").to_string()).unwrap_or_default();
+    let mut o = format!("{}\n{} · {when} · {}\n", m.title, if en { "Full meeting notes" } else { "Ghi chép đầy đủ" }, clock(m.duration as f32));
+    if let Some(f) = &m.full {
+        for p in &f.parts {
+            o.push_str(&format!("\n[{}] {}\n", clock(p.at), p.text.trim()));
+        }
+    }
+    o.push_str(if en { "\nReplay the recording: Mini-Asi › Meetings" } else { "\nNghe lại ghi âm: Mini-Asi › Họp" });
+    o
 }
 
 /// Gộp kết quả tóm tắt của nhiều khúc: bỏ trùng (so sánh không dấu)
@@ -483,14 +773,17 @@ pub fn merge(parts: Vec<Summary>) -> Summary {
     let mut out = Summary::default();
     let key = |s: &str| norm_words(s).join(" ");
     for p in parts {
-        for o in p.overview {
+        let p = p.fill_stamps(None);
+        for (o, at) in p.overview.into_iter().zip(p.overview_at) {
             if !out.overview.iter().any(|x| key(x) == key(&o)) {
                 out.overview.push(o);
+                out.overview_at.push(at);
             }
         }
-        for d in p.decisions {
+        for (d, at) in p.decisions.into_iter().zip(p.decisions_at) {
             if !out.decisions.iter().any(|x| key(x) == key(&d)) {
                 out.decisions.push(d);
+                out.decisions_at.push(at);
             }
         }
         for a in p.actions {
@@ -517,8 +810,9 @@ pub fn to_note_text(m: &Meeting, with_transcript: bool) -> String {
                 }
             }
         };
-        list(&mut o, l("Tóm tắt", "Summary"), &s.overview);
-        list(&mut o, l("Quyết định", "Decisions"), &s.decisions);
+        let stamp = |xs: &[String], at: &[Option<f32>]| -> Vec<String> { xs.iter().enumerate().map(|(i, x)| match at.get(i).copied().flatten() { Some(t) => format!("[{}] {x}", clock(t)), None => x.clone() }).collect() };
+        list(&mut o, l("Tóm tắt", "Summary"), &stamp(&s.overview, &s.overview_at));
+        list(&mut o, l("Quyết định", "Decisions"), &stamp(&s.decisions, &s.decisions_at));
         if !s.actions.is_empty() {
             o.push_str(l("\nViệc cần làm\n", "\nAction items\n"));
             for a in &s.actions {
@@ -531,6 +825,26 @@ pub fn to_note_text(m: &Meeting, with_transcript: bool) -> String {
                 }
                 o.push_str(&t);
                 o.push('\n');
+            }
+        }
+    }
+    if let Some(t) = &m.translation {
+        let ten = t.lang == "en";
+        o.push_str(if ten { "\n— English —\n" } else { "\n— Tiếng Việt —\n" });
+        let list2 = |o: &mut String, xs: &[String]| {
+            for x in xs {
+                o.push_str(&format!("• {x}\n"));
+            }
+        };
+        list2(&mut o, &t.summary.overview);
+        if !t.summary.decisions.is_empty() {
+            o.push_str(if ten { "Decisions\n" } else { "Quyết định\n" });
+            list2(&mut o, &t.summary.decisions);
+        }
+        if !t.summary.actions.is_empty() {
+            o.push_str(if ten { "Action items\n" } else { "Việc cần làm\n" });
+            for a in &t.summary.actions {
+                o.push_str(&format!("☐ {}\n", a.task));
             }
         }
     }
@@ -839,8 +1153,8 @@ mod tests {
         assert_eq!(s.overview, vec!["Chốt kế hoạch truyền thông quý 4", "Ngân sách giữ nguyên"]);
         assert_eq!(s.decisions, vec!["Chạy thử TikTok Ads 2 tuần"]);
         assert_eq!(s.actions.len(), 3);
-        assert_eq!(s.actions[0], ActionItem { task: "Gửi báo giá cho Hoiana".into(), owner: "anh Tuấn".into(), due: "thứ 6".into() });
-        assert_eq!(s.actions[1], ActionItem { task: "Làm brief video".into(), owner: "".into(), due: "".into() });
+        assert_eq!(s.actions[0], ActionItem { task: "Gửi báo giá cho Hoiana".into(), owner: "anh Tuấn".into(), due: "thứ 6".into(), at: None });
+        assert_eq!(s.actions[1], ActionItem { task: "Làm brief video".into(), owner: "".into(), due: "".into(), at: None });
         assert_eq!(s.actions[2].owner, "Lan");
         // tiêu đề viết thường, có nội dung cùng dòng
         let s = parse_summary_text("Tóm tắt: Họp nhanh về tuyển dụng\nViệc cần làm: Đăng tin tuyển dụng | chị Hà | mai");
@@ -892,10 +1206,81 @@ mod tests {
 
     #[test]
     fn live_chunks() {
+        // mỗi dòng 30 giây, 300 ký tự → khúc 3 phút = 6 dòng (≤ 180 giây tính từ dòng đầu)
         let lines: Vec<Line> = (0..10).map(|i| Line { at: i as f32 * 30.0, who: "".into(), text: "x".repeat(288) }).collect();
-        assert_eq!(next_live_chunk(&lines, 0, 2200, 2600), Some((0, 8)));
-        assert_eq!(next_live_chunk(&lines, 8, 2200, 2600), None, "chưa đủ dài");
-        assert_eq!(next_live_chunk(&[], 0, 2200, 2600), None);
+        assert_eq!(next_live_chunk(&lines, 0, 180.0, 4000), Some((0, 7)));
+        assert_eq!(next_live_chunk(&lines, 7, 180.0, 4000), None, "chưa đủ 3 phút");
+        assert_eq!(next_live_chunk(&[], 0, 180.0, 4000), None);
+        // giới hạn ký tự đến trước
+        assert_eq!(next_live_chunk(&lines, 0, 180.0, 1000), Some((0, 3)));
+    }
+
+    #[test]
+    fn audio_split_and_wav_roundtrip() {
+        let mut x = tone(70.0, 0.3);
+        for i in 0..(RATE as usize / 2) {
+            x[(40.0 * RATE as f32) as usize + i] = 0.0; // lặng ở giây 40
+        }
+        let parts = split_audio(&x, 30.0, 45.0);
+        assert_eq!(parts.len(), 2);
+        assert!((parts[0].0 - 0.0).abs() < 0.01 && (parts[1].0 - 40.2).abs() < 0.6, "{:?}", parts.iter().map(|p| p.0).collect::<Vec<_>>());
+        assert_eq!(parts.iter().map(|p| p.1.len()).sum::<usize>(), x.len());
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("a.wav");
+        write_wav16(&p, &x[..16000]).unwrap();
+        let back = read_wav_16k(&p).unwrap();
+        assert_eq!(back.len(), 16000);
+        assert!((back[100] - x[100]).abs() < 0.001);
+    }
+
+    #[test]
+    fn chunks_by_time_and_speaker() {
+        // 2 người nói xen kẽ theo phiên: A 0–100 s, B 110–200 s, A 210–… → cắt ở chỗ đổi người khi khúc đã dài quá nửa
+        let mut lines = vec![];
+        for i in 0..6 {
+            lines.push(Line { at: i as f32 * 20.0, who: "me".into(), text: "a".repeat(50) });
+        }
+        for i in 0..5 {
+            lines.push(Line { at: 120.0 + i as f32 * 20.0, who: "others".into(), text: "b".repeat(50) });
+        }
+        let r = chunk_ranges(&lines, 180.0, 5000);
+        assert_eq!(r[0], (0, 6), "cắt đúng chỗ B bắt đầu nói");
+        assert_eq!(r.last().unwrap().1, lines.len());
+        // không có chỗ đổi người → cắt theo thời gian
+        let flat: Vec<Line> = (0..20).map(|i| Line { at: i as f32 * 20.0, who: "".into(), text: "c".repeat(40) }).collect();
+        let r = chunk_ranges(&flat, 180.0, 5000);
+        assert!(r.iter().all(|(a, b)| flat[b - 1].at - flat[*a].at <= 180.0));
+        assert_eq!(r.iter().map(|(a, b)| b - a).sum::<usize>(), 20);
+        // một dòng quá dài vẫn thành một khúc (không lặp vô hạn)
+        let big = vec![Line { at: 0.0, who: "".into(), text: "d".repeat(9000) }];
+        assert_eq!(chunk_ranges(&big, 180.0, 2000), vec![(0, 1)]);
+    }
+
+    #[test]
+    fn stamps_numbered_and_gemini_transcript() {
+        assert_eq!(split_stamp("[12:30] Chốt ngân sách"), (Some(750.0), "Chốt ngân sách"));
+        assert_eq!(split_stamp("(1:02:05) – Kết thúc"), (Some(3725.0), "Kết thúc"));
+        assert_eq!(split_stamp("03:10 - Gửi báo giá"), (Some(190.0), "Gửi báo giá"));
+        assert_eq!(split_stamp("Quý 4 tăng 10%"), (None, "Quý 4 tăng 10%"));
+        assert_eq!(split_stamp("2024 là năm tốt"), (None, "2024 là năm tốt"));
+        let s = parse_summary_text("TÓM TẮT:\n- [00:40] Chốt kế hoạch Q4\n- Bàn về TikTok\nQUYẾT ĐỊNH:\n- [02:10] Chạy thử 2 tuần\nVIỆC CẦN LÀM:\n- [03:00] Gửi báo giá | Tuấn | thứ 6");
+        assert_eq!(s.overview, vec!["Chốt kế hoạch Q4", "Bàn về TikTok"]);
+        assert_eq!(s.overview_at, vec![Some(40.0), None]);
+        assert_eq!(s.decisions_at, vec![Some(130.0)]);
+        assert_eq!((s.actions[0].task.as_str(), s.actions[0].at), ("Gửi báo giá", Some(180.0)));
+        let f = s.clone().fill_stamps(Some(5.0));
+        assert_eq!(f.overview_at, vec![Some(40.0), Some(5.0)]);
+        let j = parse_summary_json(r#"{"overview":[{"text":"Chốt Q4","at":"01:05"},"[02:00] Ý hai"],"decisions":[],"actions":[{"task":"Gửi file","owner":"","due":"","at":95}]}"#).unwrap();
+        assert_eq!(j.overview_at, vec![Some(65.0), Some(120.0)]);
+        assert_eq!(j.actions[0].at, Some(95.0));
+        // dịch theo dòng
+        assert_eq!(parse_numbered("1. Close Q4 plan\n2) Try TikTok\n", 2), Some(vec!["Close Q4 plan".into(), "Try TikTok".into()]));
+        assert_eq!(parse_numbered("1. Only one", 2), None);
+        // Gemini nghe lại
+        let t = parse_transcript_json(r#"Đây: [{"at":"00:05","who":"Người 1","text":"Chào cả nhà"},{"at":12,"who":"Người 2","text":"Chào anh"},{"at":"0:20","text":""}]"#, 300.0);
+        assert_eq!(t.len(), 2);
+        assert_eq!((t[0].at, t[0].who.as_str(), t[1].at), (305.0, "Người 1", 312.0));
+        assert!(is_too_long("Exceeded model context window size") && !is_too_long("network down"));
     }
 
     #[test]
@@ -907,7 +1292,7 @@ mod tests {
             started: 1_700_000_000_000,
             duration: 1830,
             lines: vec![Line { at: 1.0, who: "me".into(), text: "Bắt đầu".into() }],
-            summary: Some(Summary { overview: vec!["Ý chính".into()], actions: vec![ActionItem { task: "Gửi file".into(), owner: "Lan".into(), due: "mai".into() }], ..Default::default() }),
+            summary: Some(Summary { overview: vec!["Ý chính".into()], actions: vec![ActionItem { task: "Gửi file".into(), owner: "Lan".into(), due: "mai".into(), at: None }], ..Default::default() }),
             ..Default::default()
         };
         save(d.path(), &m).unwrap();

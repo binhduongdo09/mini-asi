@@ -1,5 +1,6 @@
 // Tab Họp: ghi âm cuộc họp (micro + âm thanh máy) → chuyển chữ (Apple, trên máy) → ghi chú trong lúc họp (nếu máy đủ sức)
-// → biên bản (Apple Intelligence / Gemini) → sửa được, chuyển ý quan trọng thành Việc / Lịch / Ghi chú → nghe lại ghi âm.
+// → biên bản (Apple Intelligence / ChatGPT / Gemini / Claude) có mốc nghe lại từng ý → Take note (ghi chép đầy đủ, đã làm sạch)
+// → dịch biên bản Việt ↔ Anh → nhận dạng lại toàn văn từ file ghi âm → sửa được, chuyển ý thành Việc / Lịch / Ghi chú.
 // Đăng ký view qua window.ASI (xem app.js). Phần nặng nằm ở src-tauri/src/meeting.rs và commands/meeting.rs.
 (function () {
   "use strict";
@@ -12,11 +13,21 @@
     const live = []; // vài dòng mới nhất khi đang ghi
     const liveNotes = []; // ghi chú trong lúc họp của cuộc họp đang ghi
     let sysPref = null, rate = 1;
+    let pane = "sum"; // chi tiết: "sum" biên bản · "full" ghi chép đầy đủ · "lines" toàn văn
+    let showTr = false; // xem bản dịch
+    let reOpen = false, reEng = "apple", reLang = null; // bảng "Nhận dạng lại"
+    let engines = null; // AI dùng được: [{id, name, audio}]
+    const loadEngines = async () => { if (!engines) { try { engines = await api("meeting_engines"); } catch (_) { engines = []; } } return engines; };
+    // AI đang chọn cho cuộc họp (theo Cài đặt; không dùng được thì AI đầu tiên)
+    const curEng = () => { const e = engines || []; return (e.find((x) => x.id === (A.settings.meeting_ai || "apple")) || e[0] || { id: "apple", name: "Apple Intelligence" }); };
+    const canPlay = () => detail && detail.has_audio && !detail.recording;
+    // mốc nghe lại "12:30 ▶" trước một ý
+    const stamp = (at) => (at != null && at >= 0 && canPlay() ? `<button class="mt-stamp" data-play="${at}" title="Nghe lại đoạn này">${I.play}${A.clockOf(at)}</button>` : "");
 
     const fmtDate = (ms) => { const d = new Date(ms); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} · ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
     const dur = (s) => { s = Math.round(s || 0); return s >= 3600 ? `${Math.floor(s / 3600)} giờ ${Math.floor(s / 60) % 60} phút` : s >= 60 ? `${Math.floor(s / 60)} phút` : `${s} giây`; };
-    const whoChip = (w) => (w === "me" ? `<span class="mt-who me">Bạn</span>` : w === "others" ? `<span class="mt-who">Người khác</span>` : "");
-    const brainName = () => (A.settings.meeting_ai === "gemini" ? "Gemini" : "Apple Intelligence");
+    const whoChip = (w) => (w === "me" ? `<span class="mt-who me">Bạn</span>` : w === "others" ? `<span class="mt-who">Người khác</span>` : w ? `<span class="mt-who" translate="no">${esc(w)}</span>` : "");
+    const brainName = () => curEng().name;
     const sttName = (s) => (s === "on-device" ? "Chuyển chữ trên máy" : "Chuyển chữ qua máy chủ Apple (cần mạng)");
     const here = () => A.tab === "meet" && A.mode === "expanded";
     // Nút chuyển một ý thành Việc / Lịch / Ghi chú
@@ -25,10 +36,11 @@
     // ───────── trang chính ─────────
     function liveNotesHtml(notes, title = "Ghi chú trong lúc họp") {
       if (!notes.length) return "";
+      const at = (s, k, i, def) => { const v = (s[k] || [])[i]; return v != null ? v : def; };
       return `<div class="sec">${title}<span>${notes.length}</span></div>${notes.map((n) => `<div class="mt-livenote"><span class="mt-at">${A.clockOf(n.from)}</span><div class="grow">
-          ${n.summary.overview.map((x) => `<div class="mt-li">${esc(x)}${convActs(x)}</div>`).join("")}
-          ${n.summary.decisions.map((x) => `<div class="mt-li dec">Quyết định: ${esc(x)}${convActs(x)}</div>`).join("")}
-          ${n.summary.actions.map((a) => `<div class="mt-li act">Việc: ${esc(a.task)}${a.owner ? ` · ${esc(a.owner)}` : ""}${a.due ? ` · hạn ${esc(a.due)}` : ""}${convActs([a.task, a.due].filter(Boolean).join(" "))}</div>`).join("")}
+          ${n.summary.overview.map((x, i) => `<div class="mt-li">${stamp(at(n.summary, "overview_at", i, n.from))}<span class="grow" translate="no">${esc(x)}</span>${convActs(x)}</div>`).join("")}
+          ${n.summary.decisions.map((x, i) => `<div class="mt-li dec">${stamp(at(n.summary, "decisions_at", i, n.from))}<span class="grow">Quyết định: <span translate="no">${esc(x)}</span></span>${convActs(x)}</div>`).join("")}
+          ${n.summary.actions.map((a) => `<div class="mt-li act">${stamp(a.at != null ? a.at : n.from)}<span class="grow">Việc: <span translate="no">${esc(a.task)}${a.owner ? ` · ${esc(a.owner)}` : ""}${a.due ? ` · hạn ${esc(a.due)}` : ""}</span></span>${convActs([a.task, a.due].filter(Boolean).join(" "))}</div>`).join("")}
         </div></div>`).join("")}`;
     }
     function recCard(m) {
@@ -39,7 +51,7 @@
           <div class="mt-meters"><span>Micro</span><i><b id="mtMic"></b></i>${m.system_audio ? `<span>Máy</span><i><b id="mtSys"></b></i>` : ""}</div>
           <div class="mt-live">${lines.length ? lines.map((l) => `<div>${whoChip(l.who)}<span translate="no">${esc(l.text)}</span></div>`).join("") : `<div class="dim">Chữ sẽ hiện sau mỗi ~30–45 giây…</div>`}</div>
           <div class="mt-rec-foot"><span class="dim grow">${sttName(m.stt)} · ${m.system_audio ? "micro + âm thanh máy" : "chỉ micro"}${m.pending ? ` · đang chuyển ${m.pending} đoạn` : ""}
-              <br>${li ? (li.live ? `Ghi chú tự động mỗi ~5 phút (${esc(li.engine || "Apple Intelligence")})` : `Ghi chú sau khi họp${li.reason || li.why ? ` — ${esc(li.reason || li.why)}` : ""}`) : ""}</span>
+              <br>${li ? (li.live ? `Ghi chú tự động mỗi ~3 phút (${esc(li.engine || "Apple Intelligence")})` : `Ghi chú sau khi họp${li.reason || li.why ? ` — ${esc(li.reason || li.why)}` : ""}`) : ""}</span>
             <button class="btn danger" data-mt="stop">${I.stop}Dừng ghi</button></div>
         </div>`;
     }
@@ -49,8 +61,8 @@
           <button class="mt-big" data-mt="start" ${starting ? "disabled" : ""}>${starting ? `<span class="spin"></span>` : `<i class="rec-dot"></i>`}<span>Ghi cuộc họp</span></button>
           <div class="grow">
             <label class="mt-check"><input type="checkbox" id="mtSys" ${sys ? "checked" : ""}><span><b>Thu cả âm thanh máy</b> — giọng người khác trong Zoom, Meet, Teams (kể cả khi đeo tai nghe)</span></label>
-            <div class="dim mt-hint">Họp trực tiếp chỉ cần micro. ${A.settings.meeting_ai === "gemini"
-              ? "Asi ghi chú ngay trong lúc họp và viết biên bản khi dừng ghi bằng Gemini (nội dung họp được gửi tới Google)"
+            <div class="dim mt-hint">Họp trực tiếp chỉ cần micro. ${(A.settings.meeting_ai || "apple") !== "apple"
+              ? `Asi ghi chú ngay trong lúc họp và viết biên bản khi dừng ghi bằng ${esc(brainName())} (nội dung họp được gửi đi)`
               : "Máy đủ sức thì Asi ghi chú ngay trong lúc họp, không thì viết biên bản khi dừng ghi — Apple Intelligence, mọi thứ ở trên máy"} — <button class="link inline" data-mt="settings">Cài đặt</button>. Nhớ báo mọi người là đang ghi âm.</div>
           </div>
         </div>`;
@@ -90,15 +102,44 @@
           <div class="seg">${[1, 1.5, 2].map((r) => `<button data-rate="${r}" class="${rate === r ? "on" : ""}">${r}×</button>`).join("")}</div>
         </div>`;
     }
-    function sumView(s) {
-      const sec = (t, xs, cls) => (xs.length ? `<div class="sec">${t}</div><div class="mt-items">${xs.map((x) => `<div class="mt-item ${cls}"><span class="grow" translate="no">${esc(x)}</span>${convActs(x)}</div>`).join("")}</div>` : "");
-      return `${s.note ? `<div class="banner warn">${esc(s.note)}</div>` : ""}
-        ${sec("Tóm tắt", s.overview, "")}${sec("Quyết định", s.decisions, "dec")}
-        ${s.actions.length ? `<div class="sec">Việc cần làm<span>${s.actions.length}</span><button class="link" data-mt="all">${checked.size === s.actions.length ? "Bỏ chọn" : "Chọn hết"}</button></div>
-          <div class="mt-items">${s.actions.map((a, i) => `<div class="mt-item act"><label class="mt-actl"><input type="checkbox" data-ai="${i}" ${checked.has(i) ? "checked" : ""}><span class="grow">${esc(a.task)}${a.owner || a.due ? `<span class="dim">${[a.owner, a.due && `hạn ${a.due}`].filter(Boolean).map(esc).join(" · ")}</span>` : ""}</span></label>
-            ${convActs([a.task, a.owner && `(${a.owner})`, a.due].filter(Boolean).join(" "))}</div>`).join("")}</div>
-          <div class="mt-act-bar"><button class="btn sm primary" data-mt="tasks" ${checked.size ? "" : "disabled"}>${I.plus}<span>Thêm ${checked.size || ""} việc vào tab Việc</span></button></div>` : ""}
-        <div class="engine">${esc(s.engine)}</div>`;
+    function sumView(s0) {
+      const tr = detail.translation;
+      const s = showTr && tr ? tr.summary : s0;
+      const ro = showTr && tr; // bản dịch: chỉ xem (sửa ở bản gốc)
+      const item = (x, at, cls) => `<div class="mt-item ${cls}">${stamp(at)}<span class="grow" translate="no">${esc(x)}</span>${ro ? "" : convActs(x)}</div>`;
+      const sec = (t, xs, ats, cls) => (xs.length ? `<div class="sec">${t}</div><div class="mt-items">${xs.map((x, i) => item(x, (ats || [])[i], cls)).join("")}</div>` : "");
+      const trBar = tr ? `<div class="mt-trbar"><div class="seg"><button data-tr="0" class="${showTr ? "" : "on"}">Bản gốc</button><button data-tr="1" class="${showTr ? "on" : ""}">${tr.lang === "en" ? "English" : "Tiếng Việt"}</button></div>${showTr ? `<span class="dim">Dịch bằng ${esc(tr.engine)}</span>` : ""}</div>` : "";
+      return `${s0.note ? `<div class="banner warn">${esc(s0.note)}</div>` : ""}${trBar}
+        ${sec(ro && tr.lang === "en" ? "Summary" : "Tóm tắt", s.overview, s.overview_at, "")}${sec(ro && tr.lang === "en" ? "Decisions" : "Quyết định", s.decisions, s.decisions_at, "dec")}
+        ${s.actions.length ? `<div class="sec">${ro && tr.lang === "en" ? "Action items" : "Việc cần làm"}<span>${s.actions.length}</span>${ro ? "" : `<button class="link" data-mt="all">${checked.size === s.actions.length ? "Bỏ chọn" : "Chọn hết"}</button>`}</div>
+          <div class="mt-items">${s.actions.map((a, i) => `<div class="mt-item act">${ro ? `${stamp(a.at)}<span class="grow" translate="no">${esc(a.task)}</span>` : `<label class="mt-actl"><input type="checkbox" data-ai="${i}" ${checked.has(i) ? "checked" : ""}><span class="grow"><span translate="no">${esc(a.task)}</span>${a.owner || a.due ? `<span class="dim" translate="no">${[a.owner, a.due && `hạn ${a.due}`].filter(Boolean).map(esc).join(" · ")}</span>` : ""}</span></label>${stamp(a.at)}
+            ${convActs([a.task, a.owner && `(${a.owner})`, a.due].filter(Boolean).join(" "))}`}</div>`).join("")}</div>
+          ${ro ? "" : `<div class="mt-act-bar"><button class="btn sm primary" data-mt="tasks" ${checked.size ? "" : "disabled"}>${I.plus}<span>Thêm ${checked.size || ""} việc vào tab Việc</span></button></div>`}` : ""}
+        <div class="engine">${esc(s0.engine)}</div>`;
+    }
+    // Take note: ghi chép đầy đủ (đã làm sạch, không lược ý), mỗi đoạn có mốc nghe lại
+    function fullHtml(d) {
+      const f = d.full;
+      if (!f) {
+        return `<div class="mt-empty-sum"><span class="dim grow">Ghi chép đầy đủ: toàn bộ lời nói được viết lại cho dễ đọc — sửa lỗi nhận dạng, bỏ từ đệm, chia đoạn theo ý và người nói, không lược ý nào.</span>
+          <button class="btn sm primary" data-mt="take" ${d.lines.length && !d.recording && !progress ? "" : "disabled"}>${I.note}Take note</button></div>`;
+      }
+      return `<div class="mt-full-head"><span class="dim grow">${esc(f.engine)}${f.raw_parts ? ` · <span class="warn-txt">${f.raw_parts} đoạn giữ nguyên văn (AI chưa viết được)</span>` : ""}</span>
+          <button class="btn sm ghost" data-mt="full-note">${I.note}Mở trong Ghi chú</button><button class="btn sm ghost" data-mt="full-copy">${I.copy}Chép</button></div>
+        <div class="mt-full">${f.parts.map((p) => `<div class="mt-fp">${stamp(p.at) || `<span class="mt-at">${A.clockOf(p.at)}</span>`}<div class="grow" translate="no">${esc(p.text).replace(/\n/g, "<br>")}</div></div>`).join("")}</div>`;
+    }
+    // Nhận dạng lại toàn văn từ file ghi âm
+    function reHtml(d) {
+      if (!reOpen) return "";
+      const gem = (engines || []).some((e) => e.audio);
+      const lang = reLang || (String(d.locale || "").toLowerCase().startsWith("en") ? "en-US" : "vi-VN");
+      return `<div class="mt-re">
+          <b>Nhận dạng lại toàn văn từ file ghi âm</b>
+          <div class="mt-re-row"><span class="dim">Bằng</span><div class="seg"><button data-re="apple" class="${reEng !== "gemini" ? "on" : ""}">Apple (trên máy)</button>${gem ? `<button data-re="gemini" class="${reEng === "gemini" ? "on" : ""}">Gemini</button>` : ""}</div>
+            <span class="dim">Ngôn ngữ</span><div class="seg"><button data-rl="vi-VN" class="${lang === "vi-VN" ? "on" : ""}">Tiếng Việt</button><button data-rl="en-US" class="${lang === "en-US" ? "on" : ""}">English</button></div></div>
+          <span class="dim">${reEng === "gemini" ? "Gemini nghe file ghi âm (gửi âm thanh tới Google), phân biệt từng người nói, thường chính xác hơn." : "Nhận dạng giọng nói của Apple, ngay trên máy nếu máy hỗ trợ ngôn ngữ này."} Toàn văn hiện tại được cất lại; xong thì bấm Tóm tắt lại / Take note.</span>
+          <div class="mt-act-bar"><button class="btn sm ghost" data-mt="re-cancel">Huỷ</button><button class="btn sm primary" data-mt="re-go">${I.refresh}Bắt đầu</button></div>
+        </div>`;
     }
     function sumEdit(s) {
       const ta = (id, label, v, hint) => `<label class="mt-ed"><b>${label}</b><span class="dim">${hint}</span><textarea class="field" id="${id}" rows="${Math.min(8, Math.max(2, v.split("\n").length + 1))}">${esc(v)}</textarea></label>`;
@@ -115,7 +156,7 @@
       if (!s) {
         const ln = liveNotesHtml(d.live || []);
         return (d.lines.length && !d.recording
-          ? `<div class="mt-empty-sum"><span class="dim">Chưa có biên bản.</span><button class="btn sm ghost" data-mt="ed-start">Tự viết</button><button class="btn sm primary" data-mt="sum">${I.sparkle}Tóm tắt bằng ${brainName()}</button></div>`
+          ? `<div class="mt-empty-sum"><span class="dim">Chưa có biên bản.</span><button class="btn sm ghost" data-mt="ed-start">Tự viết</button><button class="btn sm primary" data-mt="sum" ${progress ? "disabled" : ""}>${I.sparkle}Tóm tắt bằng ${esc(brainName())}</button></div>`
           : "") + ln;
       }
       return sumView(s);
@@ -123,6 +164,18 @@
     const lineHtml = (l, i) => editLine === i
       ? `<div class="mt-line editing" data-li="${i}"><span class="mt-at">${A.clockOf(l.at)}</span><input class="field grow" id="mtLineEd" value="${esc(l.text)}"><button class="ib" data-mt="line-save" title="Lưu (Enter)">${I.check}</button></div>`
       : `<div class="mt-line" data-li="${i}" data-at="${l.at}"><span class="mt-at">${A.clockOf(l.at)}</span>${whoChip(l.who)}<span class="grow" translate="no">${esc(l.text)}</span>${convActs(l.text, `<button class="ib" data-mt="line-edit" title="Sửa dòng này">${I.note}</button>`)}</div>`;
+    // Thanh AI: chọn AI (chỉ khi có từ 2 AI) + Tóm tắt · Take note · Dịch · Nhận dạng lại
+    function aiBar(d) {
+      const e = engines || [];
+      const busy = !!progress || !d.lines.length;
+      const pick = e.length > 1 ? `<div class="seg mt-eng" title="AI làm biên bản, ghi chép và dịch">${e.map((x) => `<button data-eng="${esc(x.id)}" class="${curEng().id === x.id ? "on" : ""}">${esc(x.name === "Apple Intelligence" ? "Apple" : x.name)}</button>`).join("")}</div>` : "";
+      return `<div class="mt-tools">${pick}
+          <button class="btn sm" data-mt="sum" ${busy ? "disabled" : ""}>${I.sparkle}${d.summary ? "Tóm tắt lại" : "Tóm tắt"}</button>
+          <button class="btn sm" data-mt="take" ${busy ? "disabled" : ""}>${I.note}Take note</button>
+          <button class="btn sm" data-mt="tr" ${busy || !d.summary ? "disabled" : ""} title="${d.summary ? "Dịch biên bản Việt ↔ Anh" : "Tóm tắt trước rồi dịch"}">${I.globe}Dịch</button>
+          <button class="btn sm ghost" data-mt="re" ${progress || !d.has_audio ? "disabled" : ""} title="${d.has_audio ? "Nhận dạng lại toàn văn từ file ghi âm" : "Không còn file ghi âm"}">${I.refresh}Nhận dạng lại</button>
+        </div>`;
+    }
     function drawDetail() {
       const d = detail;
       if (!d) { view.innerHTML = `<div class="empty"><span class="spin"></span></div>`; return; }
@@ -135,22 +188,25 @@
           ${editingTitle ? `<input class="field grow" id="mtTitle" value="${esc(d.title)}">` : `<b class="grow mt-title" data-mt="rename" title="Bấm để đổi tên" translate="no">${esc(d.title)}</b>`}
           ${d.recording ? `<span class="badge rec"><i class="rec-dot"></i>Đang ghi</span>` : ""}
         </div>
-        <div class="dim mt-meta">${fmtDate(d.started)} · ${dur(d.duration)} · ${d.system_audio ? "micro + âm thanh máy" : "micro"} · ${d.stt === "on-device" ? "chuyển chữ trên máy" : "chuyển chữ qua Apple"}${d.pending ? ` · còn ${d.pending} đoạn đang chuyển` : ""}${d.failed ? ` · <span class="err">${d.failed} đoạn lỗi${d.last_error ? `: ${esc(d.last_error)}` : ""}</span>` : ""}</div>
+        <div class="dim mt-meta">${fmtDate(d.started)} · ${dur(d.duration)} · ${d.system_audio ? "micro + âm thanh máy" : "micro"} · ${d.retranscribed ? `nhận dạng lại: ${esc(d.retranscribed)}` : d.stt === "on-device" ? "chuyển chữ trên máy" : "chuyển chữ qua Apple"}${d.pending ? ` · còn ${d.pending} đoạn đang chuyển` : ""}${d.failed ? ` · <span class="err">${d.failed} đoạn lỗi${d.last_error ? `: ${esc(d.last_error)}` : ""}</span>` : ""}</div>
         ${playerHtml(d)}
-        <div class="mt-tools">
-          ${s && !editSum ? `<button class="btn sm" data-mt="sum" ${progress || d.recording ? "disabled" : ""}>${I.sparkle}Tóm tắt lại</button>
-            <div class="seg"><button data-eng="apple" class="${A.settings.meeting_ai !== "gemini" ? "on" : ""}">Apple</button><button data-eng="gemini" class="${A.settings.meeting_ai === "gemini" ? "on" : ""}">Gemini</button></div>` : ""}
+        ${d.recording ? "" : aiBar(d)}
+        ${progress ? `<div class="mt-progress"><span class="spin"></span>${esc(progress)}</div>` : ""}
+        ${reHtml(d)}
+        <div class="mt-panes"><div class="seg">
+            <button data-pane="sum" class="${pane === "sum" ? "on" : ""}">Biên bản</button>
+            <button data-pane="full" class="${pane === "full" ? "on" : ""}">Ghi chép đầy đủ${d.full ? "" : ""}</button>
+            <button data-pane="lines" class="${pane === "lines" ? "on" : ""}">Toàn văn${d.lines.length ? ` · ${d.lines.length}` : ""}</button></div>
           <span class="grow"></span>
-          ${s && !editSum ? `<button class="btn sm ghost" data-mt="ed-start" title="Sửa biên bản">${I.sliders}Sửa</button>` : ""}
+          ${pane === "sum" && s && !editSum ? `<button class="btn sm ghost" data-mt="ed-start" title="Sửa biên bản">${I.sliders}Sửa</button>` : ""}
           <button class="btn sm ghost" data-mt="note" title="Mở ghi chú biên bản (Ghi chú › Biên bản họp)" ${d.lines.length ? "" : "disabled"}>${I.note}Ghi chú</button>
           <button class="btn sm ghost" data-mt="copy" title="Chép biên bản" ${d.lines.length ? "" : "disabled"}>${I.copy}Chép</button>
           ${d.has_audio && !d.recording ? `<button class="btn sm ghost" data-mt="audio" title="Mở file ghi âm trong Finder">${I.folder}Finder</button>` : ""}
           ${d.recording ? "" : `<button class="btn sm ghost mt-del" data-mt="del" title="Xoá cuộc họp">${I.trash}Xoá</button>`}
         </div>
-        ${progress ? `<div class="mt-progress"><span class="spin"></span>${esc(progress)}</div>` : ""}
-        ${sumHtml(d)}
-        <div class="sec">Toàn văn<span>${d.lines.length || ""}</span>${d.lines.length ? `<span class="hint-txt">bấm một dòng để nghe đoạn đó · rê chuột để sửa / tạo việc</span>` : ""}</div>
-        <div class="mt-lines" id="mtLines">${d.lines.length ? d.lines.map(lineHtml).join("") : `<div class="empty sm">${d.recording || d.pending ? "Chữ đang được chuyển…" : "Không có lời nói nào được nhận dạng."}</div>`}</div>
+        ${pane === "sum" ? sumHtml(d) : pane === "full" ? fullHtml(d) : `
+        ${d.lines.length ? `<div class="hint-txt mt-lhint">bấm một dòng để nghe đoạn đó · rê chuột để sửa / tạo việc</div>` : ""}
+        <div class="mt-lines" id="mtLines">${d.lines.length ? d.lines.map(lineHtml).join("") : `<div class="empty sm">${d.recording || d.pending ? "Chữ đang được chuyển…" : "Không có lời nói nào được nhận dạng."}</div>`}</div>`}
       </div>`;
       bindAudio(d, keepT, wasPlaying);
       if (editingTitle) { const t = $("#mtTitle"); t.focus(); t.select(); }
@@ -210,17 +266,19 @@
 
     async function openDetail(id) {
       if (sel !== id) { const a = $("#mtAudio"); if (a) a.pause(); }
+      if (sel !== id) { pane = "sum"; showTr = false; reOpen = false; }
       sel = id; detail = null; checked = new Set(); editingTitle = false; editSum = false; editLine = -1;
       drawDetail();
-      try { detail = await api("meeting_get", { id }); } catch (err) { toast(String(err)); sel = null; return draw(); }
+      try { [detail] = await Promise.all([api("meeting_get", { id }), loadEngines()]); } catch (err) { toast(String(err)); sel = null; return draw(); }
       if (detail.summary) checked = new Set(detail.summary.actions.map((_, i) => i));
       if (here() && sel === id) drawDetail();
     }
-    async function summarize(engine) {
+    async function summarize() {
       if (!detail) return;
-      progress = "Đang tóm tắt…"; drawDetail();
+      progress = "Đang tóm tắt…"; pane = "sum"; drawDetail();
       try {
-        detail.summary = await api("meeting_summarize", { id: detail.id, engine: engine || null });
+        detail.summary = await api("meeting_summarize", { id: detail.id, engine: curEng().id });
+        detail.translation = null; showTr = false;
         checked = new Set(detail.summary.actions.map((_, i) => i));
         flashMood("happy");
         list = null;
@@ -258,6 +316,29 @@
       } catch (err) { toast(String(err)); }
       drawDetail();
     }
+    async function takeNote() {
+      if (!detail) return;
+      progress = "Đang viết ghi chép đầy đủ…"; pane = "full"; drawDetail();
+      try { detail.full = await api("meeting_take_note", { id: detail.id, engine: curEng().id }); flashMood("happy"); toast("Đã lưu ghi chép vào Ghi chú › Biên bản họp"); }
+      catch (err) { toast(String(err)); flashMood("worried", 2500); }
+      progress = ""; if (here() && sel) drawDetail();
+    }
+    async function translate() {
+      if (!detail || !detail.summary) return;
+      progress = "Đang dịch…"; pane = "sum"; drawDetail();
+      try { detail.translation = await api("meeting_translate", { id: detail.id, engine: curEng().id }); showTr = true; flashMood("happy"); }
+      catch (err) { toast(String(err)); flashMood("worried", 2500); }
+      progress = ""; if (here() && sel) drawDetail();
+    }
+    async function retranscribe() {
+      if (!detail) return;
+      const lang = reLang || (String(detail.locale || "").toLowerCase().startsWith("en") ? "en-US" : "vi-VN");
+      const au = $("#mtAudio"); if (au) au.pause();
+      reOpen = false; progress = "Đang đọc file ghi âm…"; pane = "lines"; drawDetail();
+      try { const n = await api("meeting_retranscribe", { id: detail.id, engine: reEng, locale: lang }); toast(`Đã nhận dạng lại: ${n} dòng — bấm Tóm tắt lại / Take note để cập nhật`); list = null; progress = ""; return openDetail(detail.id); }
+      catch (err) { toast(String(err)); flashMood("worried", 2500); }
+      progress = ""; if (here() && sel) drawDetail();
+    }
     async function convert(kind, text) {
       text = (text || "").trim();
       if (!text) return;
@@ -278,8 +359,18 @@
       if (cv) { e.stopPropagation(); return convert(cv.dataset.cv, cv.closest("[data-text]").dataset.text); }
       const o = e.target.closest("[data-open]");
       if (o) return openDetail(o.dataset.open);
+      const pl = e.target.closest("[data-play]");
+      if (pl) { e.stopPropagation(); return playAt(Number(pl.dataset.play)); }
       const eng = e.target.closest("[data-eng]");
-      if (eng) { await A.saveSettings({ meeting_ai: eng.dataset.eng }); return summarize(eng.dataset.eng); }
+      if (eng) { await A.saveSettings({ meeting_ai: eng.dataset.eng }); return drawDetail(); }
+      const pn = e.target.closest("[data-pane]");
+      if (pn) { pane = pn.dataset.pane; editSum = false; editLine = -1; return drawDetail(); }
+      const trb = e.target.closest("[data-tr]");
+      if (trb) { showTr = trb.dataset.tr === "1"; return drawDetail(); }
+      const re = e.target.closest("[data-re]");
+      if (re) { reEng = re.dataset.re; return drawDetail(); }
+      const rl = e.target.closest("[data-rl]");
+      if (rl) { reLang = rl.dataset.rl; return drawDetail(); }
       const rt = e.target.closest("[data-rate]");
       if (rt) { rate = Number(rt.dataset.rate); const a = $("#mtAudio"); if (a) a.playbackRate = rate; view.querySelectorAll("[data-rate]").forEach((x) => x.classList.toggle("on", Number(x.dataset.rate) === rate)); return; }
       const b = e.target.closest("[data-mt]");
@@ -309,11 +400,18 @@
       if (a === "play") { const au = $("#mtAudio"); if (au) au.paused ? au.play().catch(() => toast("Không phát được ghi âm")) : au.pause(); return; }
       if (a === "back15" || a === "fwd15") { const au = $("#mtAudio"); if (au) au.currentTime = Math.max(0, au.currentTime + (a === "fwd15" ? 15 : -15)); return; }
       if (a === "rename") { editingTitle = true; return drawDetail(); }
-      if (a === "sum") return summarize(null);
-      if (a === "ed-start") { editSum = true; return drawDetail(); }
+      if (a === "sum") return summarize();
+      if (a === "take") return takeNote();
+      if (a === "tr") return translate();
+      if (a === "re") { reOpen = !reOpen; reEng = "apple"; reLang = null; return drawDetail(); }
+      if (a === "re-cancel") { reOpen = false; return drawDetail(); }
+      if (a === "re-go") return retranscribe();
+      if (a === "full-note") { try { const nid = await api("meeting_full_to_note", { id: detail.id }); if (A.openNote) A.openNote(nid); } catch (err) { toast(String(err)); } return; }
+      if (a === "full-copy") { const t = (detail.full ? detail.full.parts : []).map((p) => `[${A.clockOf(p.at)}] ${p.text}`).join("\n\n"); try { await api("asi_action", { cmd: "copy_text", arg: t }); toast("Đã chép ghi chép đầy đủ"); } catch (err) { toast(String(err)); } return; }
+      if (a === "ed-start") { editSum = true; showTr = false; pane = "sum"; return drawDetail(); }
       if (a === "ed-cancel") { editSum = false; return drawDetail(); }
       if (a === "ed-save") return saveSummary();
-      if (a === "line-edit") { editLine = Number(b.closest("[data-li]").dataset.li); return drawDetail(); }
+      if (a === "line-edit") { editLine = Number(b.closest("[data-li]").dataset.li); pane = "lines"; return drawDetail(); }
       if (a === "line-save") return saveLine();
       if (a === "all") { const n = detail.summary.actions.length; checked = checked.size === n ? new Set() : new Set([...Array(n).keys()]); return drawDetail(); }
       if (a === "tasks") {
@@ -394,7 +492,7 @@
         detail.pending = u.pending;
         if (u.error) { detail.failed = (detail.failed || 0) + 1; detail.last_error = u.error; }
         if (here() && sel === u.id && !editingTitle && editLine < 0 && !editSum) {
-          const box = $("#mtLines");
+          const box = pane === "lines" ? $("#mtLines") : null;
           if (box && base && (u.lines || []).length) box.insertAdjacentHTML("beforeend", u.lines.map((l, k) => lineHtml(l, base + k)).join(""));
           else drawDetail();
         }
@@ -422,6 +520,7 @@
       else if (here() && !sel) drawHome();
     });
 
+    on("settings-changed", () => { engines = null; if (here() && sel) loadEngines().then(() => { if (here() && sel && !editSum && editLine < 0 && !editingTitle) drawDetail(); }); });
     A.views.meet = () => { draw(); };
     /** Mở chi tiết một cuộc họp (vd. từ ghi chú biên bản) */
     A.openMeeting = async (id) => { A.tab = "meet"; await A.setMode("expanded", { force: true }); openDetail(id); };

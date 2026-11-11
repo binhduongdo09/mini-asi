@@ -177,6 +177,27 @@ pub fn ask_with_timeout(p: Provider, key: &str, model: &str, system: &str, promp
     extract_text(p, &v)
 }
 
+/// Gemini nghe một file âm thanh (WAV, gửi kèm trong yêu cầu — tối đa ~15 MB) và trả lời theo `prompt` (JSON)
+pub fn gemini_audio(key: &str, model: &str, system: &str, prompt: &str, wav: &[u8], timeout: Duration) -> Result<String, String> {
+    use base64::Engine;
+    let p = Provider::Gemini;
+    let body = json!({
+        "systemInstruction": { "parts": [{ "text": system }] },
+        "contents": [{ "role": "user", "parts": [
+            { "inline_data": { "mime_type": "audio/wav", "data": base64::engine::general_purpose::STANDARD.encode(wav) } },
+            { "text": prompt },
+        ] }],
+        "generationConfig": { "responseMimeType": "application/json", "temperature": 0.2 },
+    });
+    let url = format!("https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent");
+    let v: Value = match ureq::post(&url).timeout(timeout).set("Content-Type", "application/json").set("x-goog-api-key", key).send_json(body) {
+        Ok(resp) => resp.into_json().map_err(|e| format!("Không đọc được phản hồi {}: {e}", p.name()))?,
+        Err(ureq::Error::Status(code, resp)) => return Err(explain_status(p, code, &resp.into_string().unwrap_or_default())),
+        Err(e) => return Err(format!("Không kết nối được {} — kiểm tra mạng ({e})", p.name())),
+    };
+    extract_text(p, &v)
+}
+
 /// Danh sách mô hình dùng được với key này (để chọn trong Cài đặt)
 pub fn list_models(p: Provider, key: &str) -> Result<Vec<String>, String> {
     let (url, headers): (String, Vec<(&str, String)>) = match p {

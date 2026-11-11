@@ -1,5 +1,21 @@
 # Nhật ký thay đổi
 
+## 0.22.0 (11/2026) — Họp: Take note, nghe lại từng ý, chọn AI, dịch biên bản, nhận dạng lại
+- **Take note**: AI viết lại toàn bộ lời nói thành *ghi chép đầy đủ* — sửa lỗi nhận dạng, bỏ từ đệm, chia đoạn theo ý / người nói,
+  không lược ý. Mỗi đoạn có mốc nghe lại; lưu riêng trong Ghi chú › Biên bản họp. Đoạn nào AI không viết được (hoặc viết ngắn bất
+  thường — dấu hiệu bị tóm tắt) thì giữ nguyên văn, không mất nội dung.
+- **Nghe lại từng ý**: mỗi ý tóm tắt, quyết định, việc cần làm (và ghi chú trong lúc họp) có nút ▶ mm:ss phát đúng đoạn đó.
+  AI được dặn ghi mốc [mm:ss]; ý không có mốc nhận mốc đầu khúc.
+- **Chọn AI** cho từng cuộc họp: Apple Intelligence + mọi AI đã có API key (ChatGPT, Gemini, Claude). Chỉ có Apple thì không hiện
+  nút chọn. Lựa chọn dùng cho ghi chú trong lúc họp, tóm tắt, Take note và dịch; AI đám mây lỗi → tự dùng Apple.
+- **Nhận dạng lại** từ file ghi âm (luôn có, kể cả khi chỉ có Apple): nhận dạng giọng nói của Apple theo ngôn ngữ chọn (Việt / Anh),
+  hoặc Gemini nghe file (phân biệt người nói, từng phần ~5 phút). Toàn văn cũ được cất trong `lines.bak.json`.
+- **Dịch biên bản** Việt ↔ Anh (giữ mốc nghe lại), xem "Bản gốc / English"; bản dịch kèm vào ghi chú biên bản.
+- **Khúc ngắn hơn cho Apple Intelligence**: ghi chú trong lúc họp mỗi ~3 phút (thay 5 phút) và tóm tắt theo khúc ≤ 3 phút / 2000 ký tự,
+  cắt ở chỗ đổi người nói (tóm tắt theo phiên nói). Mô hình báo "quá dài" → tự chia đôi khúc, hỏi lại (asi_ai.swift báo rõ lỗi
+  `exceededContextWindowSize`).
+- Chi tiết cuộc họp chia 3 phần: Biên bản · Ghi chép đầy đủ · Toàn văn.
+
 ## 0.21.0 (11/2026) — giao diện Liquid Glass (macOS 27), chat lưu việc / lịch / ghi chú, ghi chú họp theo Gemini hoặc Apple
 **Giao diện "kính trên nền đen" theo Liquid Glass của macOS 27 Golden Gate**
 - Hòn đảo vẫn đen đặc để liền tai thỏ; lớp điều khiển là kính (viền trên sáng, viền dưới tối, đục hơn bản macOS 26 cho dễ đọc):

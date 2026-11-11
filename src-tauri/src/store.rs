@@ -43,6 +43,9 @@ pub struct Note {
     /// Cuộc họp gốc (để nghe lại)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub meeting: Option<String>,
+    /// Phần nào của cuộc họp: "" = biên bản, "full" = ghi chép đầy đủ (Take note), "item" = một ý lưu riêng
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub meeting_part: String,
 }
 
 /// Trạng thái đồng bộ với Apple
@@ -396,7 +399,7 @@ impl Store {
                 return out;
             }
         }
-        let n = Note { id: self.id(), text, updated: now, pinned: false, ext_id: None, folder: String::new(), meeting: None };
+        let n = Note { id: self.id(), text, updated: now, pinned: false, ext_id: None, folder: String::new(), meeting: None, meeting_part: String::new() };
         self.notes.push(n.clone());
         let _ = self.save_notes();
         n
@@ -405,7 +408,7 @@ impl Store {
     /// Ghi chú "Biên bản họp" của một cuộc họp: có rồi thì cập nhật, chưa có thì tạo trong thư mục meetings
     pub fn upsert_meeting_note(&mut self, meeting: &str, id: Option<u64>, text: String) -> Note {
         let now = now_ms();
-        if let Some(n) = self.notes.iter_mut().find(|n| Some(n.id) == id || n.meeting.as_deref() == Some(meeting) && n.folder == "meetings") {
+        if let Some(n) = self.notes.iter_mut().find(|n| Some(n.id) == id || n.meeting.as_deref() == Some(meeting) && n.folder == "meetings" && n.meeting_part.is_empty()) {
             n.text = text;
             n.updated = now;
             n.folder = "meetings".into();
@@ -414,7 +417,23 @@ impl Store {
             let _ = self.save_notes();
             return out;
         }
-        let n = Note { id: self.id(), text, updated: now, pinned: false, ext_id: None, folder: "meetings".into(), meeting: Some(meeting.to_string()) };
+        let n = Note { id: self.id(), text, updated: now, pinned: false, ext_id: None, folder: "meetings".into(), meeting: Some(meeting.to_string()), meeting_part: String::new() };
+        self.notes.push(n.clone());
+        let _ = self.save_notes();
+        n
+    }
+
+    /// Ghi chép đầy đủ (Take note) của cuộc họp: ghi chú riêng trong thư mục Biên bản họp, cập nhật theo id
+    pub fn upsert_meeting_full_note(&mut self, meeting: &str, id: Option<u64>, text: String) -> Note {
+        let now = now_ms();
+        if let Some(n) = self.notes.iter_mut().find(|n| Some(n.id) == id || n.meeting.as_deref() == Some(meeting) && n.meeting_part == "full") {
+            n.text = text;
+            n.updated = now;
+            let out = n.clone();
+            let _ = self.save_notes();
+            return out;
+        }
+        let n = Note { id: self.id(), text, updated: now, pinned: false, ext_id: None, folder: "meetings".into(), meeting: Some(meeting.to_string()), meeting_part: "full".into() };
         self.notes.push(n.clone());
         let _ = self.save_notes();
         n
@@ -422,7 +441,7 @@ impl Store {
 
     /// Ghi chú mới trong thư mục Biên bản họp (một ý quan trọng lấy từ cuộc họp)
     pub fn add_meeting_snippet(&mut self, meeting: &str, text: String) -> Note {
-        let n = Note { id: self.id(), text, updated: now_ms(), pinned: false, ext_id: None, folder: "meetings".into(), meeting: Some(meeting.to_string()) };
+        let n = Note { id: self.id(), text, updated: now_ms(), pinned: false, ext_id: None, folder: "meetings".into(), meeting: Some(meeting.to_string()), meeting_part: "item".into() };
         self.notes.push(n.clone());
         let _ = self.save_notes();
         n

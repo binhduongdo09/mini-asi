@@ -70,7 +70,12 @@ struct AsiAI {
             let r = try await session.respond(to: prompt, options: options)
             emit(["reply": r.content, "action": "none", "argument": ""])
         } catch {
-            emit(["error": error.localizedDescription])
+            // Đầu vào quá dài so với cửa sổ ngữ cảnh (~4096 token) → báo rõ để app tự chia nhỏ đoạn rồi hỏi lại
+            if String(describing: error).contains("exceededContextWindowSize") {
+                emit(["error": "exceeded context window (quá dài)"])
+            } else {
+                emit(["error": error.localizedDescription])
+            }
         }
     }
 }

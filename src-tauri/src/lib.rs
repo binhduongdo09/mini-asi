@@ -240,7 +240,7 @@ pub fn run() {
             backup_info, backup_pick_dir, backup_set, backup_now, device_sync_now, backup_restore,
             update_info, update_check, update_install,
             drop_read, capture_supports, capture_set_text, capture_from_clip,
-            meeting_start, meeting_stop, meeting_status, meeting_list, meeting_get, meeting_rename, meeting_delete, meeting_reveal, meeting_summarize, meeting_add_tasks, meeting_to_note, meeting_copy, meeting_update_summary, meeting_edit_line, meeting_item_note, stock_alerts, stock_alert_delete, capture_analyze, capture_create, calendar_list
+            meeting_start, meeting_stop, meeting_status, meeting_list, meeting_get, meeting_rename, meeting_delete, meeting_reveal, meeting_summarize, meeting_add_tasks, meeting_to_note, meeting_copy, meeting_update_summary, meeting_edit_line, meeting_item_note, meeting_engines, meeting_take_note, meeting_full_to_note, meeting_translate, meeting_retranscribe, stock_alerts, stock_alert_delete, capture_analyze, capture_create, calendar_list
         ])
         .build(tauri::generate_context!())
         .expect("Mini-Asi không khởi động được")

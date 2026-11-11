@@ -92,8 +92,9 @@ Kiểm tra biên dịch cho macOS từ Linux (không cần Mac): `RUSTC_BOOTSTRA
   bị chặn bằng `assistant::is_repeat`.
 - Giá cổ phiếu / chỉ số: chỉ từ nguồn thật (`stocks.rs`, DNSE Entrade), không hỏi mô hình. Cảnh báo giá chỉ đặt khi người
   dùng nói rõ ("báo cho tôi khi…"), báo 1 lần rồi thôi.
-- Ghi cuộc họp: chỉ ghi khi người dùng bấm (không tự ghi); biên bản/âm thanh chỉ lưu trên máy; chỉ gửi toàn văn lên Gemini
-  khi người dùng chọn Gemini. Việc cần làm trong biên bản chỉ vào tab Việc khi người dùng tick & bấm thêm.
+- Ghi cuộc họp: chỉ ghi khi người dùng bấm (không tự ghi); biên bản/âm thanh chỉ lưu trên máy; chỉ gửi toàn văn / âm thanh lên
+  AI đám mây khi người dùng chọn AI đó (`MeetAi` trong commands/meeting.rs). Apple Intelligence: khúc ≤ 3 phút / 2000 ký tự
+  (`meeting::chunk_ranges`), quá dài thì `apple_lines` tự chia đôi. Mọi ý biên bản giữ mốc giây (`overview_at`, `ActionItem.at`). Việc cần làm trong biên bản chỉ vào tab Việc khi người dùng tick & bấm thêm.
 - Thả nội dung → việc/lịch: luôn để người dùng xem & bấm tạo, không tự tạo. Ảnh chỉ đọc bằng Vision trên máy; chỉ chữ đọc được
   (không phải ảnh) mới gửi cho AI đám mây nếu người dùng chọn bộ não đám mây.
 - Giọng đọc: **không** dùng các giọng NghiTTS mang tên/giọng người nổi tiếng hoặc giọng thương mại

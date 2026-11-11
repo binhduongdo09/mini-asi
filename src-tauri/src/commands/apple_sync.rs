@@ -157,7 +157,7 @@ pub(crate) fn sync_notes(st: &AppState) -> Result<(usize, usize), String> {
                 Plan::PullNew(ext) => {
                     if let Some(r) = rmap.get(ext.as_str()) {
                         let id = s.new_id();
-                        s.notes.push(store::Note { id, text: r.text.clone(), updated: r.modified, pinned: false, ext_id: Some(ext.clone()), folder: String::new(), meeting: None });
+                        s.notes.push(store::Note { id, text: r.text.clone(), updated: r.modified, pinned: false, ext_id: Some(ext.clone()), folder: String::new(), meeting: None, meeting_part: String::new() });
                         pulled += 1;
                     }
                 }

@@ -171,7 +171,9 @@
   function meetGroup() {
     const g = brains.find((x) => x.id === "gemini");
     const rows = [
-      row("Tóm tắt biên bản bằng", "Dùng cho cả ghi chú trong lúc họp lẫn biên bản. Apple Intelligence chạy trên máy, không cần mạng. Gemini cho biên bản tốt hơn với cuộc họp dài (nội dung họp được gửi tới Google); Gemini lỗi thì tự dùng Apple", seg("meeting_ai", [["apple", "Apple Intelligence"], ["gemini", "Gemini"]], st.meeting_ai || "apple")),
+      // chỉ hiện các AI đã kết nối (có API key); Gemini luôn có để nhập key — Gemini còn nghe được file ghi âm (Nhận dạng lại)
+      row("AI cho cuộc họp", "Ghi chú trong lúc họp, biên bản, Take note và dịch. Apple Intelligence chạy trên máy, không cần mạng. AI đám mây đọc trọn cuộc họp một lượt (nội dung họp được gửi đi); lỗi thì tự dùng Apple. Có thể đổi trong từng cuộc họp",
+        seg("meeting_ai", [["apple", "Apple Intelligence"]].concat(brains.filter((b) => b.has_key || b.id === "gemini").map((b) => [b.id, b.name])), st.meeting_ai || "apple")),
     ];
     if (st.meeting_ai === "gemini" && g && (st.ai_provider || "apple") !== "gemini") {
       rows.push(`<div class="srow"><div class="grow"><b>API key Gemini</b><span>${g.has_key ? "Đã lưu trên máy (chỉ tài khoản của bạn đọc được)" : `Chưa có — <button class="link inline-link" data-act="key-url" data-url="${esc(g.key_url)}">lấy key Gemini</button>`}</span></div>
@@ -179,7 +181,7 @@
         <button class="btn sm" data-act="key-save" data-p="gemini">Lưu</button>${g.has_key ? `<button class="btn sm" data-act="ai-test" data-p="gemini">Kiểm tra</button>` : ""}</div>`);
     }
     rows.push(
-      row("Ghi chú trong lúc họp", "Mỗi ~5 phút lời nói Asi ghi chú phần vừa nói. Tự động: Gemini luôn ghi chú; Apple Intelligence chỉ khi máy chip Apple và đủ pin, máy yếu thì viết biên bản sau khi họp", seg("meeting_live", [["auto", "Tự động"], ["live", "Luôn"], ["after", "Sau khi họp"]], st.meeting_live || "auto")),
+      row("Ghi chú trong lúc họp", "Mỗi ~3 phút lời nói Asi ghi chú phần vừa nói (cắt ở chỗ đổi người nói). Tự động: AI đám mây luôn ghi chú; Apple Intelligence chỉ khi máy chip Apple và đủ pin, máy yếu thì viết biên bản sau khi họp", seg("meeting_live", [["auto", "Tự động"], ["live", "Luôn"], ["after", "Sau khi họp"]], st.meeting_live || "auto")),
       row("Tự tóm tắt khi dừng ghi", "Biên bản tự lưu vào Ghi chú › Biên bản họp. Tắt thì bấm Tóm tắt trong từng cuộc họp", sw("meeting_auto_summary", st.meeting_auto_summary !== false)),
       row("Thu cả âm thanh máy", "Giọng người khác trong Zoom / Meet / Teams, kể cả khi đeo tai nghe (macOS 14.6+, cần quyền Ghi âm thanh hệ thống)", sw("meeting_system_audio", st.meeting_system_audio !== false)),
     );
