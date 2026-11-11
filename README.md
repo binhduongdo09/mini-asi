@@ -10,7 +10,7 @@ Bên trong là linh vật hai mắt biết chớp, cười, lo lắng, ngáp ng�
 
 | Luôn có | |
 |---|---|
-| ✦ **Asi** | Trang đầu: lời chào, 3 việc/lịch gần nhất, gợi ý câu hỏi. Gõ hoặc nói: *"hôm nay có gì"*, *"máy mình thế nào"*, *"nhắc tôi 3h chiều gọi khách"*, *"dọn rác giúp mình"*… Có Apple Intelligence (macOS 26) thì hỏi gì cũng được — viết, dịch, giải thích, lên kế hoạch — và Asi tự thêm việc / ghi chú khi bạn nhờ. Nút mic ở tai thỏ để ra lệnh không cần mở bảng. |
+| ✦ **Asi** | Trang đầu: lời chào, 3 việc/lịch gần nhất, gợi ý câu hỏi. Gõ hoặc nói: *"hôm nay có gì"*, *"máy mình thế nào"*, *"nhắc tôi 3h chiều gọi khách"*, *"dọn rác giúp mình"*… Có Apple Intelligence (macOS 26) thì hỏi gì cũng được — viết, dịch, giải thích, lên kế hoạch — và Asi tự thêm việc / lịch / ghi chú khi bạn nhờ (*"thêm lịch họp team 3h chiều mai"*, *"lưu câu trả lời trên vào ghi chú"*). Nút mic ở tai thỏ để ra lệnh không cần mở bảng. |
 | ✅ **Việc** | Câu tự nhiên Việt/Anh, có dấu hay không: *"mai 9h gọi khách"*, *"thứ 6 tuần sau chốt hợp đồng"*, *"tomorrow 3pm call John"*. Nhóm Trễ hạn / Hôm nay / Sắp tới; lịch hôm nay (Lịch Apple). Đến giờ: Xong · 10 phút · 1 giờ · Mai. |
 | ✎ **Ghi chú** | Tự lưu, ghim, tìm, đọc cho Asi ghi. ⌘⇧Space mở nhanh. |
 | 📋 **Clipboard** | Nhớ chữ, ảnh, file đã chép. Bấm = chép lại, bấm đúp = dán luôn. Ghim = giữ mãi ở đầu danh sách (đặt tên được). ⌃⇧V. |

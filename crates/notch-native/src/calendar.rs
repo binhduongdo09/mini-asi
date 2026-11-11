@@ -155,6 +155,16 @@ mod imp {
         }
     }
 
+    /// Xoá một sự kiện vừa tạo (nút "Hoàn tác" trong chat)
+    pub fn delete_event(id: &str) -> Result<(), String> {
+        ensure_access()?;
+        unsafe {
+            let store = EKEventStore::new();
+            let ev = store.eventWithIdentifier(&NSString::from_str(id)).ok_or("Không tìm thấy sự kiện")?;
+            store.removeEvent_span_commit_error(&ev, EKSpan::ThisEvent, true).map_err(|e| format!("Không xoá được sự kiện: {}", e.localizedDescription()))
+        }
+    }
+
     pub fn create_event(title: &str, start_ms: i64, end_ms: i64) -> Result<String, String> {
         ensure_access()?;
         unsafe {
@@ -182,6 +192,9 @@ mod imp {
     pub fn events(_s: i64, _e: i64) -> Result<Vec<Event>, String> {
         ensure_access().map(|_| vec![])
     }
+    pub fn delete_event(_id: &str) -> Result<(), String> {
+        Err("Chỉ có trên macOS".into())
+    }
     pub fn create_event(_t: &str, _s: i64, _e: i64) -> Result<String, String> {
         ensure_access().map(|_| String::new())
     }
@@ -193,4 +206,4 @@ mod imp {
     }
 }
 
-pub use imp::{calendars, create_event, create_event_full, ensure_access, events};
+pub use imp::{calendars, create_event, create_event_full, delete_event, ensure_access, events};

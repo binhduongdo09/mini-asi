@@ -39,7 +39,7 @@
           <div class="mt-meters"><span>Micro</span><i><b id="mtMic"></b></i>${m.system_audio ? `<span>Máy</span><i><b id="mtSys"></b></i>` : ""}</div>
           <div class="mt-live">${lines.length ? lines.map((l) => `<div>${whoChip(l.who)}<span translate="no">${esc(l.text)}</span></div>`).join("") : `<div class="dim">Chữ sẽ hiện sau mỗi ~30–45 giây…</div>`}</div>
           <div class="mt-rec-foot"><span class="dim grow">${sttName(m.stt)} · ${m.system_audio ? "micro + âm thanh máy" : "chỉ micro"}${m.pending ? ` · đang chuyển ${m.pending} đoạn` : ""}
-              <br>${li ? (li.live ? "Ghi chú tự động mỗi ~5 phút (Apple Intelligence trên máy)" : `Ghi chú sau khi họp${li.reason ? ` — ${esc(li.reason)}` : ""}`) : ""}</span>
+              <br>${li ? (li.live ? `Ghi chú tự động mỗi ~5 phút (${esc(li.engine || "Apple Intelligence")})` : `Ghi chú sau khi họp${li.reason || li.why ? ` — ${esc(li.reason || li.why)}` : ""}`) : ""}</span>
             <button class="btn danger" data-mt="stop">${I.stop}Dừng ghi</button></div>
         </div>`;
     }
@@ -49,7 +49,9 @@
           <button class="mt-big" data-mt="start" ${starting ? "disabled" : ""}>${starting ? `<span class="spin"></span>` : `<i class="rec-dot"></i>`}<span>Ghi cuộc họp</span></button>
           <div class="grow">
             <label class="mt-check"><input type="checkbox" id="mtSys" ${sys ? "checked" : ""}><span><b>Thu cả âm thanh máy</b> — giọng người khác trong Zoom, Meet, Teams (kể cả khi đeo tai nghe)</span></label>
-            <div class="dim mt-hint">Họp trực tiếp chỉ cần micro. Máy đủ sức thì Asi ghi chú ngay trong lúc họp, không thì tóm tắt khi dừng ghi (${brainName()}) — <button class="link inline" data-mt="settings">Cài đặt</button>. Nhớ báo mọi người là đang ghi âm.</div>
+            <div class="dim mt-hint">Họp trực tiếp chỉ cần micro. ${A.settings.meeting_ai === "gemini"
+              ? "Asi ghi chú ngay trong lúc họp và viết biên bản khi dừng ghi bằng Gemini (nội dung họp được gửi tới Google)"
+              : "Máy đủ sức thì Asi ghi chú ngay trong lúc họp, không thì viết biên bản khi dừng ghi — Apple Intelligence, mọi thứ ở trên máy"} — <button class="link inline" data-mt="settings">Cài đặt</button>. Nhớ báo mọi người là đang ghi âm.</div>
           </div>
         </div>`;
     }
@@ -361,7 +363,23 @@
     });
     view.addEventListener("focusout", (e) => { if (A.tab === "meet" && e.target.id === "mtTitle") saveTitle(); });
 
-    document.addEventListener("asi-meet", () => { list = null; if (here() && !sel) drawHome(); });
+    // Cửa sổ vừa tải lại (đổi ngôn ngữ, cập nhật…) trong lúc đang ghi → nạp lại mấy dòng chữ và ghi chú gần nhất
+    let restored = null;
+    async function restoreLive() {
+      const m = A.meet;
+      if (!m || restored === m.id || live.length || liveNotes.length) return;
+      restored = m.id;
+      try {
+        const d = await api("meeting_get", { id: m.id });
+        if (!A.meet || A.meet.id !== d.id || live.length || liveNotes.length) return;
+        live.push(...d.lines.slice(-8));
+        liveNotes.push(...(d.live || []));
+        if (!liveInfo) liveInfo = { id: d.id, live: d.live_ok, why: d.live_reason, engine: d.live_engine };
+        if (here() && !sel) drawHome();
+      } catch (_) {}
+    }
+    document.addEventListener("asi-meet", () => { list = null; restoreLive(); if (here() && !sel) drawHome(); });
+    restoreLive();
     document.addEventListener("asi-meet-level", () => { if (here() && !sel) paintLevel(); });
     on("meeting-update", (u) => {
       if (!u) return;

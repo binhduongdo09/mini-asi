@@ -128,9 +128,10 @@ pub(crate) fn ai_instructions(st: &AppState, en: bool, with_context: bool) -> St
          - Answer ONLY the latest user message. Never copy or repeat an earlier answer from the conversation, and never just repeat the user's question back.\n\
          - No greetings unless greeted, no disclaimers about being an AI.\n\
          Most messages are questions or requests for text: answer them fully in reply and set action to none.\n\
-         Only choose another action when the user explicitly asks the app to DO it (\"nhắc tôi\", \"thêm việc\", \"ghi chú lại\", \"bật tập trung\"…):\n\
+         Only choose another action when the user explicitly asks the app to DO it (\"nhắc tôi\", \"thêm việc\", \"thêm lịch\", \"ghi chú lại\", \"bật tập trung\"…):\n\
          - add_task: wants a reminder or to-do. argument = the task in the user's words including time words (e.g. \"mai 9h gọi khách\").\n\
          - add_note: wants to save something as a note. argument = the note text.\n\
+         - add_event: wants something put on the calendar (\"thêm lịch\", \"đặt lịch\", \"tạo sự kiện\", \"schedule\"). argument = the event in the user's words including its date and time words (e.g. \"họp team 3h chiều mai\").\n\
          - start_focus: wants a focus / pomodoro timer. argument = minutes as digits (default 25).\n\
          - show_today: asks about today's plan or agenda. show_overdue: asks which tasks are late.\n\
          - check_mac: asks about the computer's health, speed, battery, memory or storage. clean_junk: wants to free disk space.\n\
@@ -339,9 +340,87 @@ fn rule_reply(app2: &AppHandle, st: &AppState, intent: assistant::Intent, rest: 
             r.cards.push(Card::Tasks { items: vec![TaskBrief { id: t.id, title: t.title, due: t.due }] });
             r.act(if en { "Open tasks" } else { "Xem danh sách việc" }, "open_tab", "tasks").act(if en { "Undo" } else { "Hoàn tác" }, "undo_task", &t.id.to_string())
         }
+        Intent::AddEvent => {
+            let p = nlp::parse(&rest, lnow);
+            let title = {
+                let t = if p.title.trim().is_empty() { rest.trim() } else { p.title.trim() };
+                let mut c = t.chars();
+                c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+            };
+            match p.due {
+                // chưa có ngày giờ → hỏi lại; câu kế tiếp ("mai 9h") được ghép vào
+                None => {
+                    *st.pending_ask.lock().unwrap() = Some(("event".into(), rest.trim().to_string(), now));
+                    if rest.trim().is_empty() {
+                        Reply::new(intent, if en { "What's the event, and when? (e.g. “team meeting tomorrow 3pm”)" } else { "Bạn muốn thêm sự kiện gì, vào lúc nào? (vd. “họp team 3h chiều mai”)" })
+                    } else {
+                        Reply::new(intent, if en { format!("When is “{title}”? (e.g. “tomorrow 9am”, “Friday 14:30”)") } else { format!("“{title}” diễn ra lúc nào? (vd. “mai 9h”, “thứ 6 14:30”)") })
+                            .act(if en { "Save as task" } else { "Lưu thành việc" }, "add_task", rest.trim())
+                    }
+                }
+                Some(due) => {
+                    // có giờ → sự kiện 1 tiếng; chỉ có ngày → sự kiện cả ngày
+                    let all_day = !capture::has_clock(&rest);
+                    let (start, end) = if all_day {
+                        let d0 = to_ms(due.date().and_hms_opt(0, 0, 0).unwrap(), off);
+                        (d0, d0 + 86_399_000)
+                    } else {
+                        let s = to_ms(due, off);
+                        (s, s + 3_600_000)
+                    };
+                    let when = chrono::DateTime::from_timestamp_millis(start + off).map(|x| x.format(if all_day { "%d/%m" } else { "%H:%M %d/%m" }).to_string()).unwrap_or_default();
+                    let ev = notch_native::calendar::NewEvent {
+                        title: title.clone(),
+                        start_ms: start,
+                        end_ms: end,
+                        all_day,
+                        location: String::new(),
+                        notes: String::new(),
+                        calendar_id: st.store.lock().unwrap().settings.capture_calendar.clone(),
+                    };
+                    // lần đầu macOS hỏi quyền Lịch → hạ tai thỏ để hộp thoại không bị che
+                    let ask = needs_prompt(notch_native::perm::calendar());
+                    if ask {
+                        window_low(app2, true);
+                    }
+                    let made = notch_native::calendar::create_event_full(&ev);
+                    if ask {
+                        window_low(app2, false);
+                    }
+                    match made {
+                        Ok(id) => {
+                            let _ = refresh_events(st);
+                            push_status(app2);
+                            let mut r = Reply::new(intent, if en { format!("Added to your calendar: “{title}” — {when}.") } else { format!("Đã thêm vào lịch: “{title}” — {when}.") });
+                            r.cards.push(Card::Events { items: vec![(title, start, all_day)] });
+                            if !id.is_empty() {
+                                r = r.act(if en { "Undo" } else { "Hoàn tác" }, "undo_event", &id);
+                            }
+                            r
+                        }
+                        // Lịch chưa dùng được (chưa cấp quyền, không phải macOS…) → không để mất: lưu thành việc có hẹn giờ
+                        Err(e) => {
+                            let t = st.store.lock().unwrap().add_task(title, Some(start));
+                            push_status(app2);
+                            kick_sync(app2);
+                            let mut r = Reply::new(intent, if en { format!("Couldn't add it to Calendar ({e}) — saved it as a task with a reminder instead.") } else { format!("Chưa thêm được vào Lịch ({e}) — Asi đã lưu thành việc có hẹn giờ.") });
+                            r.mood = "worried".into();
+                            r.cards.push(Card::Tasks { items: vec![TaskBrief { id: t.id, title: t.title, due: t.due }] });
+                            r.act(if en { "Open tasks" } else { "Xem danh sách việc" }, "open_tab", "tasks").act(if en { "Undo" } else { "Hoàn tác" }, "undo_task", &t.id.to_string())
+                        }
+                    }
+                }
+            }
+        }
         Intent::AddNote => {
             if rest.trim().is_empty() {
-                Reply::new(intent, if en { "What should I note down?" } else { "Bạn muốn Asi ghi lại điều gì?" }).act(if en { "Open notes" } else { "Mở Ghi chú" }, "open_tab", "notes")
+                // hỏi lại; câu kế tiếp là nội dung ghi chú. Vừa có câu trả lời của Asi → cho lưu luôn câu đó.
+                *st.pending_ask.lock().unwrap() = Some(("note".into(), String::new(), now));
+                let mut r = Reply::new(intent, if en { "What should I note down?" } else { "Bạn muốn Asi ghi lại điều gì?" });
+                if let Some((_, a)) = recent_turns(st, 1).pop().filter(|(_, a)| a.chars().count() > 40) {
+                    r = r.act(if en { "Save the last answer" } else { "Lưu câu trả lời vừa rồi" }, "add_note", &a);
+                }
+                r.act(if en { "Open notes" } else { "Mở Ghi chú" }, "open_tab", "notes")
             } else {
                 st.store.lock().unwrap().upsert_note(None, rest.clone());
                 kick_sync(&app2);
@@ -478,6 +557,7 @@ fn reply_from_ai(app2: &AppHandle, st: &AppState, t: apple_ai::AiTurn, text: &st
         // Việc làm thay đổi dữ liệu: dùng đúng đường của lệnh (có nút Hoàn tác), câu xác nhận do app viết
         "add_task" => rule_reply(app2, st, Intent::AddTask, arg, text, en, offset)?,
         "add_note" => rule_reply(app2, st, Intent::AddNote, arg, text, en, offset)?,
+        "add_event" => rule_reply(app2, st, Intent::AddEvent, arg, text, en, offset)?,
         "start_focus" => rule_reply(app2, st, Intent::Focus, String::new(), &format!("{arg} {text}"), en, offset)?,
         // Dọn rác: con số phải chính xác → dùng câu của app (vẫn cần bấm "Dọn ngay")
         "clean_junk" => rule_reply(app2, st, Intent::Clean, String::new(), text, en, offset)?,
@@ -525,14 +605,61 @@ pub(crate) async fn asi_ask(app: AppHandle, st: S<'_>, text: String, offset: Opt
         let en = looks_english(&text, if ui_english { "en-US" } else { &lang });
         // Lệnh thêm việc / ghi chú: ở đầu câu ("nhắc tôi…") hoặc nói tự nhiên giữa câu ("bạn thêm giúp mình task…")
         // → luôn làm bằng luật của app (chắc chắn vào tab Việc / Ghi chú), không để mô hình chỉ "nói là đã thêm"
-        let explicit = assistant::explicit_command(&text).or_else(|| assistant::write_intent(&text));
+        let mut explicit = assistant::explicit_command(&text).or_else(|| assistant::write_intent(&text));
+        let rules_label = if en { "Basic commands" } else { "Lệnh cơ bản" };
+        // Asi vừa hỏi lại ("ghi lại điều gì?", "sự kiện lúc nào?") → câu này là phần trả lời
+        let pend = st.pending_ask.lock().unwrap().take().filter(|(_, _, at)| now_ms() - at < 3 * 60_000);
+        if let (Some((kind, partial, _)), None) = (&pend, &explicit) {
+            if assistant::is_cancel(&text) {
+                let mut r = Reply::new(Intent::Unknown, if en { "Okay, skipped." } else { "Ok, Asi bỏ qua nhé." });
+                r.engine = rules_label.into();
+                return Ok(r);
+            }
+            match kind.as_str() {
+                "event" => explicit = Some((Intent::AddEvent, format!("{partial} {text}").trim().to_string())),
+                "note" if !assistant::looks_like_question(&text) => explicit = Some((Intent::AddNote, text.clone())),
+                "task" if !assistant::looks_like_question(&text) => explicit = Some((Intent::AddTask, text.clone())),
+                _ => {}
+            }
+        }
+        // "lưu câu trả lời trên vào ghi chú", "thêm các việc trên vào danh sách" → lấy nội dung từ câu trả lời gần nhất
+        if let Some((intent, _)) = explicit.clone().filter(|(_, c)| assistant::is_back_ref(c)) {
+            let last = recent_turns(st, 1).pop().map(|x| x.1).filter(|a| !a.trim().is_empty());
+            match (intent, last) {
+                (Intent::AddNote, Some(a)) => explicit = Some((Intent::AddNote, a)),
+                (Intent::AddTask, Some(a)) if !assistant::list_items(&a).is_empty() => {
+                    let mut items = vec![];
+                    for it in assistant::list_items(&a) {
+                        if let Ok(t) = add_task(app2.clone(), app2.state::<Arc<AppState>>(), it, offset) {
+                            items.push(assistant::TaskBrief { id: t.id, title: t.title, due: t.due });
+                        }
+                    }
+                    let mut r = Reply::new(Intent::AddTask, if en { format!("Added {} tasks to your list.", items.len()) } else { format!("Đã thêm {} việc vào danh sách.", items.len()) });
+                    r.cards.push(assistant::Card::Tasks { items });
+                    r.engine = rules_label.into();
+                    remember(st, &text, &r.text);
+                    return Ok(r.act(if en { "Open tasks" } else { "Xem danh sách việc" }, "open_tab", "tasks"));
+                }
+                (intent, _) => {
+                    // không có gì để trỏ tới → hỏi lại nội dung thay vì lưu nguyên chữ "cái đó"
+                    let kind = match intent {
+                        Intent::AddNote => "note",
+                        Intent::AddEvent => "event",
+                        _ => "task",
+                    };
+                    *st.pending_ask.lock().unwrap() = Some((kind.into(), String::new(), now_ms()));
+                    let mut r = Reply::new(intent, if en { "I'm not sure which content you mean — type it here and I'll save it." } else { "Asi chưa rõ bạn muốn lưu nội dung nào — bạn gõ nội dung vào đây, Asi lưu ngay." });
+                    r.engine = rules_label.into();
+                    return Ok(r);
+                }
+            }
+        }
         let (intent, rest) = match &explicit {
             Some((i, r)) => (i.clone(), r.clone()),
             None => assistant::classify(&text),
         };
         let words = text.split_whitespace().count();
         let quick = explicit.is_some() || (!matches!(intent, Intent::Unknown | Intent::AddTask | Intent::Help) && words <= 4 && !assistant::looks_like_question(&text));
-        let rules_label = if en { "Basic commands" } else { "Lệnh cơ bản" };
         // Giá cổ phiếu / chỉ số và cảnh báo giá ("báo cho tôi khi FPT vượt 100k") → nguồn dữ liệu thật
         if explicit.is_none() {
             if let Some(r) = stock_reply(st, &text) {
@@ -541,7 +668,7 @@ pub(crate) async fn asi_ask(app: AppHandle, st: S<'_>, text: String, offset: Opt
             }
         }
         // Thời tiết, tin tức, tỷ giá, giá vàng… → nguồn dữ liệu thật (mô hình không có Internet, sẽ bịa số)
-        let wants_write = explicit.is_some() || assistant::user_asks_for("add_task", &text) || assistant::user_asks_for("add_note", &text);
+        let wants_write = explicit.is_some() || assistant::user_asks_for("add_task", &text) || assistant::user_asks_for("add_note", &text) || assistant::user_asks_for("add_event", &text);
         if !wants_write {
             if let Some(t) = crate::live::topic(&text) {
                 let r = live_reply(st, t, &text);
@@ -554,8 +681,14 @@ pub(crate) async fn asi_ask(app: AppHandle, st: S<'_>, text: String, offset: Opt
             // Mô hình trên máy hay chép câu trả lời cũ → chỉ gửi lịch sử khi câu hỏi là câu nối tiếp
             let history = prov.is_some() || assistant::is_follow_up(&text);
             let mut res = ask_brain(st, &text, en, true, history);
+            // mô hình chọn "thêm lịch" trong khi người dùng nhờ nhắc việc (hoặc ngược lại) → theo đúng lời người dùng
+            if let Ok(t) = &mut res {
+                if t.action == "add_event" && !assistant::user_asks_for("add_event", &text) && assistant::user_asks_for("add_task", &text) {
+                    t.action = "add_task".into();
+                }
+            }
             if let Ok(t) = &res {
-                if matches!(t.action.as_str(), "add_task" | "add_note" | "start_focus") && !assistant::user_asks_for(&t.action, &text) {
+                if matches!(t.action.as_str(), "add_task" | "add_note" | "add_event" | "start_focus") && !assistant::user_asks_for(&t.action, &text) {
                     // mô hình định tự thêm việc / ghi chú trong khi người dùng chỉ hỏi → hỏi lại, chỉ trả lời
                     res = ask_brain(st, &text, en, false, history).or_else(|_| Ok(apple_ai::AiTurn { reply: t.reply.clone(), action: "none".into(), argument: String::new() }));
                 }
@@ -574,7 +707,9 @@ pub(crate) async fn asi_ask(app: AppHandle, st: S<'_>, text: String, offset: Opt
             // Mô hình nói "đã thêm / đã ghi" mà không chọn hành động → làm thật bằng luật
             if let Ok(t) = &mut res {
                 if t.action == "none" && assistant::claims_done(&t.reply) {
-                    if assistant::user_asks_for("add_task", &text) {
+                    if matches!(assistant::write_intent(&text), Some((Intent::AddEvent, _))) {
+                        t.action = "add_event".into();
+                    } else if assistant::user_asks_for("add_task", &text) {
                         t.action = "add_task".into();
                     } else if assistant::user_asks_for("add_note", &text) {
                         t.action = "add_note".into();
@@ -692,8 +827,11 @@ pub(crate) async fn asi_action(app: AppHandle, st: S<'_>, cmd: String, arg: Stri
     let st2 = st.inner().clone();
     let app_outer = app.clone();
     let r = blocking(move || {
-        let lang = st2.store.lock().unwrap().settings.voice_lang.clone();
-        let en = lang.starts_with("en");
+        let (lang, ui) = {
+            let s = st2.store.lock().unwrap();
+            (s.settings.voice_lang.clone(), s.settings.ui_lang.clone())
+        };
+        let en = lang.starts_with("en") || ui == "en";
         match cmd.as_str() {
             "clean_safe" => {
                 let e = engine(&st2)?;
@@ -715,6 +853,11 @@ pub(crate) async fn asi_action(app: AppHandle, st: S<'_>, cmd: String, arg: Stri
                 st2.store.lock().unwrap().delete_task(id);
                 kick_sync(&app);
                 Ok(Reply::new(Intent::AddTask, if en { "Okay, removed it." } else { "Đã bỏ việc vừa thêm." }))
+            }
+            "undo_event" => {
+                notch_native::calendar::delete_event(&arg)?;
+                let _ = refresh_events(&st2);
+                Ok(Reply::new(Intent::AddEvent, if en { "Okay, removed it from your calendar." } else { "Đã bỏ sự kiện vừa thêm khỏi lịch." }))
             }
             "add_note" => {
                 st2.store.lock().unwrap().upsert_note(None, arg.clone());

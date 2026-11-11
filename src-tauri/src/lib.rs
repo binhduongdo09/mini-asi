@@ -135,6 +135,7 @@ pub fn run() {
                 },
                 vocab: Mutex::new(vocab::Vocab::open(&data_dir)),
                 chat_log: Mutex::new(vec![]),
+                pending_ask: Mutex::new(None),
                 update: Mutex::new(updater::UpdateProgress::default()),
             });
             app.manage(st.clone());
@@ -214,6 +215,7 @@ pub fn run() {
             std::thread::spawn(move || stock_alert_loop(h, s2));
             let h = app.handle().clone();
             std::thread::spawn(move || background_loop(h, st));
+            meeting_recover(app.state::<Arc<AppState>>().data_dir.clone());
             let h = app.handle().clone();
             std::thread::spawn(move || hover_loop(h));
             Ok(())
@@ -240,8 +242,16 @@ pub fn run() {
             drop_read, capture_supports, capture_set_text, capture_from_clip,
             meeting_start, meeting_stop, meeting_status, meeting_list, meeting_get, meeting_rename, meeting_delete, meeting_reveal, meeting_summarize, meeting_add_tasks, meeting_to_note, meeting_copy, meeting_update_summary, meeting_edit_line, meeting_item_note, stock_alerts, stock_alert_delete, capture_analyze, capture_create, calendar_list
         ])
-        .run(tauri::generate_context!())
-        .expect("Mini-Asi không khởi động được");
+        .build(tauri::generate_context!())
+        .expect("Mini-Asi không khởi động được")
+        .run(|app, event| {
+            // Thoát khi đang ghi cuộc họp → dừng thu cho đàng hoàng để không mất phần ghi âm cuối
+            if let tauri::RunEvent::Exit = event {
+                if let Some(st) = app.try_state::<Arc<AppState>>() {
+                    meeting_stop_for_quit(&st);
+                }
+            }
+        });
 }
 
 #[cfg(test)]

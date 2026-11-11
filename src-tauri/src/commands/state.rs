@@ -27,6 +27,8 @@ pub struct AppState {
     pub vocab: Mutex<vocab::Vocab>,
     /// Hội thoại gần đây với Asi (câu hỏi, câu trả lời, thời điểm) — để Apple Intelligence hiểu câu hỏi nối tiếp
     pub chat_log: Mutex<Vec<(String, String, i64)>>,
+    /// Asi vừa hỏi lại ("ghi lại điều gì?", "sự kiện lúc nào?") → câu kế tiếp là phần trả lời: (loại note|task|event, phần đã có, thời điểm)
+    pub pending_ask: Mutex<Option<(String, String, i64)>>,
     /// Trạng thái kiểm tra & tải bản cập nhật
     pub update: Mutex<updater::UpdateProgress>,
 }

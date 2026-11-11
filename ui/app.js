@@ -1253,12 +1253,18 @@
       .replace(/^(\d+)\.\s+(.+)$/gm, '<span class="li n"><b>$1.</b> $2</span>')
       .replace(/\n/g, "<br>");
   }
+  // Giờ của sự kiện trong thẻ trả lời: hôm nay → "15:00"; ngày khác → "Mai 15:00", "T6 10:00"; cả ngày → "Cả ngày · 20/11"
+  function evWhen(st, allDay) {
+    const d = new Date(st), today = d.toDateString() === new Date().toDateString();
+    if (allDay) return today ? "Cả ngày" : `Cả ngày · ${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+    return today || st < Date.now() ? hm(d) : fmtDue(st);
+  }
   function cardHtml(c) {
     if (c.kind === "metrics") return `<div class="a-metrics">${c.items.map((m) => `<div class="a-metric lv${m.level}"><span>${esc(m.label)}</span><b>${esc(m.value)}</b>${m.ratio != null ? `<i style="--r:${Math.min(1, m.ratio)}"></i>` : ""}</div>`).join("")}</div>`;
     if (c.kind === "tasks") return `<div class="a-list">${c.items.map((t) => `<div class="a-row" data-tid="${t.id}"><span class="grow">${esc(t.title)}</span>
         ${t.due ? `<span class="due ${t.due < Date.now() ? "late" : ""}">${fmtDue(t.due)}</span>` : ""}
         <button class="ib" data-ta="done" title="Xong">${I.check}</button><button class="ib txt" data-ta="s60" title="Hoãn 1 giờ">+1h</button></div>`).join("")}</div>`;
-    if (c.kind === "events") return `<div class="a-list">${c.items.map(([t, st, ad]) => `<div class="a-row"><span class="ev"></span><span class="grow">${esc(t)}</span><span class="due">${ad ? "Cả ngày" : hm(new Date(st))}</span></div>`).join("")}</div>`;
+    if (c.kind === "events") return `<div class="a-list">${c.items.map(([t, st, ad]) => `<div class="a-row"><span class="ev"></span><span class="grow">${esc(t)}</span><span class="due">${evWhen(st, ad)}</span></div>`).join("")}</div>`;
     if (c.kind === "text") return `<div class="a-text">${fmtMd(c.text)}</div>`;
     if (c.kind === "links") return `<div class="a-list">${c.items.map((l) => `<button class="a-row a-link" data-url="${esc(l.url)}" title="${esc(l.url)}"><span class="grow">${esc(l.title)}</span>${l.meta ? `<span class="due">${esc(l.meta)}</span>` : ""}${I.ext}</button>`).join("")}</div>`;
     return "";

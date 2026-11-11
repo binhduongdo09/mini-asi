@@ -61,12 +61,17 @@ Kiểm tra biên dịch cho macOS từ Linux (không cần Mac): `RUSTC_BOOTSTRA
 - **Ngôn ngữ giao diện**: viết chuỗi tiếng Việt như thường; bản tiếng Anh thêm vào `ui/i18n-en.js` (`exact` cho câu cố định,
   `patterns` cho câu có "{}" như "{} việc trễ"). Phần tử chứa nội dung người dùng phải có `translate="no"`.
   Thông báo / menu từ Rust: dùng `tl(app, "tiếng Việt", "English")` (commands/status.rs). Cài đặt: `ui_lang` = "vi" | "en".
-- Yêu cầu ghi dữ liệu từ chat (thêm việc / ghi chú) đi bằng quy tắc: `explicit_command` (đầu câu) → `write_intent` (giữa câu);
+- Yêu cầu ghi dữ liệu từ chat (thêm việc / lịch / ghi chú) đi bằng quy tắc: `explicit_command` (đầu câu) → `write_intent` (giữa câu,
+  kể cả "… vào ghi chú / vào lịch"); `is_back_ref` ("câu trả lời trên") lấy nội dung từ câu trả lời gần nhất; Asi hỏi lại thì
+  đặt `pending_ask`;
   thêm cách nói mới thì thêm test trong `assistant.rs`.
 - Sự kiện nội bộ UI: `asi-ready`, `asi-status`, `asi-tasks`, `asi-chat` (document) — view tự vẽ lại phần của mình khi cần.
 - Không vẽ lại cả khối khi chỉ đổi con số (người dùng ghét nhấp nháy) — xem `updateBar()` / `renderPeek()` so sánh rồi mới đổi.
-- **Hệ thiết kế (base.css)**: nền đen `#000`, chữ trắng, chữ phụ `--text-2`, mặt nổi `--surface`/`--surface-2`; màu chỉ để báo
-  trạng thái (đỏ = trễ, cam = cảnh báo, xanh lá = xong, tím = tập trung). Nút chính `.btn.primary` (trắng chữ đen), nút phụ `.btn`,
+- **Hệ thiết kế (base.css) — "kính trên nền đen", Liquid Glass macOS 27**: hòn đảo đen đặc. Lớp NỘI DUNG (thẻ, danh sách) dùng
+  `--surface*` + `--hair`, không dùng kính. Lớp ĐIỀU KHIỂN (nút, thanh tab, ô tìm, thanh nhập, công tắc) dùng `--glass*` +
+  `--glass-edge`; nổi bật thì `--white-glass` + `--white-edge`. Không chồng kính lên kính, không thêm `backdrop-filter` cho từng nút.
+  Bo góc đồng tâm `--r-md` (thẻ) / `--r-sm` (hàng) / `--cap` (viên thuốc). `--tint` cho lựa chọn đang bật & vòng focus; màu khác chỉ
+  để báo trạng thái (đỏ = trễ, cam = cảnh báo, xanh lá = xong, tím = tập trung). Nút chính `.btn.primary` (trắng chữ đen), nút phụ `.btn`,
   nút chữ `.link`, nút biểu tượng `.ib`, ô nhập `.field`, hàng danh sách `.row` (nút phụ `.acts` chỉ hiện khi rê chuột).
   Chữ trên nút ≤ 2 từ; không lặp thông tin đã có ở chỗ khác; không thêm emoji vào nút.
 - Cửa sổ chính luôn ở tầng cao. Mọi popup (hộp thoại quyền, chọn file, AirDrop…) phải nằm TRÊN tai thỏ: bọc bằng

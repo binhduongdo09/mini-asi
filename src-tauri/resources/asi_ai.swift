@@ -15,9 +15,9 @@ import FoundationModels
 struct AsiTurn {
     @Guide(description: "The answer shown to the user, in the user's language. Plain text, may use short '- ' bullet lines.")
     var reply: String
-    @Guide(description: "Exactly one of: none, add_task, add_note, start_focus, show_today, show_overdue, check_mac, clean_junk, open_tab. Use none unless the user clearly wants the app to act.")
+    @Guide(description: "Exactly one of: none, add_task, add_note, add_event, start_focus, show_today, show_overdue, check_mac, clean_junk, open_tab. Use none unless the user clearly wants the app to act.")
     var action: String
-    @Guide(description: "Argument for the action (task text with its time words, note text, minutes, or tab name). Empty when action is none.")
+    @Guide(description: "Argument for the action (task or calendar event text with its time words, note text, minutes, or tab name). Empty when action is none.")
     var argument: String
 }
 #endif

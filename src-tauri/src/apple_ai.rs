@@ -20,7 +20,7 @@ const SWIFT_SRC: &str = include_str!("../resources/asi_ai.swift");
 const TIMEOUT: Duration = Duration::from_secs(45);
 
 /// Các hành động mô hình được phép chọn (liệt kê trong mô tả trường `action` của asi_ai.swift)
-pub const ACTIONS: &[&str] = &["none", "add_task", "add_note", "start_focus", "show_today", "show_overdue", "check_mac", "clean_junk", "open_tab"];
+pub const ACTIONS: &[&str] = &["none", "add_task", "add_note", "add_event", "start_focus", "show_today", "show_overdue", "check_mac", "clean_junk", "open_tab"];
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AppleAiStatus {

@@ -1,55 +1,73 @@
-/* ───────── Mini-Asi — cửa sổ Cài đặt (2 cột kiểu System Settings, tông đen tối giản) ───────── */
-body.settings { background: #0c0c0e; overflow: hidden; }
-.sw { display: grid; grid-template-columns: 216px 1fr; height: 100vh; }
-.sw-side { display: flex; flex-direction: column; padding: 14px 10px 12px; border-right: 1px solid var(--sep); background: #000; overflow-y: auto; }
-#nav { display: flex; flex-direction: column; gap: 1px; flex: 1; }
-.nav-it { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0 10px; border-radius: 8px; color: var(--text-2); font-size: 13px; font-weight: 500; text-align: left; }
-.nav-it:hover { background: var(--surface); color: var(--text); }
-.nav-it.on { background: var(--surface-2); color: var(--text); font-weight: 600; }
-.nav-it svg { width: 15px; height: 15px; }
+/* ───────── Mini-Asi — cửa sổ Cài đặt (kiểu System Settings của macOS 27, luôn nền tối) ─────────
+ * - Thanh bên chạy sát mép (không nổi), mỗi mục có ô biểu tượng màu; mục đang chọn tô màu nhấn của hệ thống.
+ * - Nội dung: tiêu đề lớn, các nhóm hàng bo góc 14 (đồng tâm với hàng bên trong), vạch ngăn thụt vào.
+ * - Điều khiển (công tắc, nhóm chọn, nút bật danh sách, thanh trượt) là kính — xem base.css.
+ */
+body.settings { background: #1b1b1d; overflow: hidden; }
+.sw { display: grid; grid-template-columns: 224px 1fr; height: 100vh; }
+.sw-side { display: flex; flex-direction: column; padding: 14px 10px 12px; background: #141416; box-shadow: inset -0.5px 0 0 rgba(255, 255, 255, 0.1); overflow-y: auto; }
+#nav { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.nav-it { display: flex; align-items: center; gap: 9px; height: 34px; padding: 0 8px; border-radius: 9px; color: var(--text); font-size: 13px; font-weight: 500; text-align: left; transition: background 0.12s; }
+.nav-it:hover { background: var(--surface); }
+.nav-it.on { background: var(--tint); color: #fff; font-weight: 600; }
+/* ô biểu tượng màu (macOS 27 đưa màu trở lại thanh bên) */
+.ni { width: 22px; height: 22px; border-radius: 6.5px; display: grid; place-items: center; flex: none; color: #fff; background: #8e8e93; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -1px 0 rgba(0, 0, 0, 0.14); }
+.ni svg { width: 13px; height: 13px; stroke-width: 2.1; }
+[data-sec="general"] .ni { background: #8e8e93; }
+[data-sec="look"] .ni { background: #1c1c1e; box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.18); }
+[data-sec="features"] .ni { background: #0a84ff; }
+[data-sec="reminders"] .ni { background: #ff9f0a; }
+[data-sec="assistant"] .ni { background: #bf5af2; }
+[data-sec="ime"] .ni { background: #30b0c7; }
+[data-sec="clips"] .ni { background: #30d158; }
+[data-sec="sync"] .ni { background: #5e5ce6; }
+[data-sec="perms"] .ni { background: #ff453a; }
+[data-sec="pro"] .ni { background: #ffd60a; color: #000; }
+.nav-it.on .ni { box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3); }
 .sw-ver { padding: 8px 10px 0; font-size: 11.5px; color: var(--text-3); }
 
-.sw-main { overflow-y: auto; padding: 26px 34px 40px; }
-.sw-main > * { max-width: 640px; }
+.sw-main { overflow-y: auto; padding: 24px 34px 40px; }
+.sw-main > * { max-width: 660px; }
 header { margin-bottom: 18px; }
 header h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
-header p { margin-top: 4px; font-size: 13px; color: var(--text-2); }
-h3 { margin: 20px 4px 7px; font-size: 12px; font-weight: 700; color: var(--text-2); }
-.group { border-radius: 12px; background: rgba(255, 255, 255, 0.05); overflow: hidden; }
-.gfoot { margin: 7px 4px 0; font-size: 11.5px; color: var(--text-3); line-height: 1.5; }
+header p { margin-top: 4px; font-size: 13px; color: var(--text-2); line-height: 1.45; }
+h3 { margin: 22px 6px 7px; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.group { border-radius: 14px; background: rgba(255, 255, 255, 0.055); box-shadow: var(--hair); overflow: hidden; }
+.gfoot { margin: 7px 6px 0; font-size: 11.5px; color: var(--text-3); line-height: 1.5; }
 .gact { margin-top: 12px; display: flex; justify-content: flex-end; }
 .err { color: #ff6961; }
 
-.srow { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 9px 14px; }
-.srow + .srow { border-top: 1px solid var(--sep); }
+.srow { position: relative; display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 9px 14px; }
+/* vạch ngăn thụt vào, không chạm mép nhóm */
+.srow + .srow::before { content: ""; position: absolute; left: 14px; right: 0; top: 0; height: 0.5px; background: rgba(255, 255, 255, 0.11); }
 .srow b { display: block; font-size: 13.5px; font-weight: 500; }
 .srow .grow > span { display: block; margin-top: 1px; font-size: 12px; color: var(--text-2); line-height: 1.4; }
 .srow .tag { margin-left: 8px; }
-.srow input[type="range"] { width: 180px; accent-color: #fff; }
+.srow input[type="range"] { width: 180px; }
 .srow .val { width: 46px; text-align: right; font-variant-numeric: tabular-nums; font-size: 12.5px; }
 .srow .inline { font-size: 12.5px; }
-.srow select.field { height: 28px; font-size: 12.5px; }
 .srow .field { height: 28px; font-size: 13px; }
+.srow select.field { height: 28px; font-size: 12.5px; max-width: 260px; text-overflow: ellipsis; }
 .numbox { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--text-2); }
 .field.num { width: 58px; height: 28px; text-align: center; padding: 0 6px; }
-kbd { font: 600 12px/1 -apple-system, system-ui; padding: 5px 8px; border-radius: 6px; background: var(--surface-2); color: var(--text); }
+kbd { font: 600 12px/1 -apple-system, system-ui; padding: 6px 10px; border-radius: var(--cap); background: var(--glass); box-shadow: var(--glass-edge); color: var(--text); }
 
-/* hàng có ô tick */
+/* hàng có ô tick (màu nhấn của hệ thống như hộp kiểm macOS) */
 .check-row { cursor: pointer; min-height: 40px; }
 .check-row input { display: none; }
-.check-row .cbox { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--text-3); display: grid; place-items: center; color: transparent; flex: none; transition: 0.15s; }
+.check-row .cbox { width: 18px; height: 18px; border-radius: 5.5px; border: 1.5px solid var(--text-3); display: grid; place-items: center; color: transparent; flex: none; transition: 0.15s; }
 .check-row .cbox svg { width: 12px; height: 12px; stroke-width: 3; }
-.check-row input:checked + .cbox { background: #fff; border-color: #fff; color: #000; }
+.check-row input:checked + .cbox { background: var(--tint); border-color: var(--tint); color: #fff; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25); }
 .check-row b { font-weight: 500; }
 
 /* chọn kiểu hiển thị */
 .disp { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.disp-opt { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); border: 1.5px solid transparent; text-align: left; transition: 0.15s; }
-.disp-opt:hover { background: rgba(255, 255, 255, 0.08); }
-.disp-opt.on { border-color: #fff; }
+.disp-opt { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: 14px; background: rgba(255, 255, 255, 0.055); box-shadow: var(--hair); text-align: left; transition: 0.15s; }
+.disp-opt:hover { background: rgba(255, 255, 255, 0.085); }
+.disp-opt.on { box-shadow: inset 0 0 0 2px var(--tint); }
 .disp-opt b { font-size: 13px; margin-top: 6px; }
 .disp-opt > span:last-child { font-size: 11.5px; color: var(--text-2); }
-.pv { position: relative; display: block; height: 54px; border-radius: 8px; background: linear-gradient(160deg, #2b3247, #161a24); overflow: hidden; }
+.pv { position: relative; display: block; height: 54px; border-radius: 8px; background: linear-gradient(160deg, #3a4a78, #1a2036); overflow: hidden; }
 .pv::after { content: ""; position: absolute; background: #000; }
 .pv-notch::after { top: 0; left: 50%; width: 46%; height: 11px; transform: translateX(-50%); border-radius: 0 0 7px 7px; }
 .pv-pill::after { top: 10px; left: 50%; width: 40%; height: 11px; transform: translateX(-50%); border-radius: 9px; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5); }
@@ -59,9 +77,9 @@ kbd { font: 600 12px/1 -apple-system, system-ui; padding: 5px 8px; border-radius
 .srow.pack b { font-weight: 600; }
 .srow.voice { padding-left: 14px; }
 .srow.voice.on { background: rgba(255, 255, 255, 0.04); }
-.vav { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); font-size: 11px; font-weight: 700; color: var(--text-2); flex: none; }
-.srow.voice.on .vav { background: #fff; color: #000; }
+.vav { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--glass); box-shadow: var(--glass-edge); font-size: 11px; font-weight: 700; color: var(--text-2); flex: none; }
+.srow.voice.on .vav { background: var(--white-glass); box-shadow: var(--white-edge); color: #000; }
 .prog { font-size: 12px; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .seg button { font-size: 11.5px; }
-.srow select.field { max-width: 260px; text-overflow: ellipsis; }
 .inline-link { padding: 0; font-size: inherit; color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+.group + .group { margin-top: 14px; }

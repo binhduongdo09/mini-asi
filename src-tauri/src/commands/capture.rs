@@ -310,7 +310,7 @@ pub(crate) async fn capture_create(app: AppHandle, st: S<'_>, d: DraftView) -> R
     }
     if d.kind == "event" {
         let start = d.start.ok_or("Sự kiện cần ngày giờ bắt đầu")?;
-        let end = d.end.filter(|e| *e > start).unwrap_or(start + if d.all_day { 86_400_000 } else { 3_600_000 });
+        let end = d.end.filter(|e| *e > start).unwrap_or(start + if d.all_day { 86_399_000 } else { 3_600_000 });
         {
             let mut s = st.store.lock().unwrap();
             if s.settings.capture_calendar != d.calendar_id {

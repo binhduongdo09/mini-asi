@@ -13,6 +13,8 @@ pub enum Intent {
     Today,
     AddTask,
     AddNote,
+    /// Sự kiện vào Lịch ("thêm lịch họp 3h chiều mai", "đặt lịch…", "tạo sự kiện…")
+    AddEvent,
     Focus,
     Break,
     Disk,
@@ -54,8 +56,12 @@ pub fn explicit_command(input: &str) -> Option<(Intent, String)> {
     let f = format!(" {} ", fold(&raw).replace(',', " "));
     for (keys, intent) in [
         (&[
+            "them lich ", "dat lich ", "len lich ", "tao lich ", "xep lich ", "them su kien ", "tao su kien ", "them mot su kien ", "tao mot su kien ",
+            "them cuoc hen ", "tao cuoc hen ", "dat cuoc hen ", "add an event ", "add event ", "create an event ", "create event ", "new event ",
+        ][..], Intent::AddEvent),
+        (&[
             "them cong viec ", "tao cong viec ", "them mot cong viec ", "tao mot cong viec ", "them mot viec ", "tao mot viec ", "them mot task ", "tao mot task ",
-            "them nhiem vu ", "tao nhiem vu ", "them viec ", "tao viec ", "them task ", "tao task ", "them lich ", "nhac nho toi ", "nhac nho minh ",
+            "them nhiem vu ", "tao nhiem vu ", "them viec ", "tao viec ", "them task ", "tao task ", "nhac nho toi ", "nhac nho minh ",
             "nhac toi ", "nhac minh ", "nhac em ", "nhac anh ", "add a task ", "create a task ", "add task ", "remind me to ", "remind me ", "new task ",
         ][..], Intent::AddTask),
         (&["ghi chu ", "ghi lai ", "luu ghi chu ", "take a note ", "write down ", "note "][..], Intent::AddNote),
@@ -69,7 +75,9 @@ pub fn explicit_command(input: &str) -> Option<(Intent, String)> {
                 let kk = if f[pos..].starts_with(' ') { pos + 1 } else { pos };
                 let start_chars = f[..kk + k.len()].chars().count().saturating_sub(1);
                 let rest: String = raw.chars().skip(start_chars).collect::<String>().trim_start_matches([':', ',', '-', ' ']).to_string();
-                if !rest.trim().is_empty() || intent == Intent::AddNote {
+                // "lịch hẹn nha sĩ" / "lịch họp team": bỏ chữ đệm đầu nội dung sự kiện
+                let rest = if intent == Intent::AddEvent { strip_event_lead(&rest) } else { rest };
+                if !rest.trim().is_empty() || intent != Intent::AddTask {
                     return Some((intent, rest.trim().to_string()));
                 }
             }
@@ -96,12 +104,49 @@ pub fn write_intent(input: &str) -> Option<(Intent, String)> {
     // tách từ, giữ dấu câu riêng (":" giữa câu)
     let words: Vec<String> = raw.replace(':', " : ").split_whitespace().map(str::to_string).collect();
     let fw: Vec<String> = words.iter().map(|w| fold(w).trim_matches(|c: char| !c.is_alphanumeric()).to_string()).collect();
-    let task_verbs = ["them", "tao", "lap", "dat", "len", "add", "create", "make", "new", "ghi", "luu"];
-    let task_objs = ["viec", "task", "tasks", "todo", "nhiem", "reminder", "lich"];
+    let task_verbs = ["them", "tao", "lap", "dat", "len", "xep", "add", "create", "make", "new", "ghi", "luu"];
+    let task_objs = ["viec", "task", "tasks", "todo", "nhiem", "reminder"];
     let note_pairs: &[(&str, &[&str])] = &[("ghi", &["chu", "lai", "nho"]), ("luu", &["lai", "chu", "note"]), ("note", &["lai", "nay", "down"]), ("take", &["note"]), ("save", &["note", "notes"]), ("jot", &["down"])];
     let pronouns = ["toi", "minh", "em", "anh", "t", "me", "chi", "tao"];
+    const TRAIL: &[&str] = &["nhe", "nha", "voi", "di", "please", "thanks", "giup", "gium", "duoc", "khong", "ko", "k", "dc", "nhi", "a", "ah", "nhen"];
     let mut hit: Option<(Intent, usize)> = None;
+    let mut end_limit = fw.len();
+    // Nội dung đứng TRƯỚC nơi lưu: "lưu số anh Nam 0912… vào ghi chú", "thêm gọi khách 3h chiều vào danh sách việc",
+    // "thêm họp team 9h mai vào lịch", "add call John to my tasks"
+    {
+        const TAILS: &[(&[&str], Intent)] = &[
+            (&["vao", "ghi", "chu"], Intent::AddNote), (&["thanh", "ghi", "chu"], Intent::AddNote), (&["vao", "note"], Intent::AddNote), (&["vao", "notes"], Intent::AddNote),
+            (&["to", "my", "notes"], Intent::AddNote), (&["to", "notes"], Intent::AddNote), (&["as", "a", "note"], Intent::AddNote),
+            (&["vao", "danh", "sach", "cong", "viec"], Intent::AddTask), (&["vao", "danh", "sach", "viec"], Intent::AddTask), (&["vao", "viec", "can", "lam"], Intent::AddTask),
+            (&["vao", "danh", "sach"], Intent::AddTask), (&["vao", "task"], Intent::AddTask), (&["vao", "todo"], Intent::AddTask), (&["thanh", "viec"], Intent::AddTask),
+            (&["vao", "viec"], Intent::AddTask), (&["to", "my", "tasks"], Intent::AddTask), (&["to", "my", "task", "list"], Intent::AddTask), (&["to", "my", "to", "do", "list"], Intent::AddTask),
+            (&["to", "my", "todo", "list"], Intent::AddTask), (&["as", "a", "task"], Intent::AddTask),
+            (&["vao", "lich"], Intent::AddEvent), (&["to", "my", "calendar"], Intent::AddEvent), (&["to", "the", "calendar"], Intent::AddEvent), (&["on", "my", "calendar"], Intent::AddEvent),
+        ];
+        const VERBS: &[&str] = &["luu", "ghi", "them", "chep", "dua", "viet", "tao", "add", "save", "put", "note"];
+        // bỏ từ đệm cuối câu để tìm cụm đích
+        let mut tail_end = fw.len();
+        while tail_end > 0 && (TRAIL.contains(&fw[tail_end - 1].as_str()) || fw[tail_end - 1].is_empty() || (tail_end > 1 && pronouns.contains(&fw[tail_end - 1].as_str()) && matches!(fw[tail_end - 2].as_str(), "giup" | "gium" | "cho" | "ho" | "dum"))) {
+            tail_end -= 1;
+        }
+        for (tail, intent) in TAILS {
+            if tail_end < tail.len() || fw[tail_end - tail.len()..tail_end].iter().map(String::as_str).ne(tail.iter().copied()) {
+                continue;
+            }
+            let tail_start = tail_end - tail.len();
+            if let Some(v) = (0..tail_start.min(4)).find(|&i| VERBS.contains(&fw[i].as_str())) {
+                if v + 1 < tail_start {
+                    hit = Some((*intent, v + 1));
+                    end_limit = tail_start;
+                }
+            }
+            break;
+        }
+    }
     for i in 0..fw.len() {
+        if hit.is_some() {
+            break;
+        }
         // nhắc + đại từ ở bất kỳ đâu: "nhớ nhắc mình …", "bạn nhắc t …", "remind me …"
         if (fw[i] == "nhac" || fw[i] == "remind") && fw.get(i + 1).is_some_and(|p| pronouns.contains(&p.as_str()) || p == "nho") {
             let j = if fw.get(i + 1).map(String::as_str) == Some("nho") { i + 2 } else { i + 1 };
@@ -128,12 +173,34 @@ pub fn write_intent(input: &str) -> Option<(Intent, String)> {
                 }
             }
         }
+        // "please schedule a call with…" (không tính "show my schedule")
+        if fw[i] == "schedule" && (i == 0 || matches!(fw[i - 1].as_str(), "please" | "you" | "to" | "and" | "pls")) && i + 1 < fw.len() {
+            hit = Some((Intent::AddEvent, i + 1));
+            break;
+        }
         if task_verbs.contains(&fw[i].as_str()) && fw[i] != "ghi" {
-            if let Some(k) = (i + 1..(i + 6).min(fw.len())).find(|&k| task_objs.contains(&fw[k].as_str())) {
-                // "lên lịch" chỉ khi đứng liền; "nhiệm vụ" → bỏ cả chữ "vụ"
-                if fw[k] == "lich" && k != i + 1 {
-                    continue;
+            // sự kiện lịch: "thêm (giúp mình) lịch …", "tạo sự kiện …", "đặt cuộc hẹn …", "add an event …"
+            const FILL: &[&str] = &["giup", "gium", "ho", "dum", "cho", "minh", "toi", "em", "anh", "t", "me", "1", "mot", "cai", "a", "an", "new", "moi", "vao", "them"];
+            let ev = (i + 1..(i + 5).min(fw.len())).find_map(|k| {
+                if !fw[i + 1..k].iter().all(|w| FILL.contains(&w.as_str())) {
+                    return None;
                 }
+                let next = fw.get(k + 1).map(String::as_str);
+                match fw[k].as_str() {
+                    "lich" => Some(k),
+                    "event" => Some(k),
+                    "su" if next == Some("kien") => Some(k + 1),
+                    "cuoc" if next == Some("hen") => Some(k + 1),
+                    _ => None,
+                }
+            });
+            let first_task = (i + 1..(i + 6).min(fw.len())).find(|&k| task_objs.contains(&fw[k].as_str()));
+            if let Some(k) = ev.filter(|k| first_task.map_or(true, |t| *k < t)) {
+                hit = Some((Intent::AddEvent, k + 1));
+                break;
+            }
+            if let Some(k) = first_task {
+                // "nhiệm vụ" → bỏ cả chữ "vụ"
                 let end = if fw[k] == "nhiem" && fw.get(k + 1).map(String::as_str) == Some("vu") { k + 1 } else { k };
                 // "thêm vào ghi chú" → ghi chú
                 hit = Some((Intent::AddTask, end + 1));
@@ -149,9 +216,11 @@ pub fn write_intent(input: &str) -> Option<(Intent, String)> {
     // bỏ từ đệm đầu nội dung
     const LEAD: &[&str] = &["", "giup", "gium", "ho", "dum", "vao", "danh", "sach", "moi", "la", "rang", "sau", "nhu", "1", "mot", "cai", "noi", "dung", "voi", "ve", "to", "a", "an", "that", "list", "my", "lai", "giup"];
     let mut s = start;
-    while s < fw.len() {
+    while s < end_limit {
         let w = fw[s].as_str();
-        if LEAD.contains(&w) || words[s] == ":" {
+        // từ đệm tiếng Anh ("an", "to", "my"…) chỉ bỏ khi đúng là chữ không dấu — "ăn", "tô", "mỳ" là nội dung
+        let english_only = matches!(w, "a" | "an" | "to" | "that" | "list" | "my");
+        if (LEAD.contains(&w) && (!english_only || words[s].is_ascii())) || words[s] == ":" {
             s += 1;
         } else if (w == "cho" || w == "giup") && fw.get(s + 1).is_some_and(|p| pronouns.contains(&p.as_str())) {
             s += 2;
@@ -159,17 +228,18 @@ pub fn write_intent(input: &str) -> Option<(Intent, String)> {
             s += 1;
         } else if (w == "viec" || w == "task" || w == "note") && s == start {
             s += 1;
+        } else if intent == Intent::AddEvent && matches!(w, "for" | "cho" | "ve" | "the" | "moi") {
+            s += 1;
         } else {
             break;
         }
     }
     // "note lại ý này: …", "ghi chú cái sau: …" → lấy phần sau dấu ":" nếu nó nằm gần đầu
-    if let Some(c) = (s..(s + 5).min(words.len())).find(|&k| words[k] == ":") {
+    if let Some(c) = (s..(s + 5).min(end_limit)).find(|&k| words[k] == ":") {
         s = c + 1;
     }
     // bỏ từ đệm cuối câu
-    const TRAIL: &[&str] = &["nhe", "nha", "voi", "di", "please", "thanks", "giup", "gium", "duoc", "khong", "ko", "k", "dc", "nhi", "a", "ah", "nhen"];
-    let mut e = fw.len();
+    let mut e = end_limit.max(s.min(fw.len()));
     loop {
         if e > s && (TRAIL.contains(&fw[e - 1].as_str()) || words[e - 1] == ":") {
             e -= 1;
@@ -181,10 +251,66 @@ pub fn write_intent(input: &str) -> Option<(Intent, String)> {
         }
     }
     let content = words[s..e.max(s)].join(" ").replace(" : ", ": ").trim_matches(|c: char| c == ':' || c == ',' || c == '-' || c.is_whitespace()).trim_end_matches(['.', '!', '?']).to_string();
-    if content.is_empty() && intent == Intent::AddTask {
+    if content.is_empty() && intent != Intent::AddNote {
         return None;
     }
     Some((intent, content))
+}
+
+/// Bỏ chữ đệm đầu nội dung sự kiện ("cho", "về", "for", "a"…) — giữ nguyên phần còn lại
+fn strip_event_lead(rest: &str) -> String {
+    let mut words: Vec<&str> = rest.split_whitespace().collect();
+    while let Some(w) = words.first() {
+        if matches!(fold(w).trim_matches(|c: char| !c.is_alphanumeric()), "cho" | "ve" | "for" | "a" | "an" | "the" | "moi" | "giup" | "minh" | "toi") && words.len() > 1 {
+            words.remove(0);
+        } else {
+            break;
+        }
+    }
+    words.join(" ")
+}
+
+/// Nội dung chỉ là lời trỏ về câu trước ("cái đó", "câu trả lời trên", "những việc trên vào danh sách", "this", "the above")
+/// → phải lấy nội dung từ câu trả lời gần nhất của Asi chứ không lưu nguyên mấy chữ này.
+pub fn is_back_ref(content: &str) -> bool {
+    const REF: &[&str] = &[
+        "cai", "do", "nay", "kia", "day", "tren", "o", "phia", "vua", "roi", "cau", "tra", "loi", "noi", "dung", "y", "dieu", "doan", "van", "ban", "ket", "qua",
+        "thong", "tin", "nhung", "cac", "tat", "ca", "viec", "ghi", "chu", "vao", "lai", "danh", "sach", "ke", "hoach", "buoc", "goi", "muc", "ben", "het", "luon",
+        "it", "this", "that", "these", "those", "above", "the", "answer", "reply", "response", "last", "previous", "them", "all", "tasks", "items", "plan", "list", "to", "my", "of",
+    ];
+    const POINT: &[&str] = &["do", "nay", "kia", "tren", "vua", "it", "this", "that", "these", "those", "above", "last", "previous", "them"];
+    let f = fold(content);
+    let toks: Vec<&str> = f.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect();
+    !toks.is_empty() && toks.len() <= 9 && toks.iter().all(|w| REF.contains(w)) && toks.iter().any(|w| POINT.contains(w))
+}
+
+/// Các ý dạng gạch đầu dòng / đánh số trong một câu trả lời → danh sách việc (tối đa 10)
+pub fn list_items(reply: &str) -> Vec<String> {
+    reply
+        .lines()
+        .filter_map(|l| {
+            let t = l.trim();
+            let body = if let Some(r) = t.strip_prefix(['-', '•', '*', '–']) {
+                r
+            } else {
+                let digits = t.chars().take_while(|c| c.is_ascii_digit()).count();
+                if digits == 0 || digits > 2 || !t[digits..].starts_with(['.', ')']) {
+                    return None;
+                }
+                &t[digits + 1..]
+            };
+            let body = body.trim().trim_matches('*').replace("**", "");
+            let body = body.trim().trim_end_matches(['.', ';', ',']).trim();
+            (body.chars().filter(|c| c.is_alphanumeric()).count() >= 3).then(|| body.chars().take(140).collect::<String>())
+        })
+        .take(10)
+        .collect()
+}
+
+/// Trả lời "thôi / huỷ / không cần" cho câu Asi vừa hỏi lại
+pub fn is_cancel(input: &str) -> bool {
+    let f = fold(input.trim().trim_end_matches(['.', '!']));
+    matches!(f.as_str(), "thoi" | "huy" | "khong" | "ko" | "khong can" | "bo qua" | "thoi khong can" | "thoi bo di" | "cancel" | "no" | "never mind" | "nevermind" | "skip")
 }
 
 /// Mô hình nói đã làm ("đã thêm", "đã ghi lại", "added"…) — dùng để bắt trường hợp nói mà không làm
@@ -211,6 +337,7 @@ pub fn user_asks_for(action: &str, input: &str) -> bool {
     let keys: &[&str] = match action {
         "add_task" => &["nhac", "them viec", "them cong viec", "tao viec", "tao cong viec", "them task", "tao task", "them nhiem vu", "viec can lam", "len lich", "dat lich", "hen gio", "dat hen", "to do", "todo", "remind", "add task", "add a task", "create a task", "schedule"],
         "add_note" => &["ghi chu", "ghi lai", "luu lai", "luu vao", "luu thanh", "note", "save", "write down"],
+        "add_event" => &["them lich", "dat lich", "len lich", "tao lich", "xep lich", "su kien", "cuoc hen", "lich hen", "add event", "add an event", "create event", "create an event", "calendar", "schedule"],
         "start_focus" => &["tap trung", "focus", "pomodoro"],
         _ => return true,
     };
@@ -218,6 +345,7 @@ pub fn user_asks_for(action: &str, input: &str) -> bool {
         || match action {
             "add_task" => matches!(write_intent(input), Some((Intent::AddTask, _))),
             "add_note" => matches!(write_intent(input), Some((Intent::AddNote, _))),
+            "add_event" => matches!(write_intent(input), Some((Intent::AddEvent, _))),
             _ => false,
         }
 }
@@ -565,6 +693,35 @@ mod tests {
         assert_eq!(w("làm sao để ghi chú nhanh trên mac"), None);
         assert_eq!(w("việc gì quan trọng nhất tuần này?"), None);
         assert_eq!(w("viết giúp mình email xin nghỉ phép"), None);
+        // sự kiện lịch
+        assert_eq!(explicit_command("thêm lịch họp team 3h chiều mai"), Some((Intent::AddEvent, "họp team 3h chiều mai".into())));
+        assert_eq!(explicit_command("Đặt lịch hẹn nha sĩ thứ 6 10h"), Some((Intent::AddEvent, "hẹn nha sĩ thứ 6 10h".into())));
+        assert_eq!(explicit_command("tạo sự kiện sinh nhật mẹ ngày 20/11"), Some((Intent::AddEvent, "sinh nhật mẹ ngày 20/11".into())));
+        assert_eq!(w("bạn thêm giúp mình lịch họp với khách 9h sáng thứ 2 nhé"), Some((Intent::AddEvent, "họp với khách 9h sáng thứ 2".into())));
+        assert_eq!(w("Asi tạo cho mình sự kiện ăn tối với Lan 7h tối mai"), Some((Intent::AddEvent, "ăn tối với Lan 7h tối mai".into())));
+        assert_eq!(w("thêm vào lịch: họp phụ huynh 8h sáng thứ 7"), Some((Intent::AddEvent, "họp phụ huynh 8h sáng thứ 7".into())));
+        assert_eq!(w("please schedule a call with John tomorrow 3pm"), Some((Intent::AddEvent, "call with John tomorrow 3pm".into())));
+        assert_eq!(w("add an event for dinner with Lan tomorrow 7pm"), Some((Intent::AddEvent, "dinner with Lan tomorrow 7pm".into())));
+        // "lịch" nằm trong nội dung việc → vẫn là việc; hỏi lịch ≠ thêm lịch
+        assert_eq!(w("tạo việc kiểm tra lịch đăng bài tuần này"), Some((Intent::AddTask, "kiểm tra lịch đăng bài tuần này".into())));
+        assert_eq!(w("show my schedule today please"), None);
+        assert_eq!(explicit_command("lịch hôm nay có gì"), None);
+        assert!(user_asks_for("add_event", "đặt lịch họp 3h chiều mai") && !user_asks_for("add_event", "mai mình có lịch gì không"));
+        assert_eq!(classify("nhắc tôi họp 3h chiều mai").0, Intent::AddTask);
+        // trỏ về câu trước
+        assert!(is_back_ref("cái đó") && is_back_ref("câu trả lời trên") && is_back_ref("những việc trên vào danh sách") && is_back_ref("this") && is_back_ref("the above"));
+        assert!(!is_back_ref("gọi lại cho khách") && !is_back_ref("") && !is_back_ref("wifi nhà là abc123") && !is_back_ref("việc"));
+        // nội dung đứng trước nơi lưu
+        assert_eq!(w("lưu số điện thoại anh Nam 0912345678 vào ghi chú nhé"), Some((Intent::AddNote, "số điện thoại anh Nam 0912345678".into())));
+        assert_eq!(w("thêm gọi khách 3h chiều vào danh sách việc giúp mình"), Some((Intent::AddTask, "gọi khách 3h chiều".into())));
+        assert_eq!(w("Asi ơi thêm họp team 9h sáng mai vào lịch"), Some((Intent::AddEvent, "họp team 9h sáng mai".into())));
+        assert_eq!(w("add call John tomorrow 3pm to my tasks"), Some((Intent::AddTask, "call John tomorrow 3pm".into())));
+        assert_eq!(w("lưu vào ghi chú"), Some((Intent::AddNote, String::new())));
+        assert_eq!(w("lưu câu trả lời trên vào ghi chú").map(|x| (x.0, is_back_ref(&x.1))), Some((Intent::AddNote, true)));
+        assert_eq!(w("thêm các việc trên vào danh sách nhé").map(|x| (x.0, is_back_ref(&x.1))), Some((Intent::AddTask, true)));
+        assert_eq!(w("ghi chú lại cái đó giúp mình").map(|x| (x.0, is_back_ref(&x.1))), Some((Intent::AddNote, true)));
+        assert_eq!(list_items("Kế hoạch:\n- Gọi khách lúc 9h.\n- **Gửi báo giá**\n2. Họp team\nChúc bạn làm tốt!"), vec!["Gọi khách lúc 9h", "Gửi báo giá", "Họp team"]);
+        assert!(is_cancel("Thôi") && is_cancel("huỷ") && !is_cancel("thôi mai làm"));
         assert!(claims_done("Mình đã thêm việc “Gửi báo giá” cho bạn rồi nhé!"));
         assert!(!claims_done("Bạn có 3 việc hôm nay."));
         assert!(explicit_command("Lưu ý gì khi đi Đà Lạt").is_none(), "\"lưu ý\" không phải lệnh ghi chú");

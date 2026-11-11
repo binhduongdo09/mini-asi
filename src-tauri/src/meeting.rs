@@ -192,6 +192,36 @@ pub fn next_live_chunk(lines: &[Line], noted: usize, min_chars: usize, max_chars
     None
 }
 
+/// Sau khi app bị tắt giữa chừng (thoát, mất điện) lúc đang ghi / đang chuyển chữ: các cuộc họp còn "đang chờ" không
+/// bao giờ xong → đặt lại `pending = 0` để giao diện không quay mãi; trả về id những cuộc họp còn file wav chưa nén.
+pub fn recover(data_dir: &Path) -> Vec<String> {
+    let mut need_compress = vec![];
+    if let Ok(rd) = std::fs::read_dir(root(data_dir)) {
+        for e in rd.flatten() {
+            let id = e.file_name().to_string_lossy().to_string();
+            let Ok(mut m) = load(data_dir, &id) else { continue };
+            if m.pending > 0 {
+                m.pending = 0;
+                let _ = save(data_dir, &m);
+            }
+            let d = dir_of(data_dir, &id);
+            // file đoạn tạm còn sót
+            if let Ok(files) = std::fs::read_dir(&d) {
+                for f in files.flatten() {
+                    let n = f.file_name().to_string_lossy().to_string();
+                    if n.starts_with("seg-") && n.ends_with(".wav") {
+                        let _ = std::fs::remove_file(f.path());
+                    }
+                }
+            }
+            if d.join("audio.wav").exists() && !d.join("audio.m4a").exists() {
+                need_compress.push(id);
+            }
+        }
+    }
+    need_compress
+}
+
 pub fn list(data_dir: &Path) -> Vec<MeetingBrief> {
     let mut v = vec![];
     if let Ok(rd) = std::fs::read_dir(root(data_dir)) {
@@ -302,20 +332,31 @@ pub fn clock(sec: f32) -> String {
     if s >= 3600 { format!("{}:{:02}:{:02}", s / 3600, s / 60 % 60, s % 60) } else { format!("{:02}:{:02}", s / 60, s % 60) }
 }
 
-fn who_vi(w: &str) -> &'static str {
-    match w {
-        "me" => "Bạn",
-        "others" => "Người khác",
+fn who_label(w: &str, en: bool) -> &'static str {
+    match (w, en) {
+        ("me", false) => "Bạn",
+        ("others", false) => "Người khác",
+        ("me", true) => "You",
+        ("others", true) => "Others",
         _ => "",
     }
 }
 
-/// Toàn văn có mốc thời gian
+/// Cuộc họp nói tiếng Anh (theo ngôn ngữ nhận dạng lúc ghi) → biên bản, nhãn và lời nhắc cho AI bằng tiếng Anh
+pub fn is_en(locale: &str) -> bool {
+    locale.to_lowercase().starts_with("en")
+}
+
+/// Toàn văn có mốc thời gian (nhãn người nói tiếng Việt)
 pub fn transcript_text(lines: &[Line]) -> String {
+    transcript_text_in(lines, false)
+}
+
+pub fn transcript_text_in(lines: &[Line], en: bool) -> String {
     lines
         .iter()
         .map(|l| {
-            let w = who_vi(&l.who);
+            let w = who_label(&l.who, en);
             if w.is_empty() { format!("[{}] {}", clock(l.at), l.text) } else { format!("[{}] {w}: {}", clock(l.at), l.text) }
         })
         .collect::<Vec<_>>()
@@ -324,9 +365,13 @@ pub fn transcript_text(lines: &[Line]) -> String {
 
 /// Chia toàn văn thành các khúc ≤ `max_chars` ký tự (không cắt giữa câu)
 pub fn chunks(lines: &[Line], max_chars: usize) -> Vec<String> {
+    chunks_in(lines, max_chars, false)
+}
+
+pub fn chunks_in(lines: &[Line], max_chars: usize, en: bool) -> Vec<String> {
     let mut out = vec![];
     let mut cur = String::new();
-    for l in transcript_text(lines).lines() {
+    for l in transcript_text_in(lines, en).lines() {
         if !cur.is_empty() && cur.chars().count() + l.chars().count() + 1 > max_chars {
             out.push(std::mem::take(&mut cur));
         }
@@ -345,7 +390,7 @@ pub fn chunks(lines: &[Line], max_chars: usize) -> Vec<String> {
 fn clean_item(s: &str) -> Option<String> {
     let t = s.trim().trim_start_matches(|c: char| c == '-' || c == '•' || c == '*' || c == '–' || c.is_ascii_digit() || c == '.' || c == ')').trim();
     let f = fold(t);
-    let none = ["khong co", "khong", "chua co", "khong ro", "none", "n a", "khong co gi"];
+    let none = ["khong co", "khong", "chua co", "khong ro", "none", "n a", "khong co gi", "no decisions", "no action items", "nothing", "none mentioned", "not mentioned"];
     if t.chars().filter(|c| c.is_alphanumeric()).count() < 3 || none.contains(&f.trim_end_matches('.')) {
         return None;
     }
@@ -371,11 +416,11 @@ pub fn parse_summary_text(raw: &str) -> Summary {
         let f = fold(l).trim_start_matches('#').trim().to_string();
         let head = |k: &str| f.starts_with(k) && f.len() <= k.len() + 3;
         let (h, rest) = if let Some((a, b)) = l.split_once(':') { (fold(a).trim_start_matches('#').trim().to_string(), b.trim()) } else { (f.clone(), "") };
-        let new_sec = if head("tom tat") || h == "tom tat" || h == "noi dung chinh" || h == "y chinh" {
+        let new_sec = if head("tom tat") || h == "tom tat" || h == "noi dung chinh" || h == "y chinh" || head("summary") || h == "summary" || h == "key points" || h == "overview" {
             1
-        } else if head("quyet dinh") || h == "quyet dinh" || h == "ket luan" {
+        } else if head("quyet dinh") || h == "quyet dinh" || h == "ket luan" || head("decisions") || h == "decisions" || h == "decision" {
             2
-        } else if head("viec can lam") || h == "viec can lam" || h == "cong viec" || h == "action items" || h == "viec tiep theo" {
+        } else if head("viec can lam") || h == "viec can lam" || h == "cong viec" || h == "viec tiep theo" || head("action items") || matches!(h.as_str(), "action items" | "actions" | "to do" | "todo" | "next steps" | "tasks") {
             3
         } else {
             0
@@ -459,8 +504,10 @@ pub fn merge(parts: Vec<Summary>) -> Summary {
 
 /// Biên bản dạng chữ thường cho tab Ghi chú (dòng đầu là tiêu đề; đồng bộ sang app Ghi chú của Apple cũng gọn)
 pub fn to_note_text(m: &Meeting, with_transcript: bool) -> String {
+    let en = is_en(&m.locale);
+    let l = |vi: &'static str, e: &'static str| if en { e } else { vi };
     let when = chrono::DateTime::from_timestamp_millis(m.started).map(|d| d.with_timezone(&chrono::Local).format("%d/%m/%Y %H:%M").to_string()).unwrap_or_default();
-    let mut o = format!("{}\nBiên bản họp · {when} · {}\n", m.title, clock(m.duration as f32));
+    let mut o = format!("{}\n{} · {when} · {}\n", m.title, l("Biên bản họp", "Meeting minutes"), clock(m.duration as f32));
     if let Some(s) = &m.summary {
         let list = |o: &mut String, t: &str, xs: &[String]| {
             if !xs.is_empty() {
@@ -470,17 +517,17 @@ pub fn to_note_text(m: &Meeting, with_transcript: bool) -> String {
                 }
             }
         };
-        list(&mut o, "Tóm tắt", &s.overview);
-        list(&mut o, "Quyết định", &s.decisions);
+        list(&mut o, l("Tóm tắt", "Summary"), &s.overview);
+        list(&mut o, l("Quyết định", "Decisions"), &s.decisions);
         if !s.actions.is_empty() {
-            o.push_str("\nViệc cần làm\n");
+            o.push_str(l("\nViệc cần làm\n", "\nAction items\n"));
             for a in &s.actions {
                 let mut t = format!("☐ {}", a.task);
                 if !a.owner.is_empty() {
                     t.push_str(&format!(" — {}", a.owner));
                 }
                 if !a.due.is_empty() {
-                    t.push_str(&format!(" (hạn: {})", a.due));
+                    t.push_str(&format!(" ({}: {})", l("hạn", "due"), a.due));
                 }
                 o.push_str(&t);
                 o.push('\n');
@@ -488,39 +535,41 @@ pub fn to_note_text(m: &Meeting, with_transcript: bool) -> String {
         }
     }
     if with_transcript && !m.lines.is_empty() {
-        o.push_str("\nToàn văn\n");
-        o.push_str(&transcript_text(&m.lines));
+        o.push_str(l("\nToàn văn\n", "\nTranscript\n"));
+        o.push_str(&transcript_text_in(&m.lines, en));
         o.push('\n');
     }
-    o.push_str("\nNghe lại ghi âm: Mini-Asi › Họp");
+    o.push_str(l("\nNghe lại ghi âm: Mini-Asi › Họp", "\nReplay the recording: Mini-Asi › Meetings"));
     o
 }
 
 /// Biên bản dạng Markdown (lưu vào Ghi chú / chép)
 pub fn to_markdown(m: &Meeting, with_transcript: bool) -> String {
+    let en = is_en(&m.locale);
+    let l = |vi: &'static str, e: &'static str| if en { e } else { vi };
     let mut o = format!("# {}\n{} · {}\n", m.title, chrono::DateTime::from_timestamp_millis(m.started).map(|d| d.with_timezone(&chrono::Local).format("%d/%m/%Y %H:%M").to_string()).unwrap_or_default(), clock(m.duration as f32));
     if let Some(s) = &m.summary {
         if !s.overview.is_empty() {
-            o.push_str("\n## Tóm tắt\n");
+            o.push_str(l("\n## Tóm tắt\n", "\n## Summary\n"));
             for x in &s.overview {
                 o.push_str(&format!("- {x}\n"));
             }
         }
         if !s.decisions.is_empty() {
-            o.push_str("\n## Quyết định\n");
+            o.push_str(l("\n## Quyết định\n", "\n## Decisions\n"));
             for x in &s.decisions {
                 o.push_str(&format!("- {x}\n"));
             }
         }
         if !s.actions.is_empty() {
-            o.push_str("\n## Việc cần làm\n");
+            o.push_str(l("\n## Việc cần làm\n", "\n## Action items\n"));
             for a in &s.actions {
                 let mut t = format!("- [ ] {}", a.task);
                 if !a.owner.is_empty() {
                     t.push_str(&format!(" — {}", a.owner));
                 }
                 if !a.due.is_empty() {
-                    t.push_str(&format!(" (hạn: {})", a.due));
+                    t.push_str(&format!(" ({}: {})", l("hạn", "due"), a.due));
                 }
                 o.push_str(&t);
                 o.push('\n');
@@ -528,8 +577,8 @@ pub fn to_markdown(m: &Meeting, with_transcript: bool) -> String {
         }
     }
     if with_transcript && !m.lines.is_empty() {
-        o.push_str("\n## Toàn văn\n");
-        o.push_str(&transcript_text(&m.lines));
+        o.push_str(l("\n## Toàn văn\n", "\n## Transcript\n"));
+        o.push_str(&transcript_text_in(&m.lines, en));
         o.push('\n');
     }
     o
@@ -813,6 +862,32 @@ mod tests {
         ]);
         assert_eq!(m.overview.len(), 2);
         assert_eq!(m.actions.len(), 1);
+    }
+
+    #[test]
+    fn english_minutes_and_recover() {
+        let s = parse_summary_text("SUMMARY:\n- Agreed on the Q4 budget\nDECISIONS:\n- No decisions\nACTION ITEMS:\n- Send the quote | Tuan | Friday\n- Book the venue | ? | ?");
+        assert_eq!(s.overview, vec!["Agreed on the Q4 budget"]);
+        assert!(s.decisions.is_empty());
+        assert_eq!(s.actions.len(), 2);
+        assert_eq!((s.actions[0].owner.as_str(), s.actions[0].due.as_str(), s.actions[1].owner.as_str()), ("Tuan", "Friday", ""));
+        let lines = vec![Line { at: 3.0, who: "me".into(), text: "Hello".into() }, Line { at: 9.0, who: "others".into(), text: "Hi".into() }];
+        assert_eq!(transcript_text_in(&lines, true), "[00:03] You: Hello\n[00:09] Others: Hi");
+        let m = Meeting { id: "x".into(), title: "Sync".into(), locale: "en-US".into(), lines, summary: Some(s), ..Default::default() };
+        let nt = to_note_text(&m, true);
+        assert!(nt.contains("Meeting minutes") && nt.contains("Action items") && nt.contains("(due: Friday)") && nt.contains("Transcript") && !nt.contains("Tóm tắt"));
+        // khôi phục cuộc họp dở dang
+        let dir = std::env::temp_dir().join(format!("asi-meet-recover-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut m2 = Meeting { id: "20261111-090000".into(), pending: 3, ..Default::default() };
+        m2.title = "Dở dang".into();
+        save(&dir, &m2).unwrap();
+        std::fs::write(dir_of(&dir, &m2.id).join("audio.wav"), vec![0u8; 4096]).unwrap();
+        std::fs::write(dir_of(&dir, &m2.id).join("seg-3-mic.wav"), b"x").unwrap();
+        assert_eq!(recover(&dir), vec![m2.id.clone()]);
+        assert_eq!(load(&dir, &m2.id).unwrap().pending, 0);
+        assert!(!dir_of(&dir, &m2.id).join("seg-3-mic.wav").exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

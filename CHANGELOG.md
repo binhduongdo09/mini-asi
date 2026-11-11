@@ -1,5 +1,35 @@
 # Nhật ký thay đổi
 
+## 0.21.0 (11/2026) — giao diện Liquid Glass (macOS 27), chat lưu việc / lịch / ghi chú, ghi chú họp theo Gemini hoặc Apple
+**Giao diện "kính trên nền đen" theo Liquid Glass của macOS 27 Golden Gate**
+- Hòn đảo vẫn đen đặc để liền tai thỏ; lớp điều khiển là kính (viền trên sáng, viền dưới tối, đục hơn bản macOS 26 cho dễ đọc):
+  thanh tab thành dải kính nổi, ô thêm việc / ô tìm / thanh chat dạng viên thuốc kính, nút viên thuốc, ô nhanh ở peek.
+- Thẻ và danh sách là lớp nội dung (mặt phẳng, bo góc đồng tâm 28 → 16 → 12); nội dung mờ dần ở mép cuộn thay cho vạch kẻ.
+- Công tắc, nhóm chọn, thanh trượt, nút bật danh sách kiểu macOS 27. Cài đặt (luôn tối): thanh bên sát mép với ô biểu tượng màu,
+  mục đang chọn tô màu nhấn, vạch ngăn thụt vào.
+- Theo cài đặt Trợ năng của máy: Giảm độ trong suốt, Tăng tương phản, Giảm chuyển động. Kính vẽ bằng gradient (không làm mờ
+  nền trên từng nút) nên không nặng máy.
+
+**Chat → việc / lịch / ghi chú**
+- **Thêm lịch từ chat**: "thêm lịch họp team 3h chiều mai", "đặt lịch hẹn nha sĩ thứ 6 10h", "thêm họp 9h mai vào lịch",
+  "schedule a call with John tomorrow 3pm" → tạo sự kiện trong Lịch (có giờ = 1 tiếng, chỉ có ngày = cả ngày), có Hoàn tác.
+  Lịch chưa dùng được → lưu thành việc có hẹn giờ và nói rõ. Thiếu ngày giờ → Asi hỏi lại, câu kế tiếp ("mai 9h") được ghép vào.
+- Nội dung đứng trước nơi lưu: "lưu số anh Nam 0912… vào ghi chú", "thêm gọi khách 3h chiều vào danh sách việc".
+- Trỏ về câu trước: "lưu câu trả lời trên vào ghi chú" lưu đúng câu trả lời vừa rồi; "thêm các việc trên vào danh sách" thêm
+  từng gạch đầu dòng thành một việc (trước đây lưu nguyên mấy chữ "câu trả lời trên").
+- "Ghi chú" trống → Asi hỏi "ghi lại điều gì?", câu kế tiếp là nội dung; trả lời "thôi" để bỏ.
+- Mô hình AI có thêm hành động `add_event`; vẫn chỉ ghi khi người dùng nhờ (`user_asks_for`).
+
+**Ghi cuộc họp**
+- Một lựa chọn cho cả ghi chú trong lúc họp lẫn biên bản: chọn **Gemini** (có key) thì ghi chú trong lúc họp cũng bằng Gemini,
+  không phụ thuộc sức máy; chọn **Apple Intelligence** thì mọi thứ trên máy như cũ.
+- Gemini: tên mô hình đã cũ (404) → tự chọn mô hình mới nhất còn dùng được và thử lại. Gemini lỗi cuối buổi → Apple Intelligence;
+  Apple cũng không chạy được nhưng đã có ghi chú trong lúc họp → gộp các ghi chú đó thành biên bản.
+- Ghi chú trong lúc họp lỗi 2 lần liền mới ngừng (trước: lỗi 1 lần là ngừng, hoặc hỏi lại mãi một khúc).
+- Cuộc họp nói tiếng Anh → biên bản, nhãn và ghi chú bằng tiếng Anh.
+- Thoát app khi đang ghi → dừng thu đàng hoàng, không mất phần ghi âm cuối. Khởi động lại sau khi bị tắt giữa chừng → dọn
+  trạng thái "đang chuyển chữ" treo, nén nốt file ghi âm. Tải lại cửa sổ khi đang ghi vẫn thấy chữ và ghi chú gần nhất.
+
 ## 0.20.0 (11/2026) — cập nhật không phải xin lại quyền, việc trễ khi rê chuột, rê lên micro để nói
 **Không phải cấp lại quyền sau mỗi lần cập nhật**
 - Nguyên nhân: mọi bản trước được "ký tạm" (ad-hoc) — chữ ký gắn với dấu vân tay của từng bản build, nên macOS coi mỗi
