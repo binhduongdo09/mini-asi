@@ -1374,8 +1374,8 @@ mod tests {
         let neg = soft_mix(-0.9, -0.9);
         assert!(neg < -0.85 && neg > -1.0, "nén mềm ở ngưỡng âm: {neg}");
 
-        let alt = parse_summary_json(r#"{"summary":["Ý A"],"decision":["Chốt B"],"todo":["Làm C"]}"#).unwrap();
-        assert_eq!(alt.overview, vec!["Ý A"]);
+        let alt = parse_summary_json(r#"{"summary":["Ý chính A"],"decision":["Chốt B"],"todo":["Làm C"]}"#).unwrap();
+        assert_eq!(alt.overview, vec!["Ý chính A"]);
         assert_eq!(alt.decisions, vec!["Chốt B"]);
         assert_eq!(alt.actions[0].task, "Làm C");
 
