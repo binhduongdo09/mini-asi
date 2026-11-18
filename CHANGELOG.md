@@ -1,5 +1,26 @@
 # Nhật ký thay đổi
 
+## 0.23.0 (11/2026) — Họp ổn định hơn, thông báo trong Peek, Quick Action khi kéo thả, theo dõi CPU/RAM/SSD/Nhiệt độ, Settings gọn 6 mục, bỏ bộ gõ tự chế
+- **Ghi & biên soạn cuộc họp ổn định hơn**:
+  - Bật nhận dạng từng phần (`shouldReportPartialResults`) làm fallback khi macOS Speech báo lỗi cuối câu, huỷ task ngay sau timeout tránh kẹt tài nguyên.
+  - Tự động sửa header WAV (`repair_wav_header`) nếu ghi âm bị gián đoạn đột ngột; trộn 2 kênh micro + âm thanh máy bằng `soft_mix` chống rè và tự bù drift mỗi 200ms.
+  - Khoá chống chạy chồng `summarize` và `take_note`; mở rộng parser JSON cho nhiều mẫu trả lời của LLM.
+- **Gọn Peek & thêm Thông báo gần đây**:
+  - Bỏ các nút thừa Camera, tắt Mic hệ thống và AirDrop trên tai thỏ.
+  - Thêm khối **Thông báo gần đây** khi rê chuột vào tai thỏ (bấm để mở tab liên quan, xoá từng mục hoặc xoá hết); giữ nút **Tập trung** nhanh trên thanh trạng thái.
+- **Không gian Quick Action khi kéo thả vào tai thỏ**:
+  - Thay chia đôi AirDrop cũ bằng một khu vực Quick Action thống nhất giới thiệu các xử lý định dạng file.
+  - Hiển thị ngay hàng chọn nhanh định dạng ảnh (`JPG`, `PNG`, `HEIC`, `TIFF`, `PDF`, `1 PDF`) trực tiếp trên bảng kết quả khi thả ảnh hoặc thư mục.
+- **Dọn máy & cảnh báo hệ thống**:
+  - Hiển thị 4 thẻ **CPU · RAM · SSD · Nhiệt độ** (đọc nhiệt độ macOS qua `AppleSmartBattery` / Linux thermal zone, cập nhật theo thời gian thực).
+  - Cảnh báo chủ động (`disk-alert`) khi ổ đĩa sắp đầy kèm nút "Dọn ngay" tự chuyển sang Dọn máy và quét luôn.
+- **Giao diện phẳng (Flat UI) & hiển thị sắc nét quanh tai thỏ**:
+  - Chuyển toàn bộ giao diện sang phong cách phẳng, chuẩn hoá căn giữa & kích thước nút/ô chọn, mở rộng vùng đệm tai thỏ vật lý để không bị cắt chữ.
+  - Sửa triệt để quầng bóng mờ đằng sau ở chế độ **Viên thuốc** và **Bong bóng** (bỏ CSS `box-shadow` tràn khung và khoá `setHasShadow(false)` / `clearColor()` trên macOS `NSWindow`).
+- **Settings đơn giản & tương thích 100% bộ gõ hệ thống**:
+  - Gộp menu Settings từ 10 mục xuống **6 mục** gọn gàng: Chung & Tai thỏ · Tính năng & Nhắc nhở · AI & Họp · Đồng bộ & sao lưu · Quyền truy cập · Mini-Asi Pro.
+  - Bỏ hoàn toàn tuỳ chọn và cơ chế tự chuyển bàn phím/chặn `beforeinput` của bộ gõ tự chế — sử dụng trực tiếp bộ gõ tiếng Việt của hệ thống (macOS Telex/VNI, OpenKey, EVKey…).
+
 ## 0.22.0 (11/2026) — Họp: Take note, nghe lại từng ý, chọn AI, dịch biên bản, nhận dạng lại
 - **Take note**: AI viết lại toàn bộ lời nói thành *ghi chép đầy đủ* — sửa lỗi nhận dạng, bỏ từ đệm, chia đoạn theo ý / người nói,
   không lược ý. Mỗi đoạn có mốc nghe lại; lưu riêng trong Ghi chú › Biên bản họp. Đoạn nào AI không viết được (hoặc viết ngắn bất

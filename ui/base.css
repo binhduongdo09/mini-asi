@@ -1,33 +1,29 @@
-/* ───────── Mini-Asi — nền tảng giao diện (dùng chung cho tai thỏ & cửa sổ Cài đặt) ─────────
- * "Kính trên nền đen" theo Liquid Glass của macOS 27 (Golden Gate):
- *   - LỚP NỘI DUNG (danh sách, thẻ, chữ) nằm trên nền đặc: đen tuyền + mặt phẳng `--surface*`. Không dùng kính ở đây.
- *   - LỚP ĐIỀU KHIỂN (nút, thanh tab, ô tìm, thanh nhập, công tắc, nhóm chọn) là kính: nền `--glass*` + viền `--glass-edge`
- *     (mép trên sáng, mép dưới tối như macOS 27 — kính đục hơn, dễ đọc hơn bản macOS 26). Không chồng kính lên kính.
- *   - Bo góc đồng tâm: góc trong = góc ngoài − khoảng đệm (`--r-*`); điều khiển dạng viên thuốc (`--cap`).
- *   - Màu chỉ để báo trạng thái (đỏ = trễ, cam = cảnh báo, xanh lá = xong, tím = tập trung); `--tint` (xanh dương hệ thống)
- *     cho lựa chọn đang bật và vòng focus.
- * Kính ở đây vẽ bằng gradient + viền (không backdrop-filter trên từng nút) nên nhẹ máy; chỉ toast mới làm mờ nền.
+/* ───────── Mini-Asi — nền tảng giao diện phẳng (Flat Dark UI, dùng chung cho tai thỏ & Cài đặt) ─────────
+ *   - LỚP NỘI DUNG (danh sách, thẻ, chữ) dùng màu nền phẳng `--surface*` với viền mảnh `--hair`.
+ *   - LỚP ĐIỀU KHIỂN (nút, thanh tab, ô tìm, công tắc, nhóm chọn) dùng bề mặt phẳng `--glass*` rõ nét, không gradient lồi 3D.
+ *   - Mọi nút dùng flexbox căn giữa chuẩn và khoảng đệm rộng rãi để chữ tiếng Việt có dấu không bao giờ chạm viền.
+ *   - Màu nhấn `--tint` cho lựa chọn đang bật và vòng focus; màu đỏ / cam / xanh lá / tím chỉ để báo trạng thái.
  */
 :root {
-  --bg: #000;
-  /* lớp nội dung */
-  --surface: rgba(255, 255, 255, 0.06);
-  --surface-2: rgba(255, 255, 255, 0.1);
-  --surface-3: rgba(255, 255, 255, 0.16);
+  --bg: #0b0b0d;
+  /* lớp nội dung phẳng */
+  --surface: #141417;
+  --surface-2: #1e1e24;
+  --surface-3: #282830;
   --sep: rgba(255, 255, 255, 0.08);
-  --hair: inset 0 0 0 0.5px rgba(255, 255, 255, 0.07);
-  /* lớp điều khiển — Liquid Glass */
-  --glass: linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%);
-  --glass-hover: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.13) 100%);
-  --glass-strong: linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.18) 100%);
-  --glass-edge: inset 0 1px 0 rgba(255, 255, 255, 0.24), inset 0 0 0 0.5px rgba(255, 255, 255, 0.13), inset 0 -1px 0 rgba(0, 0, 0, 0.3);
-  --glass-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-  --white-glass: linear-gradient(180deg, #fff 0%, #e6e6eb 100%);
-  --white-edge: inset 0 1px 0 #fff, inset 0 -1px 0 rgba(0, 0, 0, 0.12), 0 1px 3px rgba(0, 0, 0, 0.35);
+  --hair: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  /* lớp điều khiển phẳng */
+  --glass: #222228;
+  --glass-hover: #2d2d35;
+  --glass-strong: #353540;
+  --glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+  --glass-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --white-glass: #ffffff;
+  --white-edge: none;
   /* chữ */
   --text: #fff;
-  --text-2: rgba(235, 235, 245, 0.64);
-  --text-3: rgba(235, 235, 245, 0.36);
+  --text-2: rgba(235, 235, 245, 0.68);
+  --text-3: rgba(235, 235, 245, 0.42);
   /* màu trạng thái */
   --red: #ff453a;
   --amber: #ff9f0a;
@@ -36,12 +32,12 @@
   --violet: #bf5af2;
   --tint: #0a84ff;
   --accent: transparent;
-  /* bo góc đồng tâm & viên thuốc */
-  --r-xs: 8px;
-  --r-sm: 12px;
-  --r-md: 16px;
-  --r-lg: 22px;
-  --cap: 999px;
+  /* bo góc phẳng đồng nhất */
+  --r-xs: 6px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --cap: 8px;
   --focus: 0 0 0 2.5px rgba(10, 132, 255, 0.55);
   --spring: cubic-bezier(0.32, 1.22, 0.37, 1);
   --ease: cubic-bezier(0.25, 0.8, 0.25, 1);
@@ -77,63 +73,63 @@ svg { flex: none; }
 .warn, .warn-txt { color: var(--amber); }
 .warn-txt { font-size: 12px; }
 
-/* ───────── Nút (viên thuốc kính) ───────── */
+/* ───────── Nút phẳng hiện đại (căn giữa chuẩn, không cắt chữ) ───────── */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  height: 30px; padding: 0 14px; border-radius: var(--cap); flex: none;
-  background: var(--glass); box-shadow: var(--glass-edge); color: var(--text); font-size: 13px; font-weight: 600; white-space: nowrap;
-  transition: background 0.15s, transform 0.18s var(--spring), opacity 0.15s, box-shadow 0.15s;
+  height: 32px; padding: 0 14px; border-radius: var(--cap); flex: none;
+  background: var(--glass); box-shadow: var(--glass-edge); color: var(--text); font-size: 13px; font-weight: 500; line-height: 1; white-space: nowrap; text-align: center;
+  transition: background 0.15s, transform 0.15s var(--ease), opacity 0.15s, box-shadow 0.15s;
 }
 .btn:hover:not(:disabled) { background: var(--glass-hover); }
-.btn:active:not(:disabled) { transform: scale(0.96); }
+.btn:active:not(:disabled) { transform: scale(0.97); }
 .btn:focus-visible { box-shadow: var(--glass-edge), var(--focus); }
 .btn svg { width: 14px; height: 14px; }
-.btn.sm { height: 26px; padding: 0 11px; font-size: 12px; gap: 5px; }
+.btn.sm { height: 28px; padding: 0 12px; border-radius: 7px; font-size: 12px; gap: 5px; }
 .btn.sm svg { width: 13px; height: 13px; }
-/* nút chính: kính trắng nổi bật */
-.btn.primary { background: var(--white-glass); box-shadow: var(--white-edge); color: #000; }
-.btn.primary:hover:not(:disabled) { background: linear-gradient(180deg, #fff 0%, #f4f4f7 100%); }
-.btn.danger { background: linear-gradient(180deg, #ff5a50 0%, #f23b30 100%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -1px 0 rgba(0, 0, 0, 0.18); color: #fff; }
-.btn.danger:hover:not(:disabled) { background: linear-gradient(180deg, #ff6f66 0%, #ff4b40 100%); }
+/* nút chính: trắng phẳng nổi bật */
+.btn.primary { background: #fff; box-shadow: none; color: #000; font-weight: 600; }
+.btn.primary:hover:not(:disabled) { background: #e5e5ea; }
+.btn.danger { background: var(--red); box-shadow: none; color: #fff; font-weight: 600; }
+.btn.danger:hover:not(:disabled) { background: #ff5b52; }
 /* nút phụ không viền: chỉ là chữ, rê chuột mới hiện nền */
 .btn.ghost { background: transparent; box-shadow: none; color: var(--text-2); }
 .btn.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
 
-/* nút biểu tượng nhỏ (tròn; rê chuột hiện kính) */
+/* nút biểu tượng nhỏ (vuông bo phẳng) */
 .ib {
-  display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; flex: none;
-  color: var(--text-2); transition: background 0.12s, color 0.12s, box-shadow 0.12s;
+  display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 7px; flex: none;
+  color: var(--text-2); line-height: 1; text-align: center; transition: background 0.12s, color 0.12s;
 }
-.ib:hover:not(:disabled) { background: var(--glass); box-shadow: var(--glass-edge); color: var(--text); }
+.ib:hover:not(:disabled) { background: var(--glass-hover); color: var(--text); }
 .ib svg { width: 15px; height: 15px; }
-.ib.txt { display: inline-flex; gap: 3px; width: auto; padding: 0 8px; border-radius: var(--cap); font-size: 11.5px; font-weight: 600; }
+.ib.txt { display: inline-flex; align-items: center; justify-content: center; gap: 4px; width: auto; height: 26px; padding: 0 10px; border-radius: 6px; font-size: 11.5px; font-weight: 600; line-height: 1; white-space: nowrap; }
 .ib.txt svg { width: 11px; height: 11px; }
 .ib.on { color: var(--amber); }
 .ib.danger { color: var(--red); background: rgba(255, 69, 58, 0.14); }
 
 /* nút chữ */
 .link {
-  display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); font-size: 12.5px; font-weight: 600;
-  padding: 3px 6px; border-radius: var(--cap); white-space: nowrap; flex: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px; color: var(--text-2); font-size: 12.5px; font-weight: 600; line-height: 1;
+  padding: 5px 8px; border-radius: 6px; white-space: nowrap; flex: none;
 }
-.link:hover { color: var(--text); }
+.link:hover { color: var(--text); background: var(--surface-2); }
 .link svg { width: 13px; height: 13px; }
 .link.center { align-self: center; margin: 6px auto 0; }
 .link.danger { color: var(--red); }
 .link.ok { color: var(--green); }
 
-/* gợi ý / bộ lọc dạng viên thuốc */
+/* gợi ý / bộ lọc dạng chip phẳng */
 .chip-btn {
-  height: 28px; padding: 0 12px; border-radius: var(--cap); background: var(--glass); box-shadow: var(--glass-edge); color: var(--text-2);
-  font-size: 12.5px; font-weight: 600; white-space: nowrap; flex: none; transition: background 0.15s, color 0.15s, transform 0.18s var(--spring);
+  display: inline-flex; align-items: center; justify-content: center; height: 30px; padding: 0 12px; border-radius: var(--cap); background: var(--surface-2); box-shadow: var(--hair); color: var(--text-2);
+  font-size: 12.5px; font-weight: 500; line-height: 1; white-space: nowrap; flex: none; transition: background 0.15s, color 0.15s, transform 0.15s var(--ease);
 }
 .chip-btn:hover { background: var(--glass-hover); color: var(--text); }
 .chip-btn:active { transform: scale(0.97); }
-.chip-btn.on { background: var(--white-glass); box-shadow: var(--white-edge); color: #000; }
+.chip-btn.on { background: #fff; box-shadow: none; color: #000; font-weight: 600; }
 
 .tag {
-  display: inline-flex; align-items: center; gap: 3px; height: 18px; padding: 0 7px; margin-left: 6px; border-radius: var(--cap);
-  font-size: 10.5px; font-weight: 700; background: var(--surface-2); color: var(--text-2); vertical-align: 1px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px; height: 20px; padding: 0 8px; margin-left: 6px; border-radius: 6px;
+  font-size: 11px; font-weight: 600; line-height: 1; background: var(--surface-2); color: var(--text-2); vertical-align: 1px; flex: none;
 }
 .tag svg { width: 10px; height: 10px; }
 .tag.red { background: rgba(255, 69, 58, 0.18); color: #ff6961; }
@@ -143,35 +139,36 @@ svg { flex: none; }
 
 /* ───────── Ô nhập ───────── */
 .field {
-  width: 100%; height: 34px; padding: 0 12px; border-radius: 10px; border: 0;
-  background: var(--surface); box-shadow: var(--hair); color: var(--text); font-size: 13.5px; outline: none;
+  width: 100%; height: 34px; padding: 0 12px; border-radius: 8px; border: 0;
+  background: var(--surface-2); box-shadow: var(--hair); color: var(--text); font-size: 13.5px; outline: none;
   user-select: text; -webkit-user-select: text; transition: box-shadow 0.15s, background 0.15s;
 }
 .field::placeholder { color: var(--text-3); }
-.field:focus { background: var(--surface-2); box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.18), var(--focus); }
+.field:focus { background: var(--surface-3); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18), var(--focus); }
 textarea.field { height: auto; padding: 8px 12px; line-height: 1.45; resize: none; }
-/* nút bật danh sách chọn: viên thuốc kính + mũi tên đôi */
+/* nút chọn danh sách phẳng */
 select.field {
-  appearance: none; -webkit-appearance: none; width: auto; padding: 0 28px 0 12px; border-radius: var(--cap); font-weight: 500;
-  background: var(--glass); box-shadow: var(--glass-edge);
-  background-image: var(--glass), url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='12' viewBox='0 0 8 12' fill='none' stroke='%23ebebf5' stroke-opacity='.7' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1.5 4.5 4 2l2.5 2.5M1.5 7.5 4 10l2.5-2.5'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: 0 0, calc(100% - 10px) 50%; background-size: auto, 8px 12px;
+  -webkit-appearance: none; appearance: none; width: auto; height: 32px; line-height: 18px; padding: 6px 34px 6px 12px; border-radius: 8px; font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background-color: var(--surface-2); box-shadow: var(--glass-edge);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6' fill='none' stroke='%23ebebf5' stroke-opacity='.75' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M1.5 1.5 5 4.5 8.5 1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 10px 6px;
 }
+select.field::-ms-expand { display: none; }
+select.field::picker-icon { display: none; }
 select.field:focus { box-shadow: var(--glass-edge), var(--focus); }
 
-/* Công tắc kiểu macOS 27: rãnh viên thuốc, núm kính dẹt */
-.switch { position: relative; width: 40px; height: 24px; border-radius: var(--cap); background: var(--surface-3); box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.1), inset 0 1px 2px rgba(0, 0, 0, 0.35); flex: none; transition: background 0.22s; }
-.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 24px; height: 20px; border-radius: var(--cap); background: var(--white-glass); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), inset 0 1px 0 #fff; transition: transform 0.28s var(--spring), width 0.18s var(--ease); }
-.switch:active::after { width: 27px; }
-.switch.on { background: var(--tint); }
-.switch.on::after { transform: translateX(12px); }
-.switch.on:active::after { transform: translateX(9px); }
+/* Công tắc phẳng */
+.switch { position: relative; width: 38px; height: 22px; border-radius: 99px; background: var(--surface-3); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); flex: none; transition: background 0.2s; }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: none; transition: transform 0.2s var(--ease); }
+.switch.on { background: var(--tint); box-shadow: none; }
+.switch.on::after { transform: translateX(16px); }
 
-/* Nhóm nút chọn 1: rãnh viên thuốc, mục đang chọn là miếng kính nổi */
-.seg { display: inline-flex; padding: 2px; border-radius: var(--cap); background: var(--surface); box-shadow: var(--hair); gap: 1px; flex: none; }
-.seg button { height: 24px; padding: 0 11px; border-radius: var(--cap); font-size: 12px; font-weight: 600; color: var(--text-2); white-space: nowrap; transition: color 0.15s, background 0.15s; }
+/* Nhóm nút chọn 1 phẳng */
+.seg { display: inline-flex; align-items: center; padding: 3px; border-radius: 9px; background: var(--surface); box-shadow: var(--hair); gap: 2px; flex: none; }
+.seg button { display: inline-flex; align-items: center; justify-content: center; height: 26px; padding: 0 12px; border-radius: 6px; font-size: 12px; font-weight: 500; line-height: 1; color: var(--text-2); white-space: nowrap; transition: color 0.15s, background 0.15s; }
 .seg button:hover { color: var(--text); }
-.seg button.on { background: var(--glass-strong); box-shadow: var(--glass-edge), 0 1px 3px rgba(0, 0, 0, 0.35); color: var(--text); }
+.seg button.on { background: var(--surface-3); box-shadow: none; color: #fff; font-weight: 600; }
 
 /* ô tick vuông bo */
 .box { width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid var(--text-3); display: grid; place-items: center; flex: none; color: transparent; transition: 0.15s; }
@@ -185,8 +182,8 @@ select.field:focus { box-shadow: var(--glass-edge), var(--focus); }
 
 /* Thanh trượt: rãnh dày, núm kính dạng viên thuốc */
 input[type="range"] { -webkit-appearance: none; appearance: none; height: 18px; background: transparent; cursor: pointer; }
-input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--surface-3); box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.3); }
-input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 16px; margin-top: -5px; border-radius: var(--cap); background: var(--white-glass); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5), inset 0 1px 0 #fff; transition: transform 0.15s var(--spring); }
+input[type="range"]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--surface-3); box-shadow: none; }
+input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; margin-top: -5px; border-radius: 50%; background: #fff; box-shadow: none; transition: transform 0.15s var(--ease); }
 input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.12); }
 
 /* Vòng xoay chờ & ba chấm */
@@ -213,14 +210,14 @@ input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.12); }
 /* Giảm độ trong suốt: kính thành mặt đặc */
 @media (prefers-reduced-transparency: reduce) {
   :root {
-    --glass: linear-gradient(180deg, #2c2c2e, #2c2c2e);
-    --glass-hover: linear-gradient(180deg, #3a3a3c, #3a3a3c);
-    --glass-strong: linear-gradient(180deg, #48484a, #48484a);
-    --surface: #1c1c1e;
-    --surface-2: #2c2c2e;
-    --surface-3: #3a3a3c;
+    --glass: #282830;
+    --glass-hover: #353540;
+    --glass-strong: #42424e;
+    --surface: #18181c;
+    --surface-2: #222228;
+    --surface-3: #2d2d35;
   }
-  .toast { -webkit-backdrop-filter: none; backdrop-filter: none; background: #3a3a3c; }
+  .toast { -webkit-backdrop-filter: none; backdrop-filter: none; background: #2d2d35; }
 }
 /* Tăng tương phản: viền rõ, chữ phụ sáng hơn */
 @media (prefers-contrast: more) {

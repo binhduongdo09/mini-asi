@@ -410,6 +410,20 @@ pub struct SysInfo {
     pub battery_pct: Option<u32>,
     pub charging: Option<bool>,
     pub uptime_days: Option<f64>,
+    pub temp_c: Option<f32>,
+}
+
+/// Đọc nhiệt độ (°C) từ kết quả `ioreg -rn AppleSmartBattery -d 1` (ưu tiên VirtualTemperature, rồi Temperature)
+pub fn parse_ioreg_temp(out: &str) -> Option<f32> {
+    let pick = |key: &str| -> Option<f32> {
+        let prefix = format!("\"{key}\" = ");
+        out.lines()
+            .find_map(|l| l.trim().strip_prefix(&prefix))
+            .and_then(|v| v.trim().parse::<f32>().ok())
+            .map(|v| if v > 150.0 { v / 100.0 } else { v })
+            .filter(|v| (18.0..=105.0).contains(v))
+    };
+    pick("VirtualTemperature").or_else(|| pick("Temperature"))
 }
 
 pub fn sysinfo() -> SysInfo {
@@ -446,6 +460,9 @@ pub fn sysinfo() -> SysInfo {
                 s.uptime_days = Some((chrono::Utc::now().timestamp() - sec) as f64 / 86400.0);
             }
         }
+        if let Some(io) = run("ioreg", &["-rn", "AppleSmartBattery", "-d", "1"]) {
+            s.temp_c = parse_ioreg_temp(&io);
+        }
     }
     #[cfg(target_os = "linux")]
     {
@@ -462,6 +479,9 @@ pub fn sysinfo() -> SysInfo {
         }
         if let Ok(u) = std::fs::read_to_string("/proc/uptime") {
             s.uptime_days = u.split_whitespace().next().and_then(|x| x.parse::<f64>().ok()).map(|x| x / 86400.0);
+        }
+        if let Ok(t) = std::fs::read_to_string("/sys/class/thermal/thermal_zone0/temp") {
+            s.temp_c = t.trim().parse::<f32>().ok().map(|v| if v > 150.0 { v / 1000.0 } else { v }).filter(|v| (18.0..=105.0).contains(v));
         }
     }
     let _ = run;
@@ -749,5 +769,8 @@ mod tests {
     fn sysinfo_reads() {
         let s = sysinfo();
         assert!(s.cores >= 1);
+        assert_eq!(parse_ioreg_temp("  \"Temperature\" = 3077\n  \"VirtualTemperature\" = 3450\n"), Some(34.5));
+        assert_eq!(parse_ioreg_temp("  \"Temperature\" = 3120\n"), Some(31.2));
+        assert_eq!(parse_ioreg_temp("  \"Temperature\" = 0\n"), None);
     }
 }

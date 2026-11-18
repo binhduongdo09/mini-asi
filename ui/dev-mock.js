@@ -25,7 +25,7 @@
   const settings = { break_enabled: true, break_minutes: 50, water_enabled: true, water_minutes: 60, sleep_hour: 23, focus_mode: false, launch_at_login: true, license_key: null, pdf_quality: "ebook", shortcut: "CmdOrCtrl+Shift+Space",
     clip_enabled: true, clip_max: 200, clip_shortcut: "Control+Shift+V", clip_autopaste: false, sync_reminders: true, reminders_list: "Mini-Asi", sync_notes: true, notes_folder: "Mini-Asi",
     show_calendar: true, event_alert_minutes: 10, voice_lang: "vi-VN", journal_enabled: true, journal_hour: 21,
-    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", notch_w: 0, notch_h: 0, icon_size: q.get("icons") || "large", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", modules: q.get("mods") ? q.get("mods").split(",").filter(Boolean) : ["threads", "clean", "focus"], apple_ai_enabled: true, ai_provider: q.get("brain") || "apple", ai_model_openai: "", ai_model_gemini: "", ai_model_claude: "", ai_cloud_context: true, auto_update_check: true, update_repo: "binhduongdo09/mini-asi", voice_reply: false, tts_engine: "nghi", tts_voice: "Mai Phương", meeting_ai: "apple", meeting_auto_summary: true, meeting_system_audio: true, meeting_live: "auto", weather_place: "", ui_lang: q.get("lang") || "vi", peek_overdue: true, hover_mic: true };
+    display_mode: q.get("disp") || "notch", vocab_enabled: true, vocab_count: 3, wing_size: q.get("wing") || "s", notch_w: 0, notch_h: 0, icon_size: q.get("icons") || "large", idle_items: q.get("idle") ? q.get("idle").split(",") : ["focus", "overdue", "event", "next", "tasks", "mic"], bubble_x: 0, bubble_y: 0, threads_embed_beta: false, viet_engine: "auto", modules: q.get("mods") ? q.get("mods").split(",").filter(Boolean) : ["threads", "clean", "focus"], apple_ai_enabled: true, ai_provider: q.get("brain") || "apple", ai_model_openai: "", ai_model_gemini: "", ai_model_claude: "", ai_cloud_context: true, auto_update_check: true, update_repo: "binhduongdo09/mini-asi", voice_reply: false, tts_engine: "nghi", tts_voice: "Mai Phương", meeting_ai: "apple", meeting_auto_summary: true, meeting_system_audio: true, meeting_live: "auto", weather_place: "", ui_lang: q.get("lang") || "vi", peek_overdue: true, peek_notifs: true, hover_mic: true };
   const today0 = new Date(); today0.setHours(0, 0, 0, 0);
   const at = (h, m = 0) => today0.getTime() + h * H + m * 60e3;
   const events = [
@@ -45,6 +45,11 @@
   const disk = { total_bytes: 245e9, free_bytes: Number(q.get("free") || 21.4e9), free_percent: 0, level: "ok" };
   disk.free_percent = (disk.free_bytes / disk.total_bytes) * 100;
   disk.level = disk.free_percent < 5 ? "critical" : disk.free_percent < 15 ? "warn" : "ok";
+  const sys = { cpu_load: 0.24, cores: 8, mem_used_pct: 68.5, mem_total_gb: 16, battery_pct: 86, charging: true, uptime_days: 3.2, temp_c: 41.5 };
+  let notifs = [
+    { id: 1, at: now - 3 * 60e3, kind: "reminder", title: "Gửi báo giá cho anh Tuấn", body: "Đến giờ rồi", tab: "tasks" },
+    { id: 2, at: now - 14 * 60e3, kind: "disk", title: "Ổ đĩa sắp đầy", body: "Còn trống 21.4 GB — bấm để dọn rác", tab: "clean" },
+  ];
 
   function lateness() {
     const t = Date.now();
@@ -58,7 +63,7 @@
     const t = Date.now();
     const open = tasks.filter((x) => !x.done_at);
     const next = open.filter((x) => x.due && x.due >= t).sort((a, b) => a.due - b.due)[0];
-    return { lateness: lateness(), next: next ? { id: next.id, title: next.title, due: next.due } : null, open_count: open.length, note_count: notes.length, clip_count: clips.length, disk, session_minutes: session, today_minutes: 312, break_minutes: settings.break_minutes, focus_until: focusUntil, sleepy: q.get("sleepy") === "1", focus_mode: settings.focus_mode, pro, now: t, threads_unread: q.get("threads") === "1" ? 4 : 0,
+    return { lateness: lateness(), next: next ? { id: next.id, title: next.title, due: next.due } : null, open_count: open.length, note_count: notes.length, clip_count: clips.length, disk, sys, notifs: [...notifs], session_minutes: session, today_minutes: 312, break_minutes: settings.break_minutes, focus_until: focusUntil, sleepy: q.get("sleepy") === "1", focus_mode: settings.focus_mode, pro, now: t, threads_unread: q.get("threads") === "1" ? 4 : 0,
       next_event: events.filter((e) => !e.all_day && e.end > t).sort((a, b) => a.start - b.start)[0] || null };
   }
   function parse(text) {
@@ -89,9 +94,10 @@
   }
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const H_ = {
-    get_geometry: () => ({ has_notch: q.get("notch") !== "0", notch_width: 185, notch_height: 32, screen_x: 0, screen_y: 0, screen_width: 1512, screen_height: 982, platform: "macos" }),
+    get_geometry: () => ({ has_notch: q.get("notch") !== "0", notch_width: 190, notch_height: 36, screen_x: 0, screen_y: 0, screen_width: 1512, screen_height: 982, platform: "macos" }),
     set_frame: () => null, set_interactive: ({ on }) => (on ? (settings.viet_engine === "off" ? null : settings.viet_engine === "vni" ? "vni" : "telex") : null),
     get_status: status,
+    clear_notifs: ({ id: nid }) => { notifs = nid == null ? [] : notifs.filter((x) => x.id !== nid); },
     parse_task: ({ text }) => parse(text),
     add_task: ({ text }) => { const p = parse(text); const t = { id: ++id, title: p.title, due: p.due, created: Date.now(), done_at: null }; tasks.push(t); emit("status", status()); return t; },
     list_tasks: () => tasks.map((t) => ({ ...t })),
@@ -121,7 +127,7 @@
     ensure_camera_perm: async () => true,
     clip_copy_image: () => null,
     reveal: () => null,
-    clean_scan: async () => { await wait(1200); return { report: report(), disk, pro }; },
+    clean_scan: async () => { await wait(1200); return { report: report(), disk, pro, sys }; },
     clean_run: async ({ rules, paths }) => { await wait(900); return { dry_run: false, deleted_bytes: 15.95e9, trashed_bytes: 0, items_done: 11, failures: [], locked_rules: [] }; },
     clean_history: () => [], open_disk_settings: () => null,
     health_break_done: () => { session = 0; }, health_snooze: () => null,
@@ -217,7 +223,7 @@
     set_display: ({ mode }) => { settings.display_mode = mode; emit("settings-changed", { ...settings }); const u = new URL(location.href); u.searchParams.set("disp", mode); history.replaceState(null, "", u); },
     move_bubble: ({ x, y, save }) => { if (save) { settings.bubble_x = x <= 0 && y <= 0 ? 0 : x; settings.bubble_y = x <= 0 && y <= 0 ? 0 : y; } }, threads_close: () => null,
     update_info: () => ({
-      current_version: "0.10.0",
+      current_version: "0.23.0",
       repo: "binhduongdo09/mini-asi",
       auto_check: settings.auto_update_check,
       status: {
@@ -225,9 +231,9 @@
         percent: q.get("update") === "1" ? 0 : 100,
         downloaded_bytes: 0,
         total_bytes: q.get("update") === "1" ? 14.2e6 : 0,
-        message: q.get("update") === "1" ? "Đã có phiên bản mới v0.11.0" : "Bạn đang dùng bản mới nhất (v0.10.0)",
+        message: q.get("update") === "1" ? "Đã có phiên bản mới v0.24.0" : "Bạn đang dùng bản mới nhất (v0.23.0)",
         error: null,
-        release: q.get("update") === "1" ? { current_version: "0.10.0", latest_version: "0.11.0", tag: "v0.11.0", title: "Mini-Asi v0.11.0", notes: "Bổ sung tự động cập nhật trong app & ghim vị trí bất kỳ trên màn hình", published_at: new Date().toISOString(), html_url: "https://github.com/binhduongdo09/mini-asi/releases", has_update: true, asset: { id: 1, name: "Mini-Asi_0.11.0_universal.dmg", size: 14.2e6, browser_download_url: "", api_url: "" } } : null,
+        release: q.get("update") === "1" ? { current_version: "0.23.0", latest_version: "0.24.0", tag: "v0.24.0", title: "Mini-Asi v0.24.0", notes: "Bổ sung tự động cập nhật trong app & ghim vị trí bất kỳ trên màn hình", published_at: new Date().toISOString(), html_url: "https://github.com/binhduongdo09/mini-asi/releases", has_update: true, asset: { id: 1, name: "Mini-Asi_0.24.0_universal.dmg", size: 14.2e6, browser_download_url: "", api_url: "" } } : null,
       },
     }),
     update_check: async () => { await wait(500); return H_.update_info(); },
@@ -275,7 +281,6 @@
       { id: "notifications", name: "Thông báo", why: "Nhắc việc, nhắc nghỉ, báo giờ họp", state: "granted", required: true },
       { id: "microphone", name: "Micro", why: "Ghi chú, thêm việc, nhật ký bằng giọng nói", state: "granted", required: true },
       { id: "speech", name: "Nhận dạng giọng nói", why: "Chuyển giọng nói tiếng Việt / Anh thành chữ", state: "granted", required: true },
-      { id: "camera", name: "Camera", why: "Gương xem nhanh & bật/tắt camera trên tai thỏ (tuỳ chọn)", state: "granted", required: false },
       { id: "calendar", name: "Lịch", why: "Hiện lịch họp, báo trước giờ họp", state: "granted" },
       { id: "automation", name: "Lời nhắc & Ghi chú", why: "Đồng bộ việc và ghi chú với app Apple", state: "manual" },
       { id: "accessibility", name: "Trợ năng", why: "Tự dán từ Clipboard", state: "denied" },

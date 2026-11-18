@@ -199,80 +199,20 @@ pub(crate) fn on_main<T: Send + 'static>(app: &AppHandle, f: impl FnOnce() -> T 
     rx.recv_timeout(Duration::from_secs(3)).ok()
 }
 
-/// Mở rộng cần bàn phím → focus. Thu gọn → trả bàn phím cho app trước đó.
-/// Trả về chế độ bộ gõ tiếng Việt của Asi ("telex" | "vni") nếu cần bật.
-///
-/// Vì sao: bộ gõ tiếng Việt có sẵn của macOS ghép chữ không ổn định trong cửa sổ nằm trên
-/// thanh menu. Khi mở bảng, Asi tạm chuyển bàn phím sang ABC trước khi focus cửa sổ và tự gõ dấu (ui/vnkey.js);
-/// khi đóng bảng (hoặc khi người dùng bấm ra ngoài lúc đang ghim popup) thì trả lại đúng bộ gõ cũ.
+/// Mở rộng cần bàn phím → đưa app ra trước & focus để bộ gõ hệ thống hoạt động tự nhiên.
+/// Thu gọn → trả bàn phím cho app trước đó. Không tự ý đổi bộ gõ hệ thống của người dùng.
 #[tauri::command]
 pub(crate) async fn set_interactive(app: AppHandle, win: WebviewWindow, st: S<'_>, on: bool, keep_focus: Option<bool>) -> Result<Option<String>, String> {
-    let (engine, tts_on) = {
-        let g = st.store.lock().unwrap();
-        (g.settings.viet_engine.clone(), g.settings.voice_reply)
-    };
     if on {
-        if tts_on {
+        if st.store.lock().unwrap().settings.voice_reply {
             st.tts.ensure_worker(); // nạp sẵn giọng khi mở tai thỏ
         }
-        if engine == "off" {
-            if let Some(prev) = st.ime_prev.lock().unwrap().take() {
-                on_main(&app, move || notch_native::ime::select(&prev));
-            }
-            if keep_focus != Some(false) {
-                let _ = win.set_focus();
-            }
-            return Ok(None);
-        }
-        let (cur, enabled) = on_main(&app, || {
-            (notch_native::ime::current().unwrap_or_default(), notch_native::ime::enabled())
-        })
-        .unwrap_or_default();
-        let is_ime = !cur.is_empty() && !notch_native::ime::is_latin_layout(&cur);
-        if is_ime || st.ime_prev.lock().unwrap().is_none() {
-            if !cur.is_empty() {
-                *st.ime_last.lock().unwrap() = cur.clone();
-            }
-        }
-        let effective = if is_ime {
-            cur.clone()
-        } else {
-            st.ime_prev.lock().unwrap().clone().unwrap_or_else(|| cur.clone())
-        };
-        let sys_mode = notch_native::ime::vietnamese_mode(&effective)
-            .or_else(|| enabled.iter().find_map(|id| notch_native::ime::vietnamese_mode(id)))
-            .or(Some("telex"));
-        let mode = match engine.as_str() {
-            "telex" => Some("telex"),
-            "vni" => Some("vni"),
-            _ => sys_mode,
-        };
-        if is_ime {
-            // Chuyển bàn phím hệ thống sang ABC/U.S. TRƯỚC khi focus cửa sổ để tránh bộ gõ ngoài kích hoạt composition
-            let ok = on_main(&app, notch_native::ime::select_latin).unwrap_or(false);
-            if ok {
-                let mut prev_guard = st.ime_prev.lock().unwrap();
-                if prev_guard.is_none() {
-                    *prev_guard = Some(cur);
-                }
-            } else {
-                // Không có bàn phím ABC/U.S. nào đang bật → không chuyển được.
-                // Tắt bộ gõ của Asi để khỏi ghép chữ hai lần, để bộ gõ hệ thống tự lo.
-                let _ = app.emit("ime-warn", cur);
-                if keep_focus != Some(false) {
-                    let _ = win.set_focus();
-                }
-                return Ok(None);
-            }
-        }
         if keep_focus != Some(false) {
+            let _ = on_main(&app, notch_native::activate_app);
             let _ = win.set_focus();
         }
-        Ok(mode.map(String::from))
+        Ok(None)
     } else {
-        if let Some(prev) = st.ime_prev.lock().unwrap().take() {
-            on_main(&app, move || notch_native::ime::select(&prev));
-        }
         if keep_focus != Some(true) {
             // Đang dùng cửa sổ Threads của Mini-Asi thì không trả focus cho app khác
             let threads_front = app.get_webview_window("threads-web").is_some_and(|w| w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false));

@@ -137,6 +137,7 @@ pub fn run() {
                 chat_log: Mutex::new(vec![]),
                 pending_ask: Mutex::new(None),
                 update: Mutex::new(updater::UpdateProgress::default()),
+                notifs: Mutex::new(vec![]),
             });
             app.manage(st.clone());
 
@@ -161,16 +162,23 @@ pub fn run() {
                 } else {
                     let wing = match s.settings.wing_size.as_str() {
                         "hidden" => 0.0,
-                        "xs" => 28.0,
-                        "s" => 56.0,
-                        "m" => 88.0,
-                        "l" => 128.0,
+                        "xs" => 56.0,
+                        "s" => 82.0,
+                        "m" => 112.0,
+                        "l" => 148.0,
                         "custom" => s.settings.notch_w.clamp(0.0, 180.0),
-                        _ => if s.settings.notch_w > 0.0 { s.settings.notch_w.clamp(0.0, 180.0) } else { 56.0 },
+                        _ => if s.settings.notch_w > 0.0 { s.settings.notch_w.clamp(0.0, 180.0) } else { 82.0 },
                     };
                     let on_notch = disp == "notch" && geo.has_notch;
-                    let base_w = if on_notch { geo.notch_width + wing * 2.0 } else { (130.0 + wing * 1.4).max(90.0) };
-                    let bar_h = if s.settings.notch_h >= 20.0 { s.settings.notch_h.clamp(20.0, 54.0) } else if on_notch { geo.notch_height } else { 32.0 };
+                    let safe_notch_h = (geo.notch_height + 4.0).ceil().max(36.0);
+                    let base_w = if on_notch { geo.notch_width + 20.0 + wing * 2.0 } else { (150.0 + wing * 1.4).max(120.0) };
+                    let bar_h = if on_notch {
+                        if s.settings.notch_h >= 24.0 { s.settings.notch_h.clamp(24.0, 54.0).max(safe_notch_h) } else { safe_notch_h }
+                    } else if s.settings.notch_h >= 24.0 {
+                        s.settings.notch_h.clamp(24.0, 54.0)
+                    } else {
+                        36.0
+                    };
                     (base_w + 36.0, bar_h + 20.0)
                 }
             };
@@ -229,7 +237,7 @@ pub fn run() {
             clean_scan, clean_run, clean_history, open_disk_settings,
             health_break_done, health_snooze, focus_start, focus_stop,
             get_settings, save_settings, patch_settings, license_info, activate_license, deactivate_license, quit,
-            get_status, asi_ask, asi_action, asi_reset, ai_info, ai_set_key, ai_test, asi_speak, asi_stop_speaking, apple_ai_status,
+            get_status, clear_notifs, asi_ask, asi_action, asi_reset, ai_info, ai_set_key, ai_test, asi_speak, asi_stop_speaking, apple_ai_status,
             clip_list, clip_copy, clip_merge, clip_copy_files, clip_copy_image, clip_pin, clip_label, clip_delete, clip_clear, clip_image, clip_to_note, clip_to_task,
             accessibility_status, open_privacy,
             voice_start, voice_stop, voice_cancel,

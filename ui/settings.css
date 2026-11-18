@@ -11,7 +11,7 @@ body.settings { background: #1b1b1d; overflow: hidden; }
 .nav-it:hover { background: var(--surface); }
 .nav-it.on { background: var(--tint); color: #fff; font-weight: 600; }
 /* ô biểu tượng màu (macOS 27 đưa màu trở lại thanh bên) */
-.ni { width: 22px; height: 22px; border-radius: 6.5px; display: grid; place-items: center; flex: none; color: #fff; background: #8e8e93; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -1px 0 rgba(0, 0, 0, 0.14); }
+.ni { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; flex: none; color: #fff; background: #8e8e93; }
 .ni svg { width: 13px; height: 13px; stroke-width: 2.1; }
 [data-sec="general"] .ni { background: #8e8e93; }
 [data-sec="look"] .ni { background: #1c1c1e; box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.18); }
@@ -46,11 +46,11 @@ h3 { margin: 22px 6px 7px; font-size: 12.5px; font-weight: 600; color: var(--tex
 .srow input[type="range"] { width: 180px; }
 .srow .val { width: 46px; text-align: right; font-variant-numeric: tabular-nums; font-size: 12.5px; }
 .srow .inline { font-size: 12.5px; }
-.srow .field { height: 28px; font-size: 13px; }
-.srow select.field { height: 28px; font-size: 12.5px; max-width: 260px; text-overflow: ellipsis; }
-.numbox { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--text-2); }
-.field.num { width: 58px; height: 28px; text-align: center; padding: 0 6px; }
-kbd { font: 600 12px/1 -apple-system, system-ui; padding: 6px 10px; border-radius: var(--cap); background: var(--glass); box-shadow: var(--glass-edge); color: var(--text); }
+.srow .field { height: 32px; font-size: 13px; }
+.srow select.field { height: 32px; line-height: 18px; padding: 6px 34px 6px 12px; font-size: 12.5px; max-width: 240px; min-width: 0; flex: 0 1 auto; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
+.numbox { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); }
+.field.num { width: 62px; height: 32px; text-align: center; padding: 0 8px; }
+kbd { display: inline-flex; align-items: center; justify-content: center; height: 28px; font: 600 12px/1 -apple-system, system-ui; padding: 0 10px; border-radius: 6px; background: var(--surface-2); box-shadow: var(--hair); color: var(--text); }
 
 /* hàng có ô tick (màu nhấn của hệ thống như hộp kiểm macOS) */
 .check-row { cursor: pointer; min-height: 40px; }
@@ -77,8 +77,8 @@ kbd { font: 600 12px/1 -apple-system, system-ui; padding: 6px 10px; border-radiu
 .srow.pack b { font-weight: 600; }
 .srow.voice { padding-left: 14px; }
 .srow.voice.on { background: rgba(255, 255, 255, 0.04); }
-.vav { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--glass); box-shadow: var(--glass-edge); font-size: 11px; font-weight: 700; color: var(--text-2); flex: none; }
-.srow.voice.on .vav { background: var(--white-glass); box-shadow: var(--white-edge); color: #000; }
+.vav { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; background: var(--surface-2); box-shadow: var(--hair); font-size: 11px; font-weight: 700; color: var(--text-2); flex: none; }
+.srow.voice.on .vav { background: #fff; box-shadow: none; color: #000; }
 .prog { font-size: 12px; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .seg button { font-size: 11.5px; }
 .inline-link { padding: 0; font-size: inherit; color: var(--text); text-decoration: underline; text-underline-offset: 2px; }

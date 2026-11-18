@@ -272,11 +272,10 @@ pub(crate) fn update_loop(app: AppHandle, st: Arc<AppState>) {
             if let Some(rel) = p.release.filter(|r| r.has_update) {
                 if notified_ver != rel.latest_version {
                     notified_ver = rel.latest_version.clone();
-                    notify(
-                        &app,
-                        &format!("✨ Đã có Mini-Asi v{}", rel.latest_version),
-                        "Mở tai thỏ và bấm “Cập nhật ngay” để nâng cấp tự động nhé.",
-                    );
+                    let title = format!("✨ Đã có Mini-Asi v{}", rel.latest_version);
+                    let body = tl(&app, "Mở tai thỏ và bấm “Cập nhật” để nâng cấp tự động nhé.", "Open Mini-Asi and click Update to upgrade automatically.");
+                    notify(&app, &title, &body);
+                    push_notif(&app, "update", &title, &body, "home");
                     let _ = app.emit("update-available", &rel);
                 }
             }

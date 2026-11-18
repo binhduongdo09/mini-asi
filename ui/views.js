@@ -74,6 +74,11 @@
     }
     document.addEventListener("asi-chat", () => { if (here("home")) drawChat(); });
     document.addEventListener("asi-status", () => {
+      if (here("clean")) {
+        const g = view.querySelector(".sys-grid");
+        if (g) g.innerHTML = sysGridHtml(scan ? scan.disk : A.status && A.status.disk, A.status && A.status.sys);
+        return;
+      }
       if (!here("home") || A.chat.length) return;
       drawChat(); // chỉ vẽ lại phần trên, không đụng ô đang gõ
       const inp = $("#chatInput");
@@ -327,12 +332,45 @@
       sel = { rules: new Set(), paths: new Set() };
       for (const r of scan.report.rules) if (!r.locked && r.level === "safe" && r.id !== "system-trash" && r.bytes > 0) sel.rules.add(r.id);
     }
+    function sysGridHtml(disk, sys) {
+      const cpuPct = sys && sys.cpu_load != null ? Math.min(100, Math.round(sys.cpu_load * 100)) : null;
+      const ramPct = sys && sys.mem_used_pct != null ? Math.round(sys.mem_used_pct) : null;
+      const ramSub = sys && sys.mem_total_gb != null ? `${(sys.mem_total_gb * (sys.mem_used_pct || 0) / 100).toFixed(1)}/${sys.mem_total_gb.toFixed(0)} GB` : "Bộ nhớ";
+      const ssdPct = disk ? Math.round(100 - (disk.free_percent || 0)) : null;
+      const tempC = sys && sys.temp_c != null ? sys.temp_c : null;
+      const card = (lbl, val, sub, pct, lv = 0) => `<div class="sys-card lv${lv}">
+        <div class="sys-top"><span>${lbl}</span><b>${val}</b></div>
+        <div class="sys-sub">${sub}</div>
+        ${pct != null ? `<div class="sys-bar"><i style="width:${Math.max(4, Math.min(100, pct))}%"></i></div>` : ""}
+      </div>`;
+      return `${card("CPU", cpuPct != null ? `${cpuPct}%` : "—", sys && sys.cores ? `${sys.cores} nhân` : "Tải hệ thống", cpuPct, cpuPct >= 85 ? 2 : cpuPct >= 65 ? 1 : 0)}
+        ${card("RAM", ramPct != null ? `${ramPct}%` : "—", ramSub, ramPct, ramPct >= 90 ? 2 : ramPct >= 75 ? 1 : 0)}
+        ${card("SSD", ssdPct != null ? `${ssdPct}%` : "—", disk ? `Còn ${bytes(disk.free_bytes)}` : "Ổ đĩa", ssdPct, disk && disk.level === "critical" ? 2 : disk && disk.level === "warn" ? 1 : 0)}
+        ${card("Nhiệt độ", tempC != null ? `${tempC.toFixed(1)}°C` : "—", tempC == null ? "Không có cảm biến" : tempC >= 80 ? "Máy nóng" : tempC >= 60 ? "Hơi ấm" : "Bình thường", tempC != null ? Math.min(100, Math.round((tempC / 95) * 100)) : null, tempC >= 80 ? 2 : tempC >= 60 ? 1 : 0)}`;
+    }
     function viewClean() {
+      if (window.__asiAutoScan && !scanning) {
+        window.__asiAutoScan = false;
+        scanning = true; cleanResult = null; confirmClean = false;
+        flashMood("focus", 60000);
+        api("clean_scan").then((r) => { scan = r; selectSafe(); }).catch((err) => toast(String(err))).finally(() => {
+          scanning = false;
+          if (A.tab === "clean") viewClean();
+        });
+      }
       const disk = scan ? scan.disk : A.status && A.status.disk;
+      const sys = (A.status && A.status.sys) || (scan && scan.sys) || null;
+      const sysGrid = `<div class="sys-grid">${sysGridHtml(disk, sys)}</div>`;
+      const diskWarn = disk && disk.level !== "ok"
+        ? `<div class="disk-warn-banner ${disk.level === "critical" ? "crit" : ""}">
+            <span class="grow"><b>${disk.level === "critical" ? "Cảnh báo: Ổ đĩa gần hết chỗ!" : "Ổ đĩa sắp đầy"}</b> — chỉ còn ${bytes(disk.free_bytes)} (${Math.round(disk.free_percent)}% trống). Hãy dọn bộ nhớ đệm.</span>
+            ${!scan && !scanning ? `<button class="btn sm primary" data-c="scan">Quét ngay</button>` : ""}
+          </div>`
+        : "";
       const head = `<div class="disk">${ring(disk)}
         <div class="grow">${disk ? `<div class="num">${bytes(disk.free_bytes)} <span>trống / ${bytes(disk.total_bytes)}</span></div>
           <div class="dim">${disk.level === "ok" ? "Ổ đĩa còn thoải mái" : disk.level === "warn" ? "Sắp đầy — nên dọn bớt" : "Gần hết chỗ!"}</div>` : "<b>Ổ đĩa</b>"}</div>
-        ${scan && !cleanResult ? `<button class="btn" data-c="scan" ${scanning ? "disabled" : ""}>${scanning ? '<span class="spin"></span>' : "Quét lại"}</button>` : ""}</div>`;
+        ${scan && !cleanResult ? `<button class="btn" data-c="scan" ${scanning ? "disabled" : ""}>${scanning ? '<span class="spin"></span>' : "Quét lại"}</button>` : ""}</div>${sysGrid}${diskWarn}`;
       if (cleanResult) {
         const r = cleanResult;
         view.innerHTML = head + `<div class="empty"><b class="big ok">Đã giải phóng ${bytes(r.deleted_bytes + (r.trashed_bytes || 0))}</b>

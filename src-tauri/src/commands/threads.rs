@@ -525,10 +525,15 @@ pub(crate) fn threads_loop(app: AppHandle, st: Arc<AppState>) {
                     let on = st.store.lock().unwrap().settings.threads_notify;
                     if on {
                         for (who, text) in fresh.iter().take(3) {
-                            notify(&app, &format!("💬 {who}"), &text.chars().take(120).collect::<String>());
+                            let title = format!("💬 {who}");
+                            let body: String = text.chars().take(120).collect();
+                            notify(&app, &title, &body);
+                            push_notif(&app, "threads", &title, &body, "threads");
                         }
                         if fresh.len() > 3 {
-                            notify(&app, "💬 Threads", &tl(&app, &format!("và {} phản hồi mới khác", fresh.len() - 3), &format!("and {} more new replies", fresh.len() - 3)));
+                            let body = tl(&app, &format!("và {} phản hồi mới khác", fresh.len() - 3), &format!("and {} more new replies", fresh.len() - 3));
+                            notify(&app, "💬 Threads", &body);
+                            push_notif(&app, "threads", "💬 Threads", &body, "threads");
                         }
                     }
                     let _ = app.emit("threads", st.threads.lock().unwrap().unread);

@@ -237,6 +237,13 @@ pub(crate) fn reply_status(st: &AppState, en: bool) -> assistant::Reply {
             problems.push(if en { "it's been over 2 weeks without a restart".into() } else { "đã hơn 2 tuần chưa khởi động lại máy".into() });
         }
     }
+    if let Some(tp) = sys.temp_c {
+        let lvl = if tp >= 82.0 { 2 } else if tp >= 68.0 { 1 } else { 0 };
+        items.push(Metric { label: if en { "Temp" } else { "Nhiệt độ" }.into(), value: format!("{tp:.0}°C"), level: lvl, ratio: Some(((tp - 20.0) / 80.0).clamp(0.0, 1.0) as f64) });
+        if lvl > 1 {
+            problems.push(if en { format!("computer is running hot ({tp:.0}°C)") } else { format!("máy đang nóng ({tp:.0}°C)") });
+        }
+    }
     if stat.lateness.overdue > 0 {
         problems.push(if en { format!("{} overdue task(s)", stat.lateness.overdue) } else { format!("{} việc đang trễ", stat.lateness.overdue) });
         r = r.act(if en { "Show overdue" } else { "Xem việc trễ" }, "ask", "việc nào trễ");

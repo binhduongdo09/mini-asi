@@ -31,6 +31,18 @@ pub struct AppState {
     pub pending_ask: Mutex<Option<(String, String, i64)>>,
     /// Trạng thái kiểm tra & tải bản cập nhật
     pub update: Mutex<updater::UpdateProgress>,
+    /// Danh sách thông báo gần đây hiện trong peek
+    pub notifs: Mutex<Vec<NotifItem>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct NotifItem {
+    pub id: u64,
+    pub at: i64,
+    pub kind: String,
+    pub title: String,
+    pub body: String,
+    pub tab: String,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]

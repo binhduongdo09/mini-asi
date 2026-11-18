@@ -1,7 +1,6 @@
-/* ───────── Bộ gõ tiếng Việt của Mini-Asi (Telex / VNI) ─────────
- * Dùng khi bộ gõ tiếng Việt của macOS không ghép chữ được trong cửa sổ tai thỏ.
- * Mini-Asi tạm chuyển bàn phím hệ thống sang ABC khi mở bảng, tự gõ dấu ở đây,
- * rồi trả lại bộ gõ cũ khi đóng bảng.
+/* ───────── Bộ gõ tiếng Việt thuần (giữ lại hàm `apply` để kiểm thử; giao diện dùng 100% bộ gõ hệ thống) ─────────
+ * Mini-Asi tương thích trực tiếp với bộ gõ tiếng Việt của hệ thống (macOS Telex/VNI, OpenKey, EVKey…),
+ * không tự gắn listener chặn sự kiện beforeinput trên giao diện nữa.
  */
 (function (root) {
   "use strict";
@@ -183,70 +182,14 @@
     return plain;
   }
 
-  // ───────── Gắn vào ô nhập ─────────
-  const WORD = /[A-Za-zÀ-ỹĐđ]+$/;
-  let composing = false;
+  // ───────── Xuất mô-đun ─────────
   const engine = {
-    mode: null, // "telex" | "vni" | null (tắt)
+    mode: null, // luôn tắt trên UI để dùng 100% bộ gõ hệ thống
     suspended: false,
     apply,
-    attach(doc) {
-      doc.addEventListener("compositionstart", () => { composing = true; }, true);
-      doc.addEventListener("compositionend", () => { composing = false; }, true);
-      doc.addEventListener("focusin", () => { composing = false; engine.suspended = false; }, true);
-      doc.addEventListener("beforeinput", (e) => {
-        if (!engine.mode || engine.suspended || composing || e.isComposing) return;
-        if (e.inputType !== "insertText" || !e.data || e.data.length !== 1) return;
-        const el = e.target;
-        if (el && el.isContentEditable) return editable(e);
-        if (!el || !(el.tagName === "INPUT" || el.tagName === "TEXTAREA") || el.type === "password" || el.type === "number") return;
-        const start = el.selectionStart, end = el.selectionEnd;
-        if (start == null || end == null) return;
-        const hasSel = start !== end;
-        const before = hasSel ? "" : el.value.slice(0, start);
-        const m = hasSel ? null : before.match(WORD);
-        const word = m ? m[0] : "";
-        const out = apply(word, e.data, engine.mode);
-        if (out === word + e.data) return; // để trình duyệt gõ bình thường
-        e.preventDefault();
-        const repStart = start - word.length;
-        if (typeof el.setRangeText === "function") {
-          el.setRangeText(out, repStart, end, "end");
-        } else {
-          const head = el.value.slice(0, repStart);
-          el.value = head + out + el.value.slice(end);
-          const caret = head.length + out.length;
-          el.setSelectionRange(caret, caret);
-        }
-        el.dispatchEvent(new Event("input", { bubbles: true }));
-      }, true);
-    },
+    // Không chặn beforeinput nữa để tương thích hoàn toàn với bộ gõ hệ thống
+    attach() {},
   };
-  // Ô soạn thảo dạng contenteditable (khung viết bài của Threads, Notes web…)
-  function editable(e) {
-    const sel = document.getSelection();
-    if (!sel || !sel.rangeCount || !sel.isCollapsed) return;
-    const r = sel.getRangeAt(0);
-    const node = r.startContainer;
-    let word = "", before = "";
-    if (node.nodeType === 3) {
-      before = node.data.slice(0, r.startOffset);
-      const m = before.match(WORD);
-      word = m ? m[0] : "";
-    }
-    const out = apply(word, e.data, engine.mode);
-    if (out === word + e.data) return;
-    e.preventDefault();
-    if (word) {
-      const rr = document.createRange();
-      rr.setStart(node, r.startOffset - word.length);
-      rr.setEnd(node, r.startOffset);
-      sel.removeAllRanges();
-      sel.addRange(rr);
-    }
-    document.execCommand("insertText", false, out);
-  }
   root.VNKey = engine;
-  if (typeof document !== "undefined") engine.attach(document);
   if (typeof module !== "undefined") module.exports = engine;
 })(typeof window !== "undefined" ? window : globalThis);

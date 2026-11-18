@@ -40,6 +40,28 @@ fn file_lock() -> &'static Mutex<()> {
     L.get_or_init(Default::default)
 }
 
+/// Chống chạy chồng 2 tác vụ AI nặng (tóm tắt / Take note) trên cùng một cuộc họp
+fn busy_ops() -> &'static Mutex<HashSet<String>> {
+    static B: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    B.get_or_init(Default::default)
+}
+
+struct BusyGuard(String);
+impl BusyGuard {
+    fn acquire(key: String, msg: &str) -> Result<Self, String> {
+        if busy_ops().lock().unwrap().insert(key.clone()) {
+            Ok(Self(key))
+        } else {
+            Err(msg.into())
+        }
+    }
+}
+impl Drop for BusyGuard {
+    fn drop(&mut self) {
+        busy_ops().lock().unwrap().remove(&self.0);
+    }
+}
+
 fn update(dir: &std::path::Path, id: &str, f: impl FnOnce(&mut Meeting)) -> Result<Meeting, String> {
     let _g = file_lock().lock().unwrap();
     let mut m = meeting::load(dir, id)?;
@@ -237,7 +259,8 @@ fn transcribe_loop(app: AppHandle, st: Arc<AppState>, dir: PathBuf, id: String, 
                         }
                     });
                 }
-                let (auto, has_lines) = (st.store.lock().unwrap().settings.meeting_auto_summary, meeting::load(&dir, &id).map(|m| !m.lines.is_empty()).unwrap_or(false));
+                let m_meta = meeting::load(&dir, &id).ok();
+                let (auto, has_lines) = (st.store.lock().unwrap().settings.meeting_auto_summary, m_meta.as_ref().is_some_and(|m| !m.lines.is_empty()));
                 if auto && has_lines {
                     let _ = app.emit("meeting-progress", serde_json::json!({ "id": id, "text": "Đang tóm tắt…" }));
                     let a2 = app.clone();
@@ -245,8 +268,16 @@ fn transcribe_loop(app: AppHandle, st: Arc<AppState>, dir: PathBuf, id: String, 
                     let r = summarize(&app, &st, &id, None, true, move |t| {
                         let _ = a2.emit("meeting-progress", serde_json::json!({ "id": id2, "text": t }));
                     });
-                    if let Err(e) = r {
-                        let _ = app.emit("meeting-progress", serde_json::json!({ "id": id, "text": "", "error": e }));
+                    match r {
+                        Ok(sum) => {
+                            let m_title = m_meta.as_ref().map(|m| m.title.clone()).unwrap_or_default();
+                            let body = sum.overview.first().cloned().unwrap_or(m_title);
+                            push_notif(&app, "meet", &tl(&app, "🎙 Biên bản cuộc họp đã xong", "🎙 Meeting minutes ready"), &body, "meet");
+                            push_status(&app);
+                        }
+                        Err(e) => {
+                            let _ = app.emit("meeting-progress", serde_json::json!({ "id": id, "text": "", "error": e }));
+                        }
                     }
                 }
                 let _ = app.emit("meeting-done", &id);
@@ -587,6 +618,7 @@ Answer with exactly the same numbered lines (1., 2., …), one translation per l
 
 /// Tóm tắt cuộc họp. `engine`: id AI (None = theo Cài đặt). AI đám mây lỗi / chưa có key → tự dùng Apple Intelligence.
 pub(crate) fn summarize(app: &AppHandle, st: &AppState, id: &str, engine: Option<&str>, use_live: bool, progress: impl Fn(String)) -> Result<Summary, String> {
+    let _busy = BusyGuard::acquire(format!("sum:{id}"), "Cuộc họp này đang được tóm tắt")?;
     let m = meeting::load(&st.data_dir, id)?;
     if m.lines.is_empty() {
         return Err("Chưa có nội dung để tóm tắt".into());
@@ -777,6 +809,7 @@ fn parse_full_parts(raw: &str, fallback: f32) -> Vec<meeting::NotePart> {
 /// Take note: viết lại toàn bộ lời nói thành ghi chép đầy đủ (không lược ý) bằng AI đã chọn, lưu vào Ghi chú › Biên bản họp.
 /// Khúc nào AI không viết được → giữ nguyên văn khúc đó (không mất nội dung).
 pub(crate) fn take_note(app: &AppHandle, st: &AppState, id: &str, engine: Option<&str>, progress: impl Fn(String)) -> Result<meeting::FullNote, String> {
+    let _busy = BusyGuard::acquire(format!("note:{id}"), "Đang viết ghi chép cho cuộc họp này rồi")?;
     let m = meeting::load(&st.data_dir, id)?;
     if m.lines.is_empty() {
         return Err("Chưa có nội dung để ghi chép".into());

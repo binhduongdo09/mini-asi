@@ -26,7 +26,7 @@ pub struct NotchInfo {
 mod imp {
     use super::*;
     use objc2::MainThreadMarker;
-    use objc2_app_kit::{NSScreen, NSWindow, NSWindowCollectionBehavior};
+    use objc2_app_kit::{NSColor, NSScreen, NSWindow, NSWindowCollectionBehavior};
 
     /// Phải gọi trên main thread.
     pub fn notch_info() -> Option<NotchInfo> {
@@ -122,7 +122,10 @@ mod imp {
                 | NSWindowCollectionBehavior::FullScreenAuxiliary
                 | NSWindowCollectionBehavior::IgnoresCycle,
         );
+        win.setOpaque(false);
+        win.setBackgroundColor(Some(&NSColor::clearColor()));
         win.setHasShadow(false);
+        win.invalidateShadow();
         win.setMovable(false);
     }
 
@@ -163,6 +166,10 @@ mod imp {
             objc2_foundation::NSSize::new(w, h),
         );
         win.setFrame_display(rect, true);
+        if win.hasShadow() {
+            win.setHasShadow(false);
+            win.invalidateShadow();
+        }
     }
 
     /// Đổi tầng cửa sổ: 27 = trên thanh menu (bình thường), 0 = tầng thường (để hộp thoại xin quyền không bị che)
@@ -175,6 +182,10 @@ mod imp {
         }
         let win: &NSWindow = &*(ns_window as *const NSWindow);
         win.setLevel(level);
+        win.setOpaque(false);
+        win.setBackgroundColor(Some(&NSColor::clearColor()));
+        win.setHasShadow(false);
+        win.invalidateShadow();
     }
 
     /// Trả lại quyền điều khiển bàn phím cho app trước đó khi thu gọn tai thỏ.

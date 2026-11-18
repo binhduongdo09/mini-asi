@@ -1,7 +1,7 @@
 /* ───────── Mini-Asi — cửa sổ Cài đặt (settings.html) ─────────
  * Cửa sổ macOS thường (có thanh tiêu đề), tách khỏi tai thỏ để không che hộp thoại xin quyền.
  * Mọi thay đổi gửi bằng `patch_settings` (chỉ các khoá vừa đổi) → backend phát `settings-changed` cho cả 2 cửa sổ.
- * Các mục: Chung · Tai thỏ · Tính năng · Nhắc nhở · Asi & giọng nói · Bộ gõ · Clipboard · Đồng bộ & sao lưu · Quyền · Pro.
+ * 6 mục gọn gàng: Chung & Tai thỏ · Tính năng & Nhắc nhở · AI & Họp · Đồng bộ & Sao lưu · Quyền truy cập · Pro.
  */
 (async function () {
   "use strict";
@@ -12,16 +12,14 @@
   const MAC = geo.platform === "macos";
   let st = await api("get_settings");
   if (window.I18N && I18N.setLang(st.ui_lang)) return;
-  let sec = (new URLSearchParams(location.search).get("sec") || "general").replace(/^sec-/, "");
+  const SEC_ALIAS = { look: "general", ime: "general", reminders: "features", clips: "features" };
+  const normSec = (s) => { const k = (s || "general").replace(/^sec-/, ""); return SEC_ALIAS[k] || k; };
+  let sec = normSec(new URLSearchParams(location.search).get("sec"));
 
   const SECTIONS = [
-    ["general", "Chung", I.gear],
-    ["look", "Tai thỏ", I.eye],
-    ["features", "Tính năng", I.grid],
-    ["reminders", "Nhắc nhở", I.clock],
-    ["assistant", "Asi & giọng nói", I.message],
-    ["ime", "Bộ gõ tiếng Việt", I.keyboard],
-    ["clips", "Clipboard", I.clip],
+    ["general", "Chung & Tai thỏ", I.gear],
+    ["features", "Tính năng & Nhắc nhở", I.grid],
+    ["assistant", "AI & Họp", I.message],
     ["sync", "Đồng bộ & sao lưu", I.sync],
     ["perms", "Quyền truy cập", I.shield],
     ["pro", "Mini-Asi Pro", I.lock],
@@ -59,66 +57,62 @@
     }
     return [row(`Phiên bản ${esc(ver)}`, desc, ctrl), row("Tự báo khi có bản mới", "", sw("auto_update_check", st.auto_update_check !== false))];
   }
+  const IDLE = [["overdue", "Số việc trễ"], ["next", "Việc sắp đến hạn (trong 1 giờ)"], ["event", "Lịch sắp diễn ra (trong 15 phút)"], ["focus", "Đồng hồ tập trung"], ["tasks", "Số việc còn lại"], ["time", "Giờ hiện tại"], ["mic", "Nút micro ra lệnh"]];
   async function secGeneral() {
     upd = await api("update_info").catch(() => null);
-    return head("Chung") +
+    const disp = st.display_mode || "notch";
+    const idle = Array.isArray(st.idle_items) ? st.idle_items : ["focus", "overdue", "event", "next", "tasks", "mic"];
+    const h = st.notch_h > 0 ? Math.round(st.notch_h) : Math.round(geo.notch_height || 32);
+    const custom = st.bubble_x > 0 || st.bubble_y > 0;
+    return head("Chung & Tai thỏ", geo.has_notch ? `Màn hình có tai thỏ ${Math.round(geo.notch_width)}×${Math.round(geo.notch_height)}` : "Màn hình không có tai thỏ — Mini-Asi tạo tai thỏ ảo") +
       group("", [
         // để nguyên 2 tên ngôn ngữ (không dịch) — người dùng luôn tìm được ngôn ngữ của mình
         `<div class="srow"><div class="grow"><b>Ngôn ngữ · Language</b><span>Giao diện Mini-Asi · App interface</span></div><div class="seg" translate="no"><button class="${(st.ui_lang || "vi") === "vi" ? "on" : ""}" data-seg="ui_lang" data-v="vi">Tiếng Việt</button><button class="${st.ui_lang === "en" ? "on" : ""}" data-seg="ui_lang" data-v="en">English</button></div></div>`,
         row("Mở cùng máy", "Mini-Asi có mặt ngay khi bạn đăng nhập", sw("launch_at_login")),
         row("Phím tắt mở nhanh", "Mở/đóng bảng từ bất kỳ đâu", `<kbd>${MAC ? "⌘ ⇧ Space" : "Ctrl ⇧ Space"}</kbd>`),
-        row("Chất lượng nén PDF", "Dùng khi kéo PDF vào tai thỏ", `<select class="field" data-txt="pdf_quality">${[["screen", "Nhỏ nhất"], ["ebook", "Cân bằng"], ["printer", "Đẹp (in ấn)"]].map(([v, n]) => `<option value="${v}" ${st.pdf_quality === v ? "selected" : ""}>${n}</option>`).join("")}</select>`),
+        row("Chất lượng nén PDF", "Dùng khi kéo PDF vào tai thỏ", seg("pdf_quality", [["screen", "Nhỏ nhất"], ["ebook", "Cân bằng"], ["printer", "Đẹp (in ấn)"]], st.pdf_quality || "ebook")),
       ]) +
-      `<div id="updGroup">${group("Cập nhật", updateRows())}</div>` +
-      group("", [row("Thoát Mini-Asi", "Dữ liệu của bạn chỉ lưu trên máy này", `<button class="btn sm" data-act="quit">Thoát</button>`)]);
-  }
-
-  // ───────── Tai thỏ ─────────
-  const IDLE = [["overdue", "Số việc trễ"], ["next", "Việc sắp đến hạn (trong 1 giờ)"], ["event", "Lịch sắp diễn ra (trong 15 phút)"], ["focus", "Đồng hồ tập trung"], ["tasks", "Số việc còn lại"], ["time", "Giờ hiện tại"], ["mic", "Nút micro ra lệnh"]];
-  function secLook() {
-    const disp = st.display_mode || "notch";
-    const idle = Array.isArray(st.idle_items) ? st.idle_items : ["focus", "overdue", "event", "next", "tasks", "mic"];
-    const h = st.notch_h > 0 ? Math.round(st.notch_h) : Math.round(geo.notch_height || 32);
-    const custom = st.bubble_x > 0 || st.bubble_y > 0;
-    return head("Tai thỏ", geo.has_notch ? `Màn hình có tai thỏ ${Math.round(geo.notch_width)}×${Math.round(geo.notch_height)}` : "Màn hình không có tai thỏ — Mini-Asi tạo tai thỏ ảo") +
-      `<h3>Kiểu hiển thị</h3><div class="disp">${[["notch", "Tai thỏ", "Ôm sát mép trên"], ["pill", "Viên thuốc", "Nổi dưới thanh menu"], ["bubble", "Bong bóng", "Nút tròn, kéo đi đâu cũng được"]]
+      `<h3>Kiểu hiển thị tai thỏ</h3><div class="disp">${[["notch", "Tai thỏ", "Ôm sát mép trên"], ["pill", "Viên thuốc", "Nổi dưới thanh menu"], ["bubble", "Bong bóng", "Nút tròn, kéo đi đâu cũng được"]]
         .map(([id, n, d]) => `<button class="disp-opt ${disp === id ? "on" : ""}" data-disp="${id}"><span class="pv pv-${id}"></span><b>${n}</b><span>${d}</span></button>`).join("")}</div>` +
-      group("Kích thước", [
+      group("Kích thước & Vị trí", [
         row("Độ rộng hai bên", "Mẹo: kéo cạnh tai thỏ để chỉnh trực tiếp", seg("wing_size", [["hidden", "Ẩn"], ["xs", "Rất gọn"], ["s", "Gọn"], ["m", "Vừa"], ["l", "Rộng"]].concat(st.wing_size === "custom" ? [["custom", "Tự chỉnh"]] : []), st.wing_size || "s")),
         row("Chiều cao", "", `<input type="range" id="notchH" min="22" max="54" step="1" value="${h}" /><span class="dim val" id="notchHVal">${h} px</span>`),
         row("Vị trí", custom ? "Đang ở vị trí bạn kéo tới" : "Mặc định — kéo hòn đảo để đổi chỗ", custom ? `<button class="btn sm" data-act="reset-pos">Về chỗ cũ</button>` : ""),
       ]) +
-      group("Khi rê chuột", [
+      group("Khi rê chuột vào tai thỏ", [
+        row("Hiện thông báo gần đây", "Xem nhanh nhắc việc, nghỉ mắt, cảnh báo ổ đĩa và xoá bớt khi cần", sw("peek_notifs", st.peek_notifs !== false)),
         row("Hiện việc trễ", "Tối đa 3 việc trễ lâu nhất, bấm ✓ để xong hoặc +1h để hoãn", sw("peek_overdue", st.peek_overdue !== false)),
-        row("Rê lên micro để ra lệnh", "Giữ chuột trên nút micro một chút là Asi bắt đầu nghe — như bấm vào nút", sw("hover_mic", st.hover_mic !== false)),
+        row("Rê lên micro để ra lệnh", "Giữ chuột trên nút micro một chút là Asi bắt đầu nghe", sw("hover_mic", st.hover_mic !== false)),
       ]) +
-      group("Khi thu gọn, hiện", IDLE.map(([id, n]) => `<label class="srow check-row"><input type="checkbox" data-idle="${id}" ${idle.includes(id) ? "checked" : ""}/><span class="cbox">${I.check}</span><b>${n}</b></label>`), "Chỉ hiện những gì quan trọng — cánh tai thỏ hẹp sẽ tự bỏ bớt mục cuối.");
+      group("Khi thu gọn, hiện", IDLE.map(([id, n]) => `<label class="srow check-row"><input type="checkbox" data-idle="${id}" ${idle.includes(id) ? "checked" : ""}/><span class="cbox">${I.check}</span><b>${n}</b></label>`), "Chỉ hiện những gì quan trọng — cánh tai thỏ hẹp sẽ tự bỏ bớt mục cuối.") +
+      `<div id="updGroup">${group("Cập nhật", updateRows())}</div>` +
+      group("", [row("Thoát Mini-Asi", "Dữ liệu của bạn chỉ lưu trên máy này", `<button class="btn sm" data-act="quit">Thoát</button>`)]);
   }
 
-  // ───────── Tính năng (mô-đun) ─────────
-  function secFeatures() {
-    const m = modules();
+  // ───────── Tính năng, Nhắc nhở & Clipboard ─────────
+  async function secFeatures() {
+    const [m, ax] = [modules(), await api("accessibility_status").catch(() => false)];
     const mod = (id, n, d, extra = "") => `<div class="srow"><div class="grow"><b>${n}</b><span>${d}</span></div>${extra}<button class="switch ${m.includes(id) ? "on" : ""}" data-mod="${id}"></button></div>`;
-    return head("Tính năng", "Asi, Việc, Ghi chú và Clipboard luôn có. Bật thêm thứ bạn thật sự dùng — bảng sẽ gọn hơn.") +
-      group("", [
-        mod("clean", "Dọn máy", "Quét cache, nhật ký, file cài đặt cũ để giải phóng ổ đĩa"),
-        mod("focus", "Tập trung", "Nút hẹn giờ 25 phút trên tai thỏ — Asi tạm im lặng"),
+    return head("Tính năng & Nhắc nhở", "Asi, Việc, Ghi chú, Họp và Clipboard luôn có. Bật thêm thứ bạn dùng để bảng gọn gàng.") +
+      group("Mô-đun mở rộng", [
+        mod("clean", "Dọn máy", "Theo dõi CPU, RAM, SSD, nhiệt độ và dọn cache giải phóng ổ đĩa"),
+        mod("focus", "Tập trung", "Nút hẹn giờ 25 phút khi rê chuột vào tai thỏ — Asi tạm im lặng"),
         mod("threads", "Social", "Facebook, Messenger, Instagram, Threads, X, TikTok, YouTube trong cửa sổ dạng điện thoại"),
         mod("journal", "Nhật ký", "Mỗi tối Asi hỏi 3 câu về ngày của bạn", m.includes("journal") ? `<span class="inline dim">lúc</span>${num("journal_hour", 17, 23, "giờ")}` : ""),
         mod("words", "Từ mới tiếng Anh", "2–3 từ mỗi lần mở bảng, có chấm phát âm", m.includes("words") ? seg("vocab_count", [[2, "2 từ"], [3, "3 từ"]], st.vocab_count || 3) : ""),
-      ]) +
-      (m.includes("threads") && MAC ? group("Thử nghiệm", [row("Threads nhúng trong bảng", "Trong tab Social, xem Threads ngay trong tai thỏ thay vì cửa sổ riêng", sw("threads_embed_beta"))]) : "");
-  }
-
-  // ───────── Nhắc nhở ─────────
-  function secReminders() {
-    return head("Nhắc nhở", "Asi nhắc nhẹ nhàng trên tai thỏ — không bật thông báo ồn ào.") +
-      group("", [
+      ].concat(m.includes("threads") && MAC ? [row("Threads nhúng trong bảng", "Xem Threads ngay trong tai thỏ thay vì cửa sổ riêng (thử nghiệm)", sw("threads_embed_beta"))] : [])) +
+      group("Nhắc nhở sức khoẻ", [
         row("Nghỉ mắt", "Sau mỗi phiên dùng máy liên tục", `${num("break_minutes", 10, 180, "phút")}${sw("break_enabled")}`),
         row("Uống nước", "Linh vật vẫy nhẹ, không làm phiền", `${num("water_minutes", 15, 240, "phút")}${sw("water_enabled")}`),
         row("Giờ đi ngủ", "Sau giờ này linh vật ngáp ngủ", num("sleep_hour", 18, 23, "giờ")),
+        row("Không làm phiền", "Tạm tắt báo đỏ khi trễ việc và nhắc nghỉ", sw("focus_mode")),
       ]) +
-      group("", [row("Không làm phiền", "Tạm tắt báo đỏ khi trễ việc và nhắc nghỉ", sw("focus_mode"))]);
+      group("Clipboard", [
+        row("Lưu lịch sử", "Chữ, ảnh, file — tự bỏ qua mật khẩu từ trình quản lý mật khẩu", sw("clip_enabled")),
+        row("Giữ tối đa", "Mục đã ghim luôn được giữ", num("clip_max", 20, 2000, "mục")),
+        row("Bấm là dán luôn", ax ? "Đã có quyền Trợ năng" : "Cần quyền Trợ năng", `${ax ? "" : `<button class="link" data-act="ax">Cấp quyền</button>`}${sw("clip_autopaste")}`),
+        row("Phím tắt mở Clipboard", "", `<kbd>${esc((st.clip_shortcut || "").replace("Control", "⌃").replace("Shift", "⇧").replace("Alt", "⌥").replace(/\+/g, " "))}</kbd>`),
+      ]);
   }
 
   // ───────── Asi & giọng nói ─────────
@@ -190,10 +184,10 @@
   async function secAssistant() {
     [tts, ai, brains] = await Promise.all([api("tts_info").catch(() => null), api("apple_ai_status").catch(() => null), api("ai_info").catch(() => [])]);
     const hasVoice = tts && tts.status.phase === "ready";
-    return head("Asi & giọng nói") +
+    return head("AI & Họp") +
       `<div id="brainGroup">${brainGroup()}</div>` +
       group("Nghe & nói", [
-        row("Ngôn ngữ khi nói với Asi", "Dùng cho ghi chú, thêm việc, nhật ký bằng giọng nói", `<select class="field" data-txt="voice_lang">${[["vi-VN", "Tiếng Việt"], ["en-US", "English (US)"], ["en-GB", "English (UK)"]].map(([v, n]) => `<option value="${v}" ${st.voice_lang === v ? "selected" : ""}>${n}</option>`).join("")}</select>`),
+        row("Ngôn ngữ khi nói với Asi", "Dùng cho ghi chú, thêm việc, nhật ký bằng giọng nói", seg("voice_lang", [["vi-VN", "Tiếng Việt"], ["en-US", "English (US)"], ["en-GB", "English (UK)"]], st.voice_lang || "vi-VN")),
         row("Đọc to câu trả lời", hasVoice ? "Asi đọc 1–2 câu đầu của câu trả lời" : "Cần tải giọng đọc bên dưới", hasVoice ? sw("voice_reply") : ""),
       ]) +
       `<div id="meetGroup">${meetGroup()}</div>` +
@@ -214,25 +208,6 @@
     if (el) el.textContent = s.step || ""; else redrawTts();
   });
 
-  // ───────── Bộ gõ ─────────
-  function secIme() {
-    return head("Bộ gõ tiếng Việt", "Khi mở bảng, Asi tạm chuyển bàn phím sang ABC và tự gõ dấu — đóng bảng sẽ trả lại bộ gõ của bạn.") +
-      group("", [row("Kiểu gõ", "Tự động: theo bộ gõ bạn đang dùng (Telex/VNI)", seg("viet_engine", [["auto", "Tự động"], ["telex", "Telex"], ["vni", "VNI"], ["off", "Tắt"]], st.viet_engine || "auto"))],
-        "Trên thanh bảng có nút VI/EN để bật/tắt nhanh · giữ ⌥ khi bấm để đổi Telex ↔ VNI.");
-  }
-
-  // ───────── Clipboard ─────────
-  async function secClips() {
-    const ax = await api("accessibility_status").catch(() => false);
-    return head("Clipboard") +
-      group("", [
-        row("Lưu lịch sử", "Chữ, ảnh, file — tự bỏ qua mật khẩu từ trình quản lý mật khẩu", sw("clip_enabled")),
-        row("Giữ tối đa", "Mục đã ghim luôn được giữ", num("clip_max", 20, 2000, "mục")),
-        row("Bấm là dán luôn", ax ? "Đã có quyền Trợ năng" : "Cần quyền Trợ năng", `${ax ? "" : `<button class="link" data-act="ax">Cấp quyền</button>`}${sw("clip_autopaste")}`),
-        row("Phím tắt mở Clipboard", "", `<kbd>${esc((st.clip_shortcut || "").replace("Control", "⌃").replace("Shift", "⇧").replace("Alt", "⌥").replace(/\+/g, " "))}</kbd>`),
-      ]);
-  }
-
   // ───────── Đồng bộ & sao lưu ─────────
   async function secSync() {
     const [bk, si] = await Promise.all([api("backup_info"), MAC ? api("sync_info").catch(() => null) : null]);
@@ -245,9 +220,10 @@
         row("Lần đồng bộ cuối", si && si.last_run ? `${fmtAgo(si.last_run)} · ${si.linked_tasks} việc · ${si.linked_notes} ghi chú${si.last_error ? ` · <span class="err">${esc(si.last_error)}</span>` : ""}` : "Chưa đồng bộ", `<button class="btn sm" data-act="sync">Đồng bộ ngay</button>`),
       ]);
     }
+    const shortLbl = (s) => (s && s.length > 24 ? s.slice(0, 23) + "…" : s || "");
     html += group("Sao lưu lên đám mây", [
-      row("Thư mục", bk.current ? "Bản sao lưu nằm trong thư mục “Mini-Asi” ở đây" : "Chọn Google Drive, iCloud… để bật sao lưu", `<select class="field" id="bkDir">${bk.dirs.map((d) => `<option value="${esc(d.path)}" ${bk.current === d.path ? "selected" : ""}>${esc(d.label)}</option>`).join("")}
-        ${bk.chosen && !bk.dirs.some((d) => d.path === bk.chosen) ? `<option value="${esc(bk.chosen)}" selected>${esc(bk.chosen.split(/[\\/]/).pop())}</option>` : ""}<option value="__pick">Chọn thư mục khác…</option></select>`),
+      row("Thư mục", bk.current ? "Bản sao lưu nằm trong thư mục “Mini-Asi” ở đây" : "Chọn Google Drive, iCloud… để bật sao lưu", `<select class="field" id="bkDir">${bk.dirs.map((d) => `<option value="${esc(d.path)}" title="${esc(d.label)}" ${bk.current === d.path ? "selected" : ""}>${esc(shortLbl(d.label))}</option>`).join("")}
+        ${bk.chosen && !bk.dirs.some((d) => d.path === bk.chosen) ? `<option value="${esc(bk.chosen)}" selected>${esc(shortLbl(bk.chosen.split(/[\\/]/).pop()))}</option>` : ""}<option value="__pick">Chọn thư mục khác…</option></select>`),
       row("Tự sao lưu mỗi ngày", `Lần cuối: ${fmtAgo(bk.last_backup)}`, `<button class="btn sm" data-act="bknow" ${bk.current ? "" : "disabled"}>Sao lưu ngay</button><button class="switch ${bk.auto_backup ? "on" : ""}" data-bk="auto_backup"></button>`),
       row("Đồng bộ giữa các máy", `${esc(bk.device_name)} · lần cuối ${fmtAgo(bk.last_device_sync)}`, `<button class="btn sm" data-act="devsync" ${bk.current ? "" : "disabled"}>Đồng bộ ngay</button><button class="switch ${bk.device_sync ? "on" : ""}" data-bk="device_sync"></button>`),
     ]);
@@ -279,7 +255,7 @@
       group("Kích hoạt", [`<div class="srow"><input class="field grow" id="licKey" placeholder="Dán khoá bản quyền MASI1.…" /><button class="btn primary sm" data-act="lic">Kích hoạt</button></div>`], '<span id="licMsg" class="err"></span>');
   }
 
-  const RENDER = { general: secGeneral, look: secLook, features: secFeatures, reminders: secReminders, assistant: secAssistant, ime: secIme, clips: secClips, sync: secSync, perms: secPerms, pro: secPro };
+  const RENDER = { general: secGeneral, features: secFeatures, assistant: secAssistant, sync: secSync, perms: secPerms, pro: secPro };
   function renderNav() {
     $("#nav").innerHTML = SECTIONS.map(([id, n, ic]) => `<button class="nav-it ${id === sec ? "on" : ""}" data-sec="${id}"><span class="ni">${ic}</span><span>${n}</span></button>`).join("");
   }
@@ -323,7 +299,7 @@
       const k = sg.dataset.seg, raw = sg.dataset.v;
       const v = /^\d+$/.test(raw) ? Number(raw) : raw;
       const p = { [k]: v };
-      if (k === "wing_size") p.notch_w = { hidden: 0, xs: 28, s: 56, m: 88, l: 128 }[v] ?? st.notch_w;
+      if (k === "wing_size") p.notch_w = { hidden: 0, xs: 56, s: 82, m: 112, l: 148 }[v] ?? st.notch_w;
       await patch(p);
       return render(true);
     }
@@ -429,7 +405,7 @@
   main.addEventListener("input", (e) => { if (e.target.id === "notchH") $("#notchHVal").textContent = e.target.value + " px"; });
 
   on("settings-changed", (n) => { if (n) { st = n; if (window.I18N) I18N.setLang(n.ui_lang); } });
-  on("settings-section", (s) => { if (s) { sec = s.replace(/^sec-/, ""); render(); } });
+  on("settings-section", (s) => { if (s) { sec = normSec(s); render(); } });
   on("update-progress", (u) => { upd = { ...(upd || {}), status: u.status || u }; const g = $("#updGroup"); if (g) g.innerHTML = group("Cập nhật", updateRows()); });
 
   api("update_info").then((v) => { if (v) $("#ver").textContent = "Mini-Asi " + (v.current_version || ""); }).catch(() => {});

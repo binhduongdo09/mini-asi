@@ -9,7 +9,7 @@ mod imp {
     use objc2_speech::{
         SFSpeechRecognitionResult, SFSpeechRecognizer, SFSpeechRecognizerAuthorizationStatus, SFSpeechURLRecognitionRequest,
     };
-    use std::sync::mpsc;
+    use std::sync::{mpsc, Arc, Mutex};
     use std::time::Duration;
 
     pub fn ensure_access() -> Result<(), String> {
@@ -59,7 +59,7 @@ mod imp {
             rec.setQueue(&NSOperationQueue::new());
             let url = NSURL::fileURLWithPath(&NSString::from_str(path));
             let req = SFSpeechURLRecognitionRequest::initWithURL(SFSpeechURLRecognitionRequest::alloc(), &url);
-            req.setShouldReportPartialResults(false);
+            req.setShouldReportPartialResults(true);
             if on_device && rec.supportsOnDeviceRecognition() {
                 req.setRequiresOnDeviceRecognition(true);
             }
@@ -67,18 +67,36 @@ mod imp {
                 req.setAddsPunctuation(true);
             }
             let (tx, rx) = mpsc::channel::<Result<String, String>>();
+            let partial = Arc::new(Mutex::new(String::new()));
+            let partial2 = partial.clone();
             let block = RcBlock::new(move |result: *mut SFSpeechRecognitionResult, err: *mut NSError| {
                 if let Some(r) = result.as_ref() {
+                    let t = r.bestTranscription().formattedString().to_string();
+                    if !t.trim().is_empty() {
+                        *partial2.lock().unwrap() = t.clone();
+                    }
                     if r.isFinal() {
-                        let _ = tx.send(Ok(r.bestTranscription().formattedString().to_string()));
+                        let _ = tx.send(Ok(t));
                     }
                 } else if let Some(e) = err.as_ref() {
                     let _ = tx.send(Err(e.localizedDescription().to_string()));
                 }
             });
-            let _task = rec.recognitionTaskWithRequest_resultHandler(&req, &block);
-            match rx.recv_timeout(Duration::from_secs(90)) {
-                Ok(Ok(t)) => Ok(t),
+            let task = rec.recognitionTaskWithRequest_resultHandler(&req, &block);
+            let res = rx.recv_timeout(Duration::from_secs(90));
+            task.cancel();
+            let fallback = partial.lock().unwrap().trim().to_string();
+            match res {
+                Ok(Ok(t)) => {
+                    if !t.trim().is_empty() {
+                        Ok(t)
+                    } else if !fallback.is_empty() {
+                        Ok(fallback)
+                    } else {
+                        Ok(t)
+                    }
+                }
+                Ok(Err(_)) | Err(_) if !fallback.is_empty() => Ok(fallback),
                 Ok(Err(e)) if e.contains("No speech") || e.contains("1110") => Err("Không nghe thấy gì, thử nói to hơn nhé".into()),
                 Ok(Err(e)) => Err(format!("Nhận dạng thất bại: {e}")),
                 Err(_) => Err("Nhận dạng quá lâu, thử lại nhé".into()),

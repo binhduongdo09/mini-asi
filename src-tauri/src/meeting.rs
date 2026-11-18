@@ -196,6 +196,37 @@ pub fn audio_file(data_dir: &Path, id: &str) -> Option<PathBuf> {
     ["audio.m4a", "audio.wav"].iter().map(|f| d.join(f)).find(|p| p.metadata().map(|m| m.len() > 1024).unwrap_or(false))
 }
 
+/// Tự sửa kích thước header RIFF/data của file `.wav` nếu app bị tắt đột ngột trước khi kịp `finalize()`.
+pub fn repair_wav_header(path: &Path) {
+    use std::io::{Read, Seek, SeekFrom, Write};
+    let Ok(mut f) = std::fs::OpenOptions::new().read(true).write(true).open(path) else { return };
+    let Ok(len) = f.metadata().map(|m| m.len()) else { return };
+    if len <= 44 || len > u32::MAX as u64 {
+        return;
+    }
+    let mut hdr = [0u8; 44];
+    if f.read_exact(&mut hdr).is_err() {
+        return;
+    }
+    if &hdr[0..4] != b"RIFF" || &hdr[8..12] != b"WAVE" || &hdr[36..40] != b"data" {
+        return;
+    }
+    let riff_sz = u32::from_le_bytes([hdr[4], hdr[5], hdr[6], hdr[7]]);
+    let data_sz = u32::from_le_bytes([hdr[40], hdr[41], hdr[42], hdr[43]]);
+    let exp_riff = (len - 8) as u32;
+    let exp_data = (len - 44) as u32;
+    if riff_sz != exp_riff {
+        if f.seek(SeekFrom::Start(4)).is_ok() {
+            let _ = f.write_all(&exp_riff.to_le_bytes());
+        }
+    }
+    if data_sz != exp_data {
+        if f.seek(SeekFrom::Start(40)).is_ok() {
+            let _ = f.write_all(&exp_data.to_le_bytes());
+        }
+    }
+}
+
 /// Nén audio.wav → audio.m4a (AAC 32 kbps, ~14 MB/giờ thay vì ~115 MB) bằng `afconvert` có sẵn trên macOS.
 /// Thành công thì xoá wav. Máy khác / lỗi → giữ wav.
 pub fn compress_audio(data_dir: &Path, id: &str) -> Result<PathBuf, String> {
@@ -204,6 +235,7 @@ pub fn compress_audio(data_dir: &Path, id: &str) -> Result<PathBuf, String> {
     if !wav.exists() {
         return audio_file(data_dir, id).ok_or_else(|| "Không có file ghi âm".into());
     }
+    repair_wav_header(&wav);
     if !cfg!(target_os = "macos") {
         return Ok(wav);
     }
@@ -258,6 +290,7 @@ pub fn load_audio_16k(data_dir: &Path, id: &str) -> Result<Vec<f32>, String> {
 
 /// WAV bất kỳ (mono/stereo, 16 bit / float) → mẫu 16 kHz mono
 pub fn read_wav_16k(path: &Path) -> Result<Vec<f32>, String> {
+    repair_wav_header(path);
     let mut r = hound::WavReader::open(path).map_err(|e| format!("Không đọc được file ghi âm: {e}"))?;
     let spec = r.spec();
     let ch = spec.channels.max(1) as usize;
@@ -321,8 +354,12 @@ pub fn recover(data_dir: &Path) -> Vec<String> {
                     }
                 }
             }
-            if d.join("audio.wav").exists() && !d.join("audio.m4a").exists() {
-                need_compress.push(id);
+            let wav = d.join("audio.wav");
+            if wav.exists() {
+                repair_wav_header(&wav);
+                if !d.join("audio.m4a").exists() {
+                    need_compress.push(id);
+                }
             }
         }
     }
@@ -577,7 +614,7 @@ pub fn parse_summary_json(raw: &str) -> Option<Summary> {
     let b = raw.rfind('}')?;
     let v: serde_json::Value = serde_json::from_str(raw.get(a..=b)?).ok()?;
     // mỗi ý là chuỗi ("[12:30] ý") hoặc đối tượng {"text": "...", "at": "12:30" | 750}
-    let strs = |k: &str| -> Vec<(String, Option<f32>)> {
+    let strs = |keys: &[&str]| -> Vec<(String, Option<f32>)> {
         let one = |i: &serde_json::Value| -> Option<(String, Option<f32>)> {
             let (at0, raw) = match i {
                 serde_json::Value::String(x) => (None, x.as_str()),
@@ -587,26 +624,27 @@ pub fn parse_summary_json(raw: &str) -> Option<Summary> {
             let (at1, body) = split_stamp(raw.trim());
             clean_item(body).map(|t| (t, at0.or(at1)))
         };
-        match &v[k] {
+        let Some(val) = keys.iter().find_map(|k| (!v[*k].is_null()).then_some(&v[*k])) else { return vec![] };
+        match val {
             serde_json::Value::Array(x) => x.iter().filter_map(one).collect(),
             serde_json::Value::String(x) => x.lines().filter_map(|l| one(&serde_json::Value::String(l.to_string()))).collect(),
             _ => vec![],
         }
     };
-    let actions = v["actions"]
-        .as_array()
+    let act_val = ["actions", "action_items", "todo", "tasks"].iter().find_map(|k| v[*k].as_array());
+    let actions = act_val
         .map(|x| {
             x.iter()
                 .filter_map(|i| {
-                    let (at1, task) = split_stamp(i["task"].as_str().or_else(|| i.as_str())?.trim());
+                    let (at1, task) = split_stamp(i["task"].as_str().or_else(|| i["text"].as_str()).or_else(|| i.as_str())?.trim());
                     let task = task.trim().to_string();
                     (!task.is_empty()).then(|| ActionItem { task, owner: none_field(i["owner"].as_str().unwrap_or("")), due: none_field(i["due"].as_str().unwrap_or("")), at: stamp_value(&i["at"]).or(at1) })
                 })
                 .collect()
         })
         .unwrap_or_default();
-    let (overview, overview_at) = strs("overview").into_iter().unzip();
-    let (decisions, decisions_at) = strs("decisions").into_iter().unzip();
+    let (overview, overview_at) = strs(&["overview", "summary", "key_points"]).into_iter().unzip();
+    let (decisions, decisions_at) = strs(&["decisions", "decision"]).into_iter().unzip();
     let s = Summary { overview, overview_at, decisions, decisions_at, actions, ..Default::default() };
     (!s.overview.is_empty() || !s.actions.is_empty() || !s.decisions.is_empty()).then_some(s)
 }
@@ -958,6 +996,18 @@ fn open_stream(dev: &cpal::Device, cfg: cpal::SupportedStreamConfig, buf: Buf, w
     Ok(s)
 }
 
+/// Trộn 2 kênh âm thanh kèm nén mềm khi vượt 0.85 để tránh rè/méo tiếng khi cả hai cùng nói
+pub fn soft_mix(a: f32, b: f32) -> f32 {
+    let s = a + b;
+    if s > 0.85 {
+        0.85 + 0.15 * ((s - 0.85) / 0.15).tanh()
+    } else if s < -0.85 {
+        -0.85 + 0.15 * ((s + 0.85) / 0.15).tanh()
+    } else {
+        s
+    }
+}
+
 /// Bắt đầu thu. `system`: thu thêm âm thanh của máy. Trả về (Recorder, cảnh báo nếu không thu được âm thanh máy).
 /// `on_segment` nhận từng đoạn ~30–45 giây; `audio_path`: file ghi âm đầy đủ (16 kHz mono).
 pub fn start(
@@ -1039,7 +1089,7 @@ pub fn start(
             });
             if let Some(w) = writer.as_mut() {
                 for (i, m) in mic.iter().enumerate() {
-                    let s = m + sys.as_ref().map(|v| v[i]).unwrap_or(0.0);
+                    let s = soft_mix(*m, sys.as_ref().map(|v| v[i]).unwrap_or(0.0));
                     let _ = w.write_sample((s.clamp(-1.0, 1.0) * 32767.0) as i16);
                 }
                 let _ = w.flush();
@@ -1063,10 +1113,17 @@ pub fn start(
             pm.extend(m16);
             if with_sys {
                 ps.extend(s16);
+                // Chống lệch thời gian (drift): khi hệ thống không phát âm thanh, Process Tap có thể ngừng đẩy mẫu
+                let slack = RATE as usize / 5;
+                if pm.len() > ps.len() + slack {
+                    ps.resize(pm.len(), 0.0);
+                } else if ps.len() > pm.len() + slack {
+                    ps.truncate(pm.len());
+                }
             }
             let max = (SEG_MAX * RATE as f32) as usize;
             if pm.len() >= max {
-                let mix: Vec<f32> = pm.iter().enumerate().map(|(i, m)| m + ps.get(i).copied().unwrap_or(0.0)).collect();
+                let mix: Vec<f32> = pm.iter().enumerate().map(|(i, m)| soft_mix(*m, ps.get(i).copied().unwrap_or(0.0))).collect();
                 let cut = best_cut(&mix, RATE, SEG_MIN, SEG_MAX);
                 emit(&mut pm, &mut ps, cut, &mut seg_at, &mut index, &mut writer);
             }
@@ -1307,5 +1364,30 @@ mod tests {
         assert!(md.starts_with("# Họp agency"));
         assert!(md.contains("- [ ] Gửi file — Lan (hạn: mai)"));
         assert!(md.contains("[00:01] Bạn: Bắt đầu"));
+    }
+
+    #[test]
+    fn soft_mix_wav_repair_and_alt_json() {
+        assert!((soft_mix(0.3, 0.4) - 0.7).abs() < 1e-6);
+        let clipped = soft_mix(0.9, 0.9);
+        assert!(clipped > 0.85 && clipped < 1.0, "nén mềm ở ngưỡng dương: {clipped}");
+        let neg = soft_mix(-0.9, -0.9);
+        assert!(neg < -0.85 && neg > -1.0, "nén mềm ở ngưỡng âm: {neg}");
+
+        let alt = parse_summary_json(r#"{"summary":["Ý A"],"decision":["Chốt B"],"todo":["Làm C"]}"#).unwrap();
+        assert_eq!(alt.overview, vec!["Ý A"]);
+        assert_eq!(alt.decisions, vec!["Chốt B"]);
+        assert_eq!(alt.actions[0].task, "Làm C");
+
+        let d = tempfile::tempdir().unwrap();
+        let p = d.path().join("broken.wav");
+        write_wav16(&p, &tone(0.5, 0.2)).unwrap();
+        // giả lập header bị = 0 do mất điện chưa finalize()
+        let mut raw = std::fs::read(&p).unwrap();
+        raw[4..8].copy_from_slice(&0u32.to_le_bytes());
+        raw[40..44].copy_from_slice(&0u32.to_le_bytes());
+        std::fs::write(&p, &raw).unwrap();
+        let back = read_wav_16k(&p).unwrap();
+        assert_eq!(back.len(), RATE as usize / 2);
     }
 }

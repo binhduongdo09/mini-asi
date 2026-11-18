@@ -1,7 +1,7 @@
 /* ───────────────────────── Mini-Asi — vỏ hòn đảo (cửa sổ tai thỏ) ─────────────────────────
  * Trạng thái hòn đảo:
- *   collapsed (thu gọn) → peek (rê chuột: trạng thái + Micro/Camera/AirDrop/Tập trung) → expanded (bảng chính)
- *   alert (nhắc việc, nghỉ mắt, lịch, nhật ký) · listen / reply (lệnh giọng nói) · drop (kéo file vào) · sheet (công cụ file)
+ *   collapsed (thu gọn) → peek (rê chuột: trạng thái + Tập trung + thông báo gần đây) → expanded (bảng chính)
+ *   alert (nhắc việc, nghỉ mắt, lịch, nhật ký, đầy ổ đĩa) · listen / reply (lệnh giọng nói) · drop (kéo thả quick action) · sheet (công cụ file)
  * File này lo: hình học cửa sổ, linh vật, thanh trên, peek, kéo/giãn, giọng nói, báo động, kéo thả file, thanh tab.
  * Nội dung từng tab nằm ở: views.js (Asi, Việc, Ghi chú, Dọn máy) · extra.js (Clipboard, Nhật ký, Threads) · vocab.js (Từ mới).
  * Cài đặt là cửa sổ riêng: settings.html + settings.js.
@@ -25,12 +25,12 @@
   if (!ON_NOTCH) island.classList.add("virtual");
   if (settings.bubble_x > 0 || settings.bubble_y > 0) document.body.classList.add("floating-pos");
 
-  const WING_PRESETS = { hidden: 0, xs: 28, s: 56, m: 88, l: 128 };
+  const WING_PRESETS = { hidden: 0, xs: 56, s: 82, m: 112, l: 148 };
   function wingPx(st = settings) {
     const ws = st.wing_size || "s";
     if (ws === "hidden") return 0;
     if (ws === "custom") return Math.max(0, Math.min(180, Math.round(Number(st.notch_w) || 0)));
-    return WING_PRESETS[ws] ?? 56;
+    return WING_PRESETS[ws] ?? 82;
   }
 
   const MARGIN_X = 18, MARGIN_B = 20; // vùng đệm trong suốt quanh hòn đảo (cho bóng & góc cong)
@@ -43,7 +43,6 @@
   let status = null;
   let tasks = [];
   let media = null; // trạng thái nhạc gần nhất (media_status)
-  const cam = { active: false, stream: null };
   let popupLow = false; // popup của macOS / app đang hiện (perm-prompt)
   let hovering = false, modeTimer = null, frameTimer = null, suppressHoverUntil = 0, lastFrameKey = "";
   let freshOpen = true;
@@ -58,12 +57,25 @@
   const modules = () => (Array.isArray(settings.modules) ? settings.modules : DEFAULT_MODULES);
   const modOn = (id) => modules().includes(id);
 
+  const PEEK_NOTIF_MAX = 4;
+  function peekNotifs() {
+    if (settings.peek_notifs === false || !status || !Array.isArray(status.notifs)) return [];
+    return status.notifs.slice(0, PEEK_NOTIF_MAX);
+  }
   function peekHeight() {
     const hasMedia = !!(media && (media.title || media.playing));
-    const n = Math.min(PEEK_LATE_MAX, lateTasks().length);
-    return BAR + 128 + (hasMedia ? 64 : 0) + (cam.active ? 178 : 0) + (n ? 8 + n * 32 + (n - 1) * 2 : 0);
+    const nLate = Math.min(PEEK_LATE_MAX, lateTasks().length);
+    const nNotif = peekNotifs().length;
+    return BAR + 70
+      + (nLate ? 8 + nLate * 32 + (nLate - 1) * 2 : 0)
+      + (hasMedia ? 64 : 0)
+      + (nNotif ? 36 + nNotif * 40 + (nNotif - 1) * 2 : 0);
   }
-  // Việc đang trễ hiện ngay khi rê chuột (Cài đặt › Tai thỏ › Khi rê chuột); trễ lâu nhất lên đầu
+  function sheetHeight() {
+    const hasImg = !!(sheet && sheet.kinds && sheet.kinds.images > 0);
+    return BAR + (hasImg ? 248 : 204);
+  }
+  // Việc đang trễ hiện ngay khi rê chuột (Cài đặt › Chung & Tai thỏ › Khi rê chuột); trễ lâu nhất lên đầu
   const PEEK_LATE_MAX = 3;
   function lateTasks() {
     if (settings.peek_overdue === false || !status || status.focus_until) return [];
@@ -72,6 +84,7 @@
   }
   function sizeOf(m) {
     if (m === "peek") return [SIZES.peek[0], peekHeight()];
+    if (m === "sheet") return [SIZES.sheet[0], sheetHeight()];
     if (m !== "expanded") return SIZES[m] || SIZES.collapsed;
     if (threadsInline()) return [clampW(settings.threads_w || 480), clampH(settings.threads_h || Math.min(MAX_H, 860))];
     return [clampW(settings.panel_w || SIZES.expanded[0]), clampH(settings.panel_h || SIZES.expanded[1])];
@@ -85,22 +98,26 @@
   }
   function applyGeometry(st = settings, resizeNow = false) {
     const wing = wingPx(st);
-    const defBar = Math.round(ON_NOTCH ? geo.notch_height : DISP === "notch" ? 30 : 34);
+    const safeNotchH = Math.max(36, Math.ceil(geo.notch_height || 34) + 4);
+    const defBar = Math.round(ON_NOTCH ? safeNotchH : DISP === "notch" ? 32 : 36);
     const customH = Math.round(Number(st.notch_h) || 0);
-    BAR = wing === 0 && ON_NOTCH ? Math.max(18, Math.round(geo.notch_height - 2)) : customH >= 20 ? Math.min(54, customH) : defBar;
-    BASE_W = DISP === "bubble" ? 58 : ON_NOTCH ? Math.round(geo.notch_width + wing * 2) : Math.max(110, Math.round(140 + wing * 1.4));
+    BAR = ON_NOTCH
+      ? Math.max(safeNotchH, customH >= 24 ? Math.min(54, customH) : defBar)
+      : customH >= 24 ? Math.min(54, customH) : defBar;
+    const gapW = ON_NOTCH ? Math.round(geo.notch_width + 20) : 0; // thêm 10px đệm mỗi bên tai thỏ vật lý
+    BASE_W = DISP === "bubble" ? 58 : ON_NOTCH ? Math.round(gapW + wing * 2) : Math.max(120, Math.round(150 + wing * 1.4));
     island.classList.toggle("notch-hidden", DISP !== "bubble" && wing <= 2);
     root.style.setProperty("--bar-h", BAR + "px");
-    root.style.setProperty("--gap-w", (ON_NOTCH ? Math.round(geo.notch_width) : 0) + "px");
+    root.style.setProperty("--gap-w", gapW + "px");
     SIZES.collapsed = DISP === "bubble" ? [58, 58] : [BASE_W, BAR];
-    SIZES.peek = [Math.max(BASE_W + 100, 460), 0];
-    SIZES.alert = [Math.max(BASE_W + 80, 460), BAR + 122];
-    SIZES.listen = [Math.max(BASE_W + 60, 440), BAR + 78];
-    SIZES.reply = [Math.max(BASE_W + 120, 500), BAR + 270];
-    SIZES.drop = [Math.max(BASE_W + 120, 480), BAR + 112];
-    SIZES.sheet = [Math.max(BASE_W + 140, 520), BAR + 188];
-    SIZES.capture = [Math.max(BASE_W + 140, 560), BAR + 336];
-    SIZES.expanded = [Math.max(BASE_W + 140, 700), 520];
+    SIZES.peek = [Math.max(BASE_W + 100, 468), 0];
+    SIZES.alert = [Math.max(BASE_W + 100, 468), BAR + 132];
+    SIZES.listen = [Math.max(BASE_W + 80, 450), BAR + 86];
+    SIZES.reply = [Math.max(BASE_W + 120, 500), BAR + 278];
+    SIZES.drop = [Math.max(BASE_W + 140, 468), BAR + 136];
+    SIZES.sheet = [Math.max(BASE_W + 140, 528), 0];
+    SIZES.capture = [Math.max(BASE_W + 140, 560), BAR + 344];
+    SIZES.expanded = [Math.max(BASE_W + 140, 700), 530];
     const [w, h] = sizeOf(mode);
     root.style.setProperty("--w", w + "px");
     root.style.setProperty("--h", h + "px");
@@ -108,19 +125,10 @@
   }
   applyGeometry(settings, true);
 
-  // ───────── Bộ gõ: mở bảng → bật Telex/VNI của Asi (backend tạm chuyển bàn phím hệ thống sang ABC) ─────────
+  // ───────── Focus cửa sổ cho bộ gõ hệ thống hoạt động tự nhiên ─────────
   async function syncIme(onNow, keepFocus) {
-    const V = window.VNKey;
-    if (!onNow) {
-      if (V) { V.mode = null; V.suspended = false; }
-      await api("set_interactive", { on: false, keepFocus: keepFocus ?? null });
-      updateBar();
-      return null;
-    }
-    const m = await api("set_interactive", { on: true, keepFocus: keepFocus ?? null });
-    if (V) { V.mode = m || (V.userOn ? V.userOn : null); V.suspended = false; }
+    await api("set_interactive", { on: !!onNow, keepFocus: keepFocus ?? null }).catch(() => null);
     updateBar();
-    return V ? V.mode : m;
   }
   async function openSettings(section = null) {
     try {
@@ -147,7 +155,6 @@
     const prev = mode;
     mode = next;
     if (!growing) frameTimer = setTimeout(frame, 420);
-    if (next !== "peek" && cam.active) stopCam(false);
     if (next !== "expanded" || tab !== "threads") hideEmbed();
     if (next === "expanded" && prev !== "expanded") {
       freshOpen = true;
@@ -235,12 +242,10 @@
   function updateBar() {
     const rw = $("#rightWing");
     if (mode === "expanded") {
-      const V = window.VNKey;
-      const key = `exp:${V && V.mode ? V.mode : "en"}:${status && status.update_version ? 1 : 0}`;
+      const key = `exp:${status && status.update_version ? 1 : 0}`;
       if (rw.dataset.keys === key) return;
       rw.dataset.keys = key;
-      rw.innerHTML = `<button class="ime-pill ${V && V.mode ? "on" : ""}" data-act="ime" title="Bộ gõ tiếng Việt của Asi · ⌥ bấm để đổi Telex/VNI">${V && V.mode ? (V.mode === "vni" ? "VNI" : "VI") : "EN"}</button>
-        <button class="bar-btn ${status && status.update_version ? "dot" : ""}" data-act="settings" title="Cài đặt">${I.gear}</button>`;
+      rw.innerHTML = `<button class="bar-btn ${status && status.update_version ? "dot" : ""}" data-act="settings" title="Cài đặt">${I.gear}</button>`;
       return;
     }
     const s = status;
@@ -265,7 +270,7 @@
     if (want("next") && s.next && s.next.due - now < 3600000) b.push(["next", "", I.clock, hm(new Date(s.next.due))]);
     if (want("time")) b.push(["time", "ghost", "", hm(new Date(now))]);
     if (want("tasks") && s.open_count > 0 && !b.some((x) => x[0] === "overdue")) b.push(["tasks", "ghost", I.check, String(s.open_count)]);
-    const keys = b.map((x) => x[0]).join(",") + (micHtml ? "|mic" : "");
+    const keys = b.map((x) => x[0]).join(",") + (micHtml ? "|mic" : "") + ":" + mode + ":" + wingPx();
     if (rw.dataset.keys === keys) {
       // cùng các mục → chỉ đổi chữ tại chỗ, không vẽ lại (không nhấp nháy)
       for (const [k, , , t] of b) { const el = rw.querySelector(`[data-k="${k}"] .bt`); if (el && el.textContent !== t) el.textContent = t; }
@@ -273,13 +278,16 @@
     }
     rw.innerHTML = b.map(([k, c, ic, t]) => `<span class="badge ${c}" data-k="${k}">${ic}<span class="bt">${t}</span></span>`).join("") + micHtml;
     rw.dataset.keys = keys;
-    // Cánh phải hẹp → bỏ bớt mục ít ưu tiên ở cuối
-    const shown = [...rw.querySelectorAll(".badge")];
-    const overflow = () => rw.firstElementChild && rw.firstElementChild.getBoundingClientRect().left < rw.getBoundingClientRect().left - 0.5;
-    while (shown.length > 1 && overflow()) shown.pop().remove();
+    // Cánh phải thu gọn có độ rộng cố định → tính đúng ngân sách để không bao giờ bị tai thỏ vật lý che mất chữ
+    if (mode === "collapsed") {
+      const budget = Math.max(0, (ON_NOTCH ? wingPx() : Math.round((BASE_W - 60) / 2)) - 10);
+      const shown = [...rw.querySelectorAll(".badge")];
+      const usedW = () => (micHtml ? 28 : 0) + shown.reduce((sum, el) => sum + el.offsetWidth + 4, 0);
+      while (shown.length > 0 && usedW() > budget) shown.pop().remove();
+    }
   }
 
-  // ───────── Peek: một dòng trạng thái + nhạc (nếu đang phát) + 4 nút nhanh ─────────
+  // ───────── Peek: trạng thái + nút Tập trung + việc trễ + nhạc + thông báo gần đây ─────────
   function peekStatus() {
     const s = status, now = Date.now();
     if (meet) return { go: "meet", html: `<span class="pill red"><i class="rec-dot"></i>Đang ghi ${clockOf(meet.secs)}</span><span class="t" translate="no">${esc(meet.title || "Cuộc họp")}</span>` };
@@ -304,6 +312,11 @@
     if (s.next) return { go: "tasks", html: `<span class="pill">${fmtDue(s.next.due)}</span><span class="t" translate="no">${esc(s.next.title)}</span>` };
     return { go: "tasks", html: `<span class="t dim">${s.open_count ? `${s.open_count} việc chưa đặt giờ` : "Không có việc nào sắp tới"}</span>` };
   }
+  function peekFocusBtn() {
+    if (!modOn("focus")) return "";
+    const fc = !!(status && status.focus_until);
+    return `<button class="pk-fbtn ${fc ? "on" : ""}" data-pk="focus" title="${fc ? "Dừng tập trung" : "Bắt đầu tập trung 25 phút"}">${I.target}<span>${fc ? "Dừng" : "Tập trung"}</span></button>`;
+  }
   function peekMediaHtml() {
     const m = media;
     if (!m || !(m.title || m.playing)) return "";
@@ -315,15 +328,26 @@
       <button class="mbtn" data-pk="next" title="Bài sau">${I.next}</button>
     </div>`;
   }
-  function peekTilesHtml() {
-    const m = media || {};
-    const focusOn = !!(status && status.focus_until);
-    const tile = (id, on, ic, label, sub, cls = "") => `<button class="tile ${on ? "on" : ""} ${cls}" data-pk="${id}" title="${esc(label + " · " + sub)}"><span class="ti">${ic}</span><b>${label}</b><span>${sub}</span></button>`;
-    return `<div class="pk-tiles">
-      ${tile("mic", !m.mic_muted, m.mic_muted ? I.micOff : I.mic, "Micro", m.mic_muted ? "Đang tắt" : "Đang bật", m.mic_muted ? "warn" : "")}
-      ${tile("cam", cam.active, cam.active ? I.camOff : I.cam, "Camera", cam.active ? "Đang mở" : "Soi gương")}
-      ${tile("airdrop", false, I.airdrop, "AirDrop", "Gửi file")}
-      ${modOn("focus") ? tile("focus", focusOn, I.target, "Tập trung", focusOn ? "Dừng" : "25 phút", "violet") : ""}
+  function notifIcon(kind) {
+    if (kind === "reminder" || kind === "event") return I.cal;
+    if (kind === "disk") return I.disk;
+    if (kind === "break") return I.eye;
+    if (kind === "journal") return I.book;
+    if (kind === "meet") return I.wave;
+    if (kind === "threads") return I.grid;
+    return I.bell || I.sparkle;
+  }
+  function peekNotifsHtml() {
+    const list = peekNotifs();
+    if (!list.length) return "";
+    return `<div class="pk-notifs">
+      <div class="pk-nh"><span>${I.bell || ""}Thông báo gần đây</span><button class="link" data-pn="clear">Xoá hết</button></div>
+      ${list.map((n) => `<div class="pk-nrow ${n.kind === "disk" ? "warn" : ""}" data-pn="open" data-tab="${esc(n.tab || "home")}" data-nid="${n.id}">
+        <span class="pk-nic">${notifIcon(n.kind)}</span>
+        <div class="pk-ntxt" translate="no"><b>${esc(n.title)}</b>${n.body ? `<span>${esc(n.body)}</span>` : ""}</div>
+        <span class="pk-ntime">${fmtAgo(n.at)}</span>
+        <button class="pk-nx" data-pn="del" data-nid="${n.id}" title="Xoá">${I.x}</button>
+      </div>`).join("")}
     </div>`;
   }
   function peekLateHtml() {
@@ -335,17 +359,14 @@
   }
   function renderPeek() {
     if (!status) return;
-    // Số việc trễ / nhạc đổi → chiều cao đổi: dựng lại khung trước (setMode gọi lại renderPeek)
+    // Số việc trễ / nhạc / thông báo đổi → chiều cao đổi: dựng lại khung trước (setMode gọi lại renderPeek)
     if (mode === "peek" && Math.round(parseFloat(root.style.getPropertyValue("--h"))) !== peekHeight()) { setMode("peek", { force: true }); return; }
     const pk = $("#peek");
     const st = peekStatus();
-    const parts = [`<div class="pk-status" data-go="${st.go}">${st.html}<span class="chev">${I.chevron}</span></div>`, peekLateHtml(), peekMediaHtml(), peekTilesHtml()];
-    if (cam.active) parts.push(`<div class="pk-cam"><video id="camVideo" autoplay playsinline muted></video><button class="btn sm" data-pk="snap">Chụp vào Clipboard</button></div>`);
-    const html = parts.join("");
+    const html = [`<div class="pk-status" data-go="${st.go}">${st.html}${peekFocusBtn()}<span class="chev">${I.chevron}</span></div>`, peekLateHtml(), peekMediaHtml(), peekNotifsHtml()].join("");
     if (pk.dataset.html === html) return; // không đổi gì → không vẽ lại (chống nhấp nháy)
     pk.dataset.html = html;
     pk.innerHTML = html;
-    if (cam.active && cam.stream) { const v = $("#camVideo"); if (v) v.srcObject = cam.stream; }
   }
   async function refreshMedia() {
     const before = peekHeight();
@@ -354,46 +375,10 @@
     if (peekHeight() !== before) setMode("peek", { force: true });
     else renderPeek();
   }
-  function stopCam(resize = true) {
-    if (cam.stream) { try { cam.stream.getTracks().forEach((t) => t.stop()); } catch (_) {} }
-    cam.active = false;
-    cam.stream = null;
-    if (resize && mode === "peek") setMode("peek", { force: true });
-  }
-  async function toggleCam() {
-    if (cam.active) { stopCam(true); return; }
-    const ok = await api("ensure_camera_perm").catch(() => true);
-    if (!ok) { toast("Chưa có quyền Camera — bật trong Cài đặt hệ thống › Quyền riêng tư"); return; }
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { toast("Máy này chưa mở được Camera trong Mini-Asi"); return; }
-    try {
-      cam.stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 360 }, facingMode: "user" }, audio: false });
-      cam.active = true;
-      await setMode("peek", { force: true });
-    } catch (err) { toast("Không mở được Camera: " + String(err.message || err)); }
-  }
   async function peekAction(act) {
     if (["prev", "play", "next"].includes(act)) {
       try { media = await api("media_control", { action: act }); } catch (err) { toast(String(err)); }
       renderPeek();
-      return;
-    }
-    if (act === "mic") {
-      try { media = await api("toggle_mic_mute"); } catch (err) { toast(String(err)); return; }
-      renderPeek();
-      toast(media.mic_muted ? "Đã tắt micro" : "Đã bật micro");
-      return;
-    }
-    if (act === "cam") return toggleCam();
-    if (act === "snap") {
-      const v = $("#camVideo");
-      if (!v || !v.videoWidth) return;
-      const cv = document.createElement("canvas");
-      cv.width = v.videoWidth; cv.height = v.videoHeight;
-      const ctx = cv.getContext("2d");
-      ctx.translate(cv.width, 0); ctx.scale(-1, 1); ctx.drawImage(v, 0, 0);
-      await api("clip_copy_image", { dataUrl: cv.toDataURL("image/png") });
-      flashMood("happy", 1200);
-      toast("Đã chụp — ⌘V để dán");
       return;
     }
     if (act === "focus") {
@@ -401,13 +386,6 @@
       else { await api("focus_start", { minutes: 25 }); toast("Tập trung 25 phút — Asi tạm im lặng"); }
       status = await api("get_status");
       applyColor(); applyMood(); updateBar(); renderPeek();
-      return;
-    }
-    if (act === "airdrop") {
-      suppressHoverUntil = Date.now() + 2000;
-      const paths = await api("pick_files");
-      if (!paths || !paths.length) return;
-      try { await api("file_airdrop", { paths }); setMode("collapsed"); } catch (err) { toast(String(err)); }
     }
   }
 
@@ -516,7 +494,7 @@
     if (inside && mode === "collapsed" && DISP !== "bubble" && Date.now() >= suppressHoverUntil) {
       modeTimer = setTimeout(() => { if (hovering && !overMic && mode === "collapsed" && Date.now() >= suppressHoverUntil) setMode("peek"); }, 130);
     } else if (!inside && mode === "peek") {
-      modeTimer = setTimeout(() => { if (!hovering && mode === "peek") setMode("collapsed"); }, cam.active ? 1600 : 380);
+      modeTimer = setTimeout(() => { if (!hovering && mode === "peek") setMode("collapsed"); }, 380);
     }
   }
   on("hover", (inside) => { if (!inside) micHover(false); hoverSync(inside); });
@@ -606,25 +584,10 @@
     island.addEventListener("pointercancel", endDrag);
   })();
 
-  async function toggleIme(alt) {
-    const V = window.VNKey;
-    const cur = V && V.mode ? V.mode : null;
-    let next;
-    if (alt) next = cur === "vni" ? "telex" : "vni";
-    else if (cur) { V.lastPref = cur; next = "off"; }
-    else next = (V && V.lastPref) || (settings.viet_engine === "vni" ? "vni" : "telex");
-    settings.viet_engine = next;
-    if (V) V.userOn = next === "off" ? null : next;
-    await saveSettings(["viet_engine"]);
-    const active = await syncIme(true);
-    api("threads_embed_ime", { ime: active }).catch(() => {});
-    toast(active ? `Gõ tiếng Việt · ${active === "vni" ? "VNI" : "Telex"}` : "Gõ tiếng Anh");
-  }
   $("#bar").addEventListener("click", async (e) => {
     if (justDragged) return;
     const act = e.target.closest("[data-act]")?.dataset.act;
     if (act === "vmic") { e.stopPropagation(); voiceCommand(); return; }
-    if (act === "ime") { e.stopPropagation(); toggleIme(e.altKey); return; }
     if (act === "settings") { e.stopPropagation(); openSettings(); return; }
     if (e.target.closest('[data-k="meet"]')) { e.stopPropagation(); tab = "meet"; setMode("expanded", { force: true }); return; }
     if (mode === "collapsed" || mode === "peek") setMode("expanded");
@@ -634,6 +597,26 @@
     if (justDragged) return;
     const b = e.target.closest("[data-pk]");
     if (b) { e.stopPropagation(); await peekAction(b.dataset.pk); return; }
+    const pn = e.target.closest("[data-pn]");
+    if (pn) {
+      e.stopPropagation();
+      const act = pn.dataset.pn;
+      if (act === "clear") {
+        await api("clear_notifs", { id: null }).catch(() => {});
+        if (status) status.notifs = [];
+        setMode("peek", { force: true });
+      } else if (act === "del") {
+        const nid = Number(pn.dataset.nid);
+        await api("clear_notifs", { id: nid }).catch(() => {});
+        if (status && Array.isArray(status.notifs)) status.notifs = status.notifs.filter((x) => x.id !== nid);
+        setMode("peek", { force: true });
+      } else if (act === "open") {
+        const goTab = pn.dataset.tab || "home";
+        if (TABS.some(([t]) => t === goTab)) tab = goTab;
+        setMode("expanded");
+      }
+      return;
+    }
     const pt = e.target.closest("[data-pt]");
     if (pt) {
       e.stopPropagation();
@@ -646,7 +629,7 @@
       refreshTasks();
       return;
     }
-    if (e.target.closest(".pk-media, .pk-tiles, .pk-cam")) return;
+    if (e.target.closest(".pk-media, .pk-notifs")) return;
     const go = e.target.closest("[data-go]");
     if (go) tab = go.dataset.go;
     setMode("expanded");
@@ -678,7 +661,6 @@
     if (low && mode !== "collapsed") setMode("collapsed");
     else if (!low) { const [w, h] = sizeOf(mode); sendFrame(w, h, true); }
   });
-  on("ime-warn", () => toast("Hãy thêm bàn phím ABC trong Cài đặt hệ thống › Bàn phím để Asi tự gõ tiếng Việt"));
 
   // Mắt chớp & liếc ngẫu nhiên
   (function life() {
@@ -764,8 +746,8 @@
   function showAlert(a) {
     if (mode === "expanded") {
       // đang mở bảng: không chen ngang, chỉ báo nhỏ
-      toast(a.kind === "reminder" ? `Đến giờ: ${a.task.title}` : a.kind === "event" ? `Sắp tới: ${a.event.title}` : a.kind === "break" ? "Đến giờ nghỉ mắt" : a.kind === "stock" ? `${a.title} · ${a.text}` : "Asi muốn hỏi chuyện hôm nay");
-      if (a.kind !== "reminder" && a.kind !== "stock") return;
+      toast(a.kind === "reminder" ? `Đến giờ: ${a.task.title}` : a.kind === "event" ? `Sắp tới: ${a.event.title}` : a.kind === "break" ? "Đến giờ nghỉ mắt" : a.kind === "stock" ? `${a.title} · ${a.text}` : a.kind === "disk" ? `Ổ đĩa sắp đầy — còn trống ${bytes(a.disk.free_bytes)}` : "Asi muốn hỏi chuyện hôm nay");
+      if (a.kind !== "reminder" && a.kind !== "stock" && a.kind !== "disk") return;
     }
     alertQueue.push(a);
     if (mode !== "alert" && mode !== "expanded") nextAlert();
@@ -798,6 +780,14 @@
       flashMood("alarm", 5000);
       island.classList.add("shake");
       setTimeout(() => island.classList.remove("shake"), 1600);
+    } else if (a.kind === "disk" && a.disk) {
+      const pct = Math.round(a.disk.free_percent || 0);
+      el.innerHTML = `${x}<div class="al-title">${a.disk.level === "critical" ? "Ổ đĩa gần hết dung lượng!" : "Ổ đĩa sắp đầy"}</div>
+        <div class="al-sub">Chỉ còn trống ${bytes(a.disk.free_bytes)} (${pct}%) — nên quét và dọn bộ nhớ đệm.</div>
+        <div class="al-acts"><button class="btn primary" data-a="clean">Dọn ngay</button><button class="btn" data-a="dismiss">Để sau</button></div>`;
+      flashMood("worried", 6000);
+      island.classList.add("shake");
+      setTimeout(() => island.classList.remove("shake"), 1400);
     } else if (a.kind === "journal") {
       el.innerHTML = `<button class="x" data-a="jskip" title="Bỏ qua hôm nay">${I.x}</button><div class="al-title">Hôm nay của bạn thế nào?</div><div class="al-sub">3 câu hỏi nhỏ — Asi ghi nhật ký giúp bạn.</div>
         <div class="al-acts"><button class="btn primary" data-a="jwrite">Viết</button><button class="btn" data-a="jtalk">${I.mic}Nói</button><button class="btn" data-a="jlater">Để sau</button></div>`;
@@ -817,6 +807,7 @@
     if (a === "stm") await api("snooze_task", { id, minutes: -1 });
     if (a === "later") await api("health_snooze", { minutes: 10 });
     if (a === "rest") return restCountdown();
+    if (a === "clean") { alertQueue.length = 0; window.__asiAutoScan = true; tab = "clean"; return setMode("expanded", { force: true }); }
     if (a === "squote") { alertQueue.length = 0; tab = "home"; await setMode("expanded", { force: true }); return askAsi(`giá ${e.target.closest("[data-sym]").dataset.sym}`, false); }
     if (a === "jwrite" || a === "jtalk") {
       alertQueue.length = 0;
@@ -852,6 +843,7 @@
   on("break", (minutes) => showAlert({ kind: "break", minutes }));
   on("event-soon", (event) => showAlert({ kind: "event", event }));
   on("journal-ask", () => { if (modOn("journal")) showAlert({ kind: "journal" }); });
+  on("disk-alert", (disk) => showAlert({ kind: "disk", disk }));
   on("stock-alert", (s) => {
     if (!s || !s.alert) return;
     showAlert({ kind: "stock", symbol: s.alert.symbol, title: s.title, text: s.text });
@@ -868,43 +860,25 @@
   on("water", () => flashMood("happy", 2500));
   on("focus-done", () => { confetti(); flashMood("love", 4000); toast("Xong phiên tập trung 🎉"); });
 
-  // ───────── Kéo thả file: nửa trái = AirDrop ngay · nửa phải = tấm công cụ file ─────────
-  $$("#drop .drop-ic").forEach((el) => (el.innerHTML = I[el.dataset.i]));
-  let dropZone = "airdrop", dropPoll = null, dropBefore = "collapsed";
-  function setDropZone(z) {
-    dropZone = z === "tools" || z === "capture" ? z : "airdrop";
-    $$("#drop .drop-half").forEach((h) => h.classList.toggle("on", h.dataset.zone === dropZone));
-  }
-  $("#drop").addEventListener("dragover", (e) => { e.preventDefault(); setDropZone(e.clientX < window.innerWidth / 2 ? "airdrop" : "tools"); });
-  on("tauri://drag-over", (p) => {
-    const pos = p && p.position;
-    if (!pos || typeof pos.x !== "number") return;
-    const lx = pos.x > window.innerWidth ? pos.x / (window.devicePixelRatio || 1) : pos.x; // toạ độ logical hoặc physical
-    setDropZone(lx < window.innerWidth / 2 ? "airdrop" : "tools");
-  });
-  // Kéo file → 2 nửa (AirDrop / công cụ file). Kéo chữ, link, ảnh từ web/app chat, danh bạ… (không phải file)
-  // → 1 ô "Tạo việc / lịch".
-  let dropContent = false;
+  // ───────── Kéo thả Quick Action: thả file → bảng định dạng & công cụ · thả chữ/link/ảnh web → tạo việc/lịch ─────────
+  $$("#drop [data-i]").forEach((el) => (el.innerHTML = I[el.dataset.i] || ""));
+  let dropBefore = "collapsed";
+  $("#drop").addEventListener("dragover", (e) => e.preventDefault());
   on("tauri://drag-enter", (p) => {
     if (mode === "drop") return;
-    dropContent = !(p && p.paths && p.paths.length);
-    $("#drop").classList.toggle("content", dropContent);
+    const isContent = !(p && p.paths && p.paths.length);
+    $("#drop").classList.toggle("content", isContent);
+    const title = $("#drop .drop-title"), sub = $("#drop .drop-sub"), ico = $("#drop .drop-ico");
+    if (title) title.textContent = isContent ? "Thả để tạo việc · lịch" : "Thả vào để xử lý nhanh";
+    if (sub) sub.textContent = isContent ? "Asi tự đọc ngày giờ, địa điểm từ chữ, ảnh hoặc đường dẫn" : "Tự nhận diện định dạng file hoặc nội dung bạn thả vào";
+    if (ico) ico.innerHTML = isContent ? I.cal : I.file;
     dropBefore = mode;
-    setDropZone(dropContent ? "capture" : "airdrop");
     setMode("drop");
-    clearInterval(dropPoll);
-    if (dropContent) return;
-    dropPoll = setInterval(async () => {
-      if (mode !== "drop") { clearInterval(dropPoll); return; }
-      try { setDropZone((await api("cursor_side")) === "right" ? "tools" : "airdrop"); } catch (_) {}
-    }, 90);
   });
   on("tauri://drag-leave", () => {
-    clearInterval(dropPoll);
     if (mode === "drop") setMode(dropBefore === "expanded" ? "expanded" : "collapsed");
   });
   on("tauri://drag-drop", async (p) => {
-    clearInterval(dropPoll);
     const paths = (p && p.paths) || [];
     if (!paths.length) {
       // chữ đang chọn, tin nhắn, link, ảnh trên web, danh bạ… → đọc bảng kéo-thả của macOS
@@ -913,16 +887,10 @@
       if (!info || info.kind === "none") { await setMode(dropBefore === "expanded" ? "expanded" : "collapsed"); toast("Chưa đọc được nội dung này — thử kéo chữ, ảnh, link hoặc danh bạ"); return; }
       return openCapture(info);
     }
-    let side = dropZone;
-    try { side = (await api("cursor_side")) === "right" ? "tools" : "airdrop"; } catch (_) {}
-    if (side === "airdrop") {
-      await setMode("collapsed");
-      try { await api("file_airdrop", { paths }); return; } catch (err) { toast(String(err)); }
-    }
     await openSheet(paths);
   });
 
-  // Tấm công cụ file
+  // Tấm công cụ file (Quick Action sau khi thả)
   const sheet = { files: [], busy: false, result: null };
   async function openSheet(paths, add = false) {
     const info = await api("file_info", { paths });
@@ -930,8 +898,7 @@
     const known = new Set(sheet.files.map((f) => f.path));
     sheet.files.push(...info.filter((f) => !known.has(f.path)));
     sheet.capture = await api("capture_supports", { paths: sheet.files.map((f) => f.path) }).catch(() => false);
-    sheet.pick = false;
-    // ảnh / file chữ (kể cả trong thư mục) → nút đổi định dạng
+    // ảnh / file chữ (kể cả trong thư mục) → hiển thị ngay hàng đổi định dạng nhanh
     sheet.kinds = await api("file_kinds", { paths: sheet.files.map((f) => f.path) }).catch(() => ({ images: 0, texts: 0 }));
     renderSheet();
     await setMode("sheet", { force: true });
@@ -950,27 +917,25 @@
       : `<div class="sh-res idle">File mới lưu ngay cạnh file gốc · kéo cả thư mục → kết quả vào thư mục mới bên cạnh</div>`;
     const k = sheet.kinds || { images: 0, texts: 0 };
     const dis = sheet.busy ? "disabled" : "";
-    const acts = sheet.pick
-      ? `<div class="sh-acts sh-fmt"><span class="sh-fmt-l">${k.images} ảnh →</span>
-          ${[["jpg", "JPG"], ["png", "PNG"], ["heic", "HEIC"], ["tiff", "TIFF"], ["pdf", "PDF"]].map(([f, n]) => `<button class="act" data-fmt="${f}" ${dis}><b>${n}</b><span>${f === "pdf" ? "mỗi ảnh 1 file" : f === "heic" ? "nhẹ nhất" : f === "jpg" ? "phổ biến" : f === "png" ? "không mất nét" : "in ấn"}</span></button>`).join("")}
-          ${k.images > 1 ? `<button class="act" data-fmt="pdf1" ${dis}><b>1 PDF</b><span>gộp ${k.images} ảnh</span></button>` : ""}
-          <button class="act ghost" data-sh="unpick">${I.x}<span>Thôi</span></button></div>`
-      : `<div class="sh-acts">
-        <button class="act" data-sh="zip" ${dis}>${I.zip}<span>Nén ZIP</span></button>
-        ${arcs.length ? `<button class="act" data-sh="extract" ${dis}>${I.unzip}<span>Giải nén</span></button>` : ""}
+    const imgBar = k.images
+      ? `<div class="sh-fmt-bar"><span class="sh-fmt-l">${I.image}<span>${k.images} ảnh →</span></span>
+          ${[["jpg", "JPG"], ["png", "PNG"], ["heic", "HEIC"], ["tiff", "TIFF"], ["pdf", "PDF"]].map(([fmt, lbl]) => `<button class="sh-fbtn" data-fmt="${fmt}" ${dis}>${lbl}</button>`).join("")}
+          ${k.images > 1 ? `<button class="sh-fbtn primary" data-fmt="pdf1" ${dis}>1 PDF</button>` : ""}</div>`
+      : "";
+    const acts = `<div class="sh-acts">
+        ${k.texts ? `<button class="act" data-sh="topdf" ${dis}>${I.pdf}<span>${k.texts > 1 ? `${k.texts} file → PDF` : "Sang PDF"}</span></button>` : ""}
         ${pdfs.length ? `<button class="act" data-sh="pdf" ${dis}>${I.pdf}<span>Nén PDF</span></button>` : ""}
         ${pdfs.length >= 2 ? `<button class="act" data-sh="merge" ${dis}>${I.merge}<span>Gộp ${pdfs.length} PDF</span></button>` : ""}
-        ${k.images ? `<button class="act" data-sh="pick" ${dis}>${I.image}<span>Đổi định dạng</span></button>` : ""}
-        ${k.texts ? `<button class="act" data-sh="topdf" ${dis}>${I.pdf}<span>${k.texts > 1 ? `${k.texts} file → PDF` : "Sang PDF"}</span></button>` : ""}
-        ${sheet.capture ? `<button class="act" data-sh="capture">${I.cal}<span>Tạo việc · lịch</span></button>` : ""}
-        <button class="act" data-sh="airdrop">${I.airdrop}<span>AirDrop</span></button>
-        ${k.images && k.texts ? "" : `<button class="act" data-sh="copy">${I.copy}<span>Chép file</span></button>`}
+        <button class="act" data-sh="zip" ${dis}>${I.zip}<span>Nén ZIP</span></button>
+        ${arcs.length ? `<button class="act" data-sh="extract" ${dis}>${I.unzip}<span>Giải nén</span></button>` : ""}
+        ${sheet.capture ? `<button class="act" data-sh="capture" ${dis}>${I.cal}<span>Tạo việc · lịch</span></button>` : ""}
+        <button class="act" data-sh="copy" ${dis}>${I.copy}<span>Chép file</span></button>
       </div>`;
     $("#sheet").innerHTML = `<button class="x" data-sh="close" title="Đóng">${I.x}</button>
       <div class="sh-head"><b>${f.length === 1 ? esc(f[0].name) : `${f.length} mục`}</b><span class="dim">${f.length === 1 && f[0].is_dir ? "Thư mục" : bytes(total)}</span>
         <button class="link" data-sh="add">${I.plus}Thêm</button></div>
       <div class="sh-files">${f.slice(0, 6).map((x) => `<span class="fchip" title="${esc(x.path)}">${ic(x)}${esc(x.name)}</span>`).join("")}${f.length > 6 ? `<span class="fchip">+${f.length - 6}</span>` : ""}</div>
-      ${acts}${resHtml}`;
+      ${imgBar}${acts}${resHtml}`;
   }
   async function runSheet(fn) {
     sheet.busy = true; sheet.result = null; renderSheet();
@@ -984,19 +949,16 @@
     const fm = e.target.closest("[data-fmt]");
     if (fm && !fm.disabled) {
       const f = fm.dataset.fmt, paths = sheet.files.map((x) => x.path);
-      sheet.pick = false;
       return runSheet(() => api("file_convert_images", { paths, format: f === "pdf1" ? "pdf" : f, merge: f === "pdf1" }));
     }
     const b = e.target.closest("[data-sh]");
     if (!b || b.disabled) return;
     const a = b.dataset.sh, paths = sheet.files.map((f) => f.path);
     if (a === "close") return setMode("collapsed");
-    if (a === "pick" || a === "unpick") { sheet.pick = a === "pick"; return renderSheet(); }
     if (a === "topdf") return runSheet(() => api("file_text_pdf", { paths }));
     if (a === "capture") { try { return openCapture(await api("drop_read", { paths })); } catch (err) { return toast(String(err)); } }
     if (a === "add") { suppressHoverUntil = Date.now() + 2000; const p = await api("pick_files"); if (p && p.length) openSheet(p, true); return; }
     if (a === "reveal" && sheet.result) return api("reveal", { path: sheet.result.output });
-    if (a === "airdrop") { try { await api("file_airdrop", { paths }); setMode("collapsed"); } catch (err) { toast(String(err)); } return; }
     if (a === "copy") { await api("clip_copy_files", { paths }); toast("Đã chép — ⌘V để dán vào Finder, Mail, Zalo…"); return; }
     if (a === "zip") return runSheet(() => api("file_zip", { paths }));
     if (a === "merge") return runSheet(() => api("file_merge_pdf", { paths: sheet.files.filter((f) => f.is_pdf).map((f) => f.path) }));
@@ -1394,10 +1356,6 @@
     if (st && window.I18N) I18N.setLang(st.ui_lang);
     if (!st) return;
     if ((st.display_mode || "notch") !== DISP) { setTimeout(() => location.reload(), 120); return; } // đổi kiểu hiển thị → nạp lại
-    if (st.viet_engine !== settings.viet_engine && window.VNKey) {
-      window.VNKey.userOn = st.viet_engine === "telex" || st.viet_engine === "vni" ? st.viet_engine : null;
-      if (mode === "expanded") setTimeout(() => syncIme(true), 0);
-    }
     const geoKey = (x) => [x.wing_size, x.notch_w, x.notch_h].join("|");
     const changedGeo = geoKey(st) !== geoKey(settings);
     settings = st;
@@ -1456,11 +1414,10 @@
   else if (devOpen === "reply") askAsi("máy mình thế nào", true);
   else if (devOpen === "sheet") openSheet(["/Users/binh/Desktop/Hop-dong.pdf", "/Users/binh/Desktop/Bao-gia.pdf", "/Users/binh/Downloads/Anh.zip"]);
   else if (devOpen === "sheet2") openSheet(["/Users/binh/Desktop/Ảnh chuyến đi", "/Users/binh/Desktop/IMG_0420.HEIC", "/Users/binh/Desktop/Biên bản.md"]);
-  else if (devOpen === "drop") { setDropZone("tools"); setMode("drop"); }
-  else if (devOpen === "dropc") { $("#drop").classList.add("content"); setDropZone("capture"); setMode("drop"); }
+  else if (devOpen === "drop" || devOpen === "dropc") { if (devOpen === "dropc") $("#drop").classList.add("content"); setMode("drop"); }
   else if (devOpen === "capture") openCapture(await api("drop_read", { paths: [] }));
   else if (devOpen && devOpen.startsWith("alert-")) {
     const k = devOpen.slice(6);
-    showAlert(k === "break" ? { kind: "break", minutes: 52 } : k === "journal" ? { kind: "journal" } : k === "stock" ? { kind: "stock", symbol: "FPT", title: "FPT vượt 100.000đ rồi", text: "Giá hiện tại 100.200đ" } : k === "event" ? { kind: "event", event: { title: "Họp khách hàng", start: Date.now() + 9 * 60000 } } : { kind: "reminder", task: tasks[0] });
+    showAlert(k === "break" ? { kind: "break", minutes: 52 } : k === "journal" ? { kind: "journal" } : k === "disk" ? { kind: "disk", disk: { free_bytes: 12e9, free_percent: 4, level: "critical" } } : k === "stock" ? { kind: "stock", symbol: "FPT", title: "FPT vượt 100.000đ rồi", text: "Giá hiện tại 100.200đ" } : k === "event" ? { kind: "event", event: { title: "Họp khách hàng", start: Date.now() + 9 * 60000 } } : { kind: "reminder", task: tasks[0] });
   } else if (devOpen) { tab = devOpen; await setMode("expanded", { force: true }); }
 })();

@@ -2,8 +2,30 @@
 
 #[allow(unused_imports)]
 use crate::prelude::*;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 // ───────────────────────── Trạng thái tổng hợp ─────────────────────────
+
+static SYS_CACHE: OnceLock<Mutex<(i64, assistant::SysInfo)>> = OnceLock::new();
+static NEXT_NOTIF_ID: AtomicU64 = AtomicU64::new(1);
+
+/// Đọc thông tin CPU / RAM / Nhiệt độ có cache 10 giây để tránh gọi `sysctl`/`ioreg` liên tục
+pub(crate) fn cached_sysinfo(force: bool) -> assistant::SysInfo {
+    let cell = SYS_CACHE.get_or_init(|| Mutex::new((0, assistant::SysInfo::default())));
+    let now = now_ms();
+    if !force {
+        if let Ok(g) = cell.lock() {
+            if g.0 > 0 && now - g.0 < 10_000 {
+                return g.1.clone();
+            }
+        }
+    }
+    let info = assistant::sysinfo();
+    if let Ok(mut g) = cell.lock() {
+        *g = (now_ms(), info.clone());
+    }
+    info
+}
 
 #[derive(Serialize, Clone)]
 pub(crate) struct NextTask {
@@ -20,6 +42,8 @@ pub(crate) struct Status {
     pub(crate) note_count: usize,
     pub(crate) clip_count: usize,
     pub(crate) disk: Option<asi_clean::disk::DiskStatus>,
+    pub(crate) sys: assistant::SysInfo,
+    pub(crate) notifs: Vec<NotifItem>,
     pub(crate) session_minutes: u32,
     pub(crate) today_minutes: u32,
     pub(crate) break_minutes: u32,
@@ -49,6 +73,7 @@ pub(crate) fn build_status(st: &AppState) -> Status {
     };
     let h = st.health.lock().unwrap();
     let ts = Local::now().timestamp();
+    let notifs = st.notifs.lock().unwrap().clone();
     Status {
         lateness,
         next,
@@ -56,6 +81,8 @@ pub(crate) fn build_status(st: &AppState) -> Status {
         note_count,
         clip_count,
         disk: asi_clean::disk::status(&asi_clean::config::Paths::detect().home),
+        sys: cached_sysinfo(false),
+        notifs,
         session_minutes: h.session_minutes(ts),
         today_minutes: h.today_minutes as u32,
         break_minutes,
@@ -82,10 +109,44 @@ pub(crate) fn get_status(st: S) -> Status {
     build_status(&st)
 }
 
+#[tauri::command]
+pub(crate) fn clear_notifs(app: AppHandle, st: S, id: Option<u64>) {
+    {
+        let mut list = st.notifs.lock().unwrap();
+        match id {
+            Some(i) => list.retain(|n| n.id != i),
+            None => list.clear(),
+        }
+    }
+    push_status(&app);
+}
+
 pub(crate) fn push_status(app: &AppHandle) {
     if let Some(st) = app.try_state::<Arc<AppState>>() {
         let _ = app.emit("status", build_status(&st));
     }
+}
+
+/// Lưu thông báo vào danh sách gần đây để hiển thị khi rê chuột vào tai thỏ
+pub(crate) fn push_notif(app: &AppHandle, kind: &str, title: &str, body: &str, tab: &str) {
+    let Some(st) = app.try_state::<Arc<AppState>>() else { return };
+    let now = now_ms();
+    let mut list = st.notifs.lock().unwrap();
+    if list.first().is_some_and(|x| x.title == title && x.body == body && now - x.at < 60_000) {
+        return;
+    }
+    list.insert(
+        0,
+        NotifItem {
+            id: NEXT_NOTIF_ID.fetch_add(1, Ordering::Relaxed),
+            at: now,
+            kind: kind.into(),
+            title: title.into(),
+            body: body.into(),
+            tab: tab.into(),
+        },
+    );
+    list.truncate(15);
 }
 
 /// Giao diện đang dùng tiếng Anh không
@@ -103,7 +164,7 @@ pub(crate) fn notify(app: &AppHandle, title: &str, body: &str) {
     let _ = app.notification().builder().title(title).body(body).show();
 }
 
-/// Vòng lặp nền: nhắc việc, sức khoẻ, hẹn giờ tập trung.
+/// Vòng lặp nền: nhắc việc, sức khoẻ, hẹn giờ tập trung, cảnh báo ổ đĩa đầy.
 pub(crate) fn background_loop(app: AppHandle, st: Arc<AppState>) {
     loop {
         let now = now_ms();
@@ -123,7 +184,9 @@ pub(crate) fn background_loop(app: AppHandle, st: Arc<AppState>) {
             fired
         };
         for t in due {
-            notify(&app, &tl(&app, "⏰ Đến giờ rồi!", "⏰ It's time!"), &t.title);
+            let title = tl(&app, "⏰ Đến giờ rồi!", "⏰ It's time!");
+            notify(&app, &title, &t.title);
+            push_notif(&app, "reminder", &title, &t.title, "tasks");
             let _ = app.emit("reminder", &t);
         }
         // 2. Sức khoẻ
@@ -148,10 +211,18 @@ pub(crate) fn background_loop(app: AppHandle, st: Arc<AppState>) {
         for n in nudges {
             match n {
                 health::Nudge::Break { minutes } if minutes > 0 => {
-                    notify(&app, &tl(&app, "👀 Nghỉ mắt chút nhé", "👀 Rest your eyes"), &tl(&app, &format!("Bạn đã dùng máy liên tục {minutes} phút. Nhìn xa 20 giây nào!"), &format!("You've been on the computer for {minutes} minutes. Look far away for 20 seconds!")));
+                    let title = tl(&app, "👀 Nghỉ mắt chút nhé", "👀 Rest your eyes");
+                    let body = tl(&app, &format!("Bạn đã dùng máy liên tục {minutes} phút. Nhìn xa 20 giây nào!"), &format!("You've been on the computer for {minutes} minutes. Look far away for 20 seconds!"));
+                    notify(&app, &title, &body);
+                    push_notif(&app, "break", &title, &body, "home");
                     let _ = app.emit("break", minutes);
                 }
-                health::Nudge::Break { .. } => notify(&app, &tl(&app, "🎯 Hết giờ tập trung", "🎯 Focus session done"), &tl(&app, "Làm tốt lắm! Nghỉ 5 phút rồi tiếp tục nhé.", "Great job! Take a 5-minute break, then keep going.")),
+                health::Nudge::Break { .. } => {
+                    let title = tl(&app, "🎯 Hết giờ tập trung", "🎯 Focus session done");
+                    let body = tl(&app, "Làm tốt lắm! Nghỉ 5 phút rồi tiếp tục nhé.", "Great job! Take a 5-minute break, then keep going.");
+                    notify(&app, &title, &body);
+                    push_notif(&app, "focus", &title, &body, "home");
+                }
                 health::Nudge::Water => {
                     let _ = app.emit("water", ());
                 }
@@ -171,7 +242,9 @@ pub(crate) fn background_loop(app: AppHandle, st: Arc<AppState>) {
             let key = format!("{}@{}", e.id, e.start);
             if st.alerted.lock().unwrap().insert(key) {
                 let mins = ((e.start - now) / 60_000).max(1);
-                notify(&app, &tl(&app, &format!("📅 {} phút nữa: {}", mins, e.title), &format!("📅 In {} min: {}", mins, e.title)), &e.location);
+                let title = tl(&app, &format!("📅 {} phút nữa: {}", mins, e.title), &format!("📅 In {} min: {}", mins, e.title));
+                notify(&app, &title, &e.location);
+                push_notif(&app, "event", &title, &e.location, "tasks");
                 let _ = app.emit("event-soon", &e);
             }
         }
@@ -189,9 +262,32 @@ pub(crate) fn background_loop(app: AppHandle, st: Arc<AppState>) {
                 if !written && ask.0 != today && now >= ask.1 {
                     *ask = (today, 0);
                     drop(ask);
-                    notify(&app, &tl(&app, "📔 Hôm nay của bạn thế nào?", "📔 How was your day?"), &tl(&app, "Kể Asi nghe vài dòng để lưu vào nhật ký nhé", "Tell Asi a few lines for your journal"));
+                    let title = tl(&app, "📔 Hôm nay của bạn thế nào?", "📔 How was your day?");
+                    let body = tl(&app, "Kể Asi nghe vài dòng để lưu vào nhật ký nhé", "Tell Asi a few lines for your journal");
+                    notify(&app, &title, &body);
+                    push_notif(&app, "journal", &title, &body, "journal");
                     let _ = app.emit("journal-ask", ());
                 }
+            }
+        }
+        // 5. Cảnh báo ổ đĩa sắp đầy (chỉ báo một lần khi chuyển sang ngưỡng cảnh báo)
+        if let Some(d) = asi_clean::disk::status(&asi_clean::config::Paths::detect().home) {
+            if matches!(d.level, asi_clean::disk::DiskLevel::Warn | asi_clean::disk::DiskLevel::Critical) {
+                if st.alerted.lock().unwrap().insert("disk-low".into()) {
+                    let free = asi_clean::disk::human(d.free_bytes);
+                    let pct = d.free_percent.round() as u32;
+                    let title = tl(&app, "💾 Ổ đĩa sắp đầy!", "💾 Disk space is low!");
+                    let body = tl(
+                        &app,
+                        &format!("Chỉ còn {free} trống ({pct}%). Mở Dọn máy để giải phóng dung lượng."),
+                        &format!("Only {free} free ({pct}%). Open Clean to free up space."),
+                    );
+                    notify(&app, &title, &body);
+                    push_notif(&app, "disk", &title, &body, "clean");
+                    let _ = app.emit("disk-alert", &d);
+                }
+            } else {
+                st.alerted.lock().unwrap().remove("disk-low");
             }
         }
         push_status(&app);

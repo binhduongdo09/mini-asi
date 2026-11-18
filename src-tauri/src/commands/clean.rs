@@ -21,6 +21,7 @@ pub(crate) fn engine(st: &AppState) -> Result<asi_clean::Engine, String> {
 pub(crate) struct ScanOut {
     pub(crate) report: asi_clean::scan::ScanReport,
     pub(crate) disk: Option<asi_clean::disk::DiskStatus>,
+    pub(crate) sys: assistant::SysInfo,
     pub(crate) pro: bool,
 }
 
@@ -31,7 +32,7 @@ pub(crate) async fn clean_scan(st: S<'_>) -> Result<ScanOut, String> {
         let e = engine(&st)?;
         let report = e.scan(vec![]);
         *st.last_scan.lock().unwrap() = Some(report.clone());
-        Ok(ScanOut { disk: e.disk(), pro: e.tier == asi_clean::rules::Tier::Pro, report })
+        Ok(ScanOut { disk: e.disk(), sys: cached_sysinfo(true), pro: e.tier == asi_clean::rules::Tier::Pro, report })
     })
     .await
 }

@@ -4,8 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Mini-Asi</title>
-  <link rel="stylesheet" href="base.css" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="base.css?v=29" />
+  <link rel="stylesheet" href="style.css?v=29" />
 </head>
 <body>
   <div id="island" class="mode-collapsed mood-idle" aria-label="Mini-Asi">
@@ -30,11 +30,24 @@
     <!-- Lệnh giọng nói: đang nghe / Asi trả lời -->
     <section class="layer" id="listen"></section>
     <section class="layer" id="reply"></section>
-    <!-- Kéo file vào: trái = AirDrop · phải = công cụ file -->
+    <!-- Kéo file hoặc nội dung vào: không gian Quick Action xử lý định dạng -->
     <section class="layer" id="drop">
-      <div class="drop-half" data-zone="airdrop"><span class="drop-ic" data-i="airdrop"></span><b>AirDrop</b><span>Thả để gửi ngay</span></div>
-      <div class="drop-half" data-zone="tools"><span class="drop-ic" data-i="zip"></span><b>Công cụ file</b><span>Nén · PDF · Đổi định dạng</span></div>
-      <div class="drop-half drop-one" data-zone="capture"><span class="drop-ic" data-i="cal"></span><b>Tạo việc · lịch</b><span>Thả chữ, ảnh, link, danh bạ…</span></div>
+      <div class="drop-box">
+        <div class="drop-head">
+          <span class="drop-ico" data-i="file"></span>
+          <div class="drop-txt">
+            <div class="drop-title">Thả vào để xử lý nhanh</div>
+            <div class="drop-sub">Tự nhận diện định dạng file hoặc nội dung bạn thả vào</div>
+          </div>
+        </div>
+        <div class="drop-chips">
+          <span class="drop-chip">Ảnh → JPG · PNG · HEIC · PDF</span>
+          <span class="drop-chip">Văn bản → PDF</span>
+          <span class="drop-chip">Gộp &amp; Nén PDF</span>
+          <span class="drop-chip">Nén / Giải nén ZIP</span>
+          <span class="drop-chip">Tạo việc · Lịch</span>
+        </div>
+      </div>
     </section>
     <!-- Bảng tạo việc / sự kiện từ nội dung vừa thả -->
     <section class="layer" id="capture"></section>
@@ -50,15 +63,15 @@
     <div class="accent" id="accent"></div>
     <div class="confetti" id="confetti"></div>
   </div>
-  <script src="i18n-en.js"></script>
-  <script src="i18n.js"></script>
-  <script src="icons.js"></script>
-  <script src="vnkey.js"></script>
-  <script src="common.js"></script>
-  <script src="app.js"></script>
-  <script src="views.js"></script>
-  <script src="extra.js"></script>
-  <script src="meeting.js"></script>
-  <script src="vocab.js"></script>
+  <script src="i18n-en.js?v=29"></script>
+  <script src="i18n.js?v=29"></script>
+  <script src="icons.js?v=29"></script>
+  <script src="vnkey.js?v=29"></script>
+  <script src="common.js?v=29"></script>
+  <script src="app.js?v=29"></script>
+  <script src="views.js?v=29"></script>
+  <script src="extra.js?v=29"></script>
+  <script src="meeting.js?v=29"></script>
+  <script src="vocab.js?v=29"></script>
 </body>
 </html>
